@@ -315,23 +315,87 @@ export default function About() {
 
         {/* Savings trajectory */}
         <div className="mt-5 p-4 rounded-xl" style={{ background: 'var(--surface-secondary)' }}>
-          <div className="text-xs font-bold text-neutral-600 mb-3">💹 Cost per turn over a conversation (illustrative):</div>
-          <div className="flex items-end gap-2 h-16">
+          <div className="text-xs font-bold text-neutral-600 mb-1">💹 Cost per turn over a conversation (illustrative):</div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm" style={{ background: '#ED2738' }} />
+              <span className="text-xs text-neutral-500">Full cost (MISS)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm" style={{ background: '#00C280' }} />
+              <span className="text-xs text-neutral-500">With Infinia Cache</span>
+            </div>
+          </div>
+          <div className="flex items-end gap-2" style={{ height: '72px' }}>
             {[
-              { label: 'T1', pct: 100, color: '#ED2738', note: 'Full cost (MISS)' },
-              { label: 'T2', pct: 15, color: '#FF7600', note: '85% saved' },
-              { label: 'T3', pct: 8, color: '#00C280', note: '92% saved' },
-              { label: 'T4', pct: 5, color: '#00C280', note: '95% saved' },
-              { label: 'T5', pct: 4, color: '#00C280', note: '96% saved' },
-              { label: 'T10', pct: 2, color: '#00C280', note: '98% saved' },
-              { label: 'T50', pct: 1, color: '#00C280', note: '~99% saved' },
+              { label: 'T1', pct: 100, color: '#ED2738', note: '100%' },
+              { label: 'T2', pct: 15,  color: '#FF7600', note: '15%' },
+              { label: 'T3', pct: 8,   color: '#00C280', note: '8%' },
+              { label: 'T4', pct: 5,   color: '#00C280', note: '5%' },
+              { label: 'T5', pct: 4,   color: '#00C280', note: '4%' },
+              { label: 'T10', pct: 2,  color: '#00C280', note: '2%' },
+              { label: 'T50', pct: 1,  color: '#00C280', note: '~1%' },
             ].map(bar => (
-              <div key={bar.label} className="flex-1 flex flex-col items-center gap-1">
-                <div className="text-xs font-mono" style={{ color: bar.color, fontSize: '9px' }}>{bar.note}</div>
-                <div className="w-full rounded-t-lg transition-all" style={{ height: `${bar.pct * 0.56}px`, background: bar.color, minHeight: '3px' }} />
-                <div className="text-xs font-bold text-neutral-500" style={{ fontSize: '10px' }}>{bar.label}</div>
+              <div key={bar.label} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                <div className="text-xs font-mono font-bold" style={{ color: bar.color, fontSize: '9px', marginBottom: '2px' }}>{bar.note}</div>
+                <div className="w-full rounded-t-lg" style={{ height: `${Math.max(bar.pct * 0.62, 3)}px`, background: bar.color }} />
               </div>
             ))}
+          </div>
+          {/* Turn labels below bars */}
+          <div className="flex items-center gap-2 mt-1">
+            {['T1','T2','T3','T4','T5','T10','T50'].map(t => (
+              <div key={t} className="flex-1 text-center font-bold text-neutral-500" style={{ fontSize: '10px' }}>{t}</div>
+            ))}
+          </div>
+          <div className="mt-2 text-xs text-neutral-400 text-center">
+            85% saved at T2 · 92% at T3 · ~99% at T50
+          </div>
+        </div>
+
+        {/* ── Core Demo Point ── */}
+        <div className="mt-4 rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(0,194,128,0.25)' }}>
+          <div className="px-4 py-2.5 font-bold text-sm" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
+            ⚡ The Core Demo Point — Token Growth Per Turn
+          </div>
+          <div className="p-4">
+            <p className="text-xs text-neutral-500 mb-3">
+              The <strong>left panel (No Cache)</strong> carries all prior conversation history on every turn — its token count grows like a leaking bucket.
+              The <strong>right panel (Infinia)</strong> only ever sends the new question — a flat line regardless of conversation length.
+            </p>
+            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--border-subtle)' }}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: 'var(--surface-secondary)' }}>
+                    <th className="text-left px-3 py-2 font-semibold text-neutral-600">Turn</th>
+                    <th className="text-left px-3 py-2 font-semibold text-neutral-600">Question Asked</th>
+                    <th className="px-3 py-2 font-semibold text-center" style={{ color: '#ED2738' }}>❌ Left — Tokens Sent</th>
+                    <th className="px-3 py-2 font-semibold text-center" style={{ color: '#00C280' }}>✅ Right — Tokens Sent</th>
+                    <th className="text-center px-3 py-2 font-semibold text-neutral-600">Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { turn: 'Turn 1', q: '"What is DDN Infinia?"',        left: '5 tokens',          right: '5 tokens',    result: 'MISS → stored in Infinia', hit: false },
+                    { turn: 'Turn 2', q: '"Tell me more about it"',        left: '5 + reply1 + 10',   right: '10 tokens',   result: 'New Q → MISS → stored',    hit: false },
+                    { turn: 'Turn 3', q: '"What is DDN Infinia?" (again)', left: '5+reply1+10+reply2+5', right: '⚡ 0ms HIT', result: 'Instant from Infinia',     hit: true  },
+                    { turn: 'Turn N', q: 'Any previously asked question',  left: 'Growing unbounded', right: '⚡ 0ms HIT', result: 'Always free after 1st ask', hit: true  },
+                  ].map((row, i) => (
+                    <tr key={i} style={{ background: row.hit ? 'rgba(0,194,128,0.04)' : i % 2 === 0 ? 'transparent' : 'var(--surface-secondary)' }}>
+                      <td className="px-3 py-2 font-semibold text-neutral-700">{row.turn}</td>
+                      <td className="px-3 py-2 text-neutral-600 italic">{row.q}</td>
+                      <td className="px-3 py-2 text-center font-mono" style={{ color: '#ED2738' }}>{row.left}</td>
+                      <td className="px-3 py-2 text-center font-mono font-bold" style={{ color: row.hit ? '#00C280' : 'var(--text-secondary)' }}>{row.right}</td>
+                      <td className="px-3 py-2 text-center" style={{ color: row.hit ? '#00C280' : '#1A81AF' }}>{row.result}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 p-3 rounded-lg text-xs font-medium" style={{ background: 'rgba(237,39,56,0.05)', border: '1px solid rgba(237,39,56,0.15)', color: 'var(--text-secondary)' }}>
+              💡 <strong style={{ color: '#ED2738' }}>The left panel is a leaking bucket</strong> — every turn adds more tokens, more GPU time, more cost.
+              {' '}<strong style={{ color: '#00C280' }}>The right panel with Infinia is a flat line</strong> — it only ever pays for the new words you type. Once cached, any question costs near-zero to answer — forever.
+            </div>
           </div>
         </div>
       </div>
