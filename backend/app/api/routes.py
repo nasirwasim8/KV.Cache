@@ -490,7 +490,8 @@ async def seed_prefix(req: SeedRequest):
         raise HTTPException(status_code=503, detail=f"Ollama error: {e}")
 
     # Store KV context in Infinia (real S3 PUT)
-    store_ms = kv_cache.store_prefix(req.use_case, result.context, system_prompt)
+    store_meta = kv_cache.store_prefix(req.use_case, result.context, system_prompt)
+    store_ms = store_meta.get("store_latency_ms", 0.0) if isinstance(store_meta, dict) else float(store_meta)
     context_size_kb = round(len(str(result.context)) / 1024, 1)
 
     return {
