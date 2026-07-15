@@ -179,8 +179,9 @@ class ConfigSave(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    demo_mode: str = "business"   # "business" | "technical"
+    demo_mode: str = "business"      # "business" | "technical"
     audience_mode: str = "business"
+    pricing_tier: str = "self_hosted_h100"  # "self_hosted_h100" | "cloud_openai" | "cloud_anthropic"
 
 
 class SeedRequest(BaseModel):
@@ -305,8 +306,16 @@ async def chat_send(req: ChatRequest):
     # Token counts: left grows with history, right only counts new message
     full_tokens = ollama_client.count_tokens(full_prompt)   # grows each turn!
     new_tokens  = ollama_client.count_tokens(req.message)   # always just the question
+    output_tokens = left_result.response_tokens
+    # Tokens that are "cached" = everything except the new message
+    cached_tokens = max(0, full_tokens - new_tokens)
 
-    left_cost = left_time * settings.cost_per_ms()
+    # ── TOKEN-BASED COST (industry standard) ─────────────────────────────
+    # LEFT: charged for ALL input tokens + output tokens
+    # RIGHT (cache hit): charged for NEW tokens only + output (prefix is FREE)
+    # RIGHT (cache miss): same as left
+    tier = req.pricing_tier
+    left_cost = settings.token_cost(full_tokens, output_tokens, tier)
 
     left_metrics = {
         "ttft_ms":        round(left_result.ttft_ms, 1),
@@ -322,26 +331,36 @@ async def chat_send(req: ChatRequest):
     # ── Right Panel: Infinia Cache ───────────────────────────────────────
     if cache_hit and cached_data:
         # ✅ CACHE HIT — served from DDN Infinia
-        # TTFT = real Infinia S3 GET latency (typically 10–100ms vs GPU 500–5000ms)
-        # Tokens = only the new message (not the full history recomputed)
+        # RIGHT panel cost: only new message tokens charged (prefix is FREE/discounted)
+        # This is the KEY insight: provider doesn't charge you for tokens already cached
         response_text = cached_data.get("response", left_result.response)
-        right_cost = 0.0000001   # S3 GET ≈ $0.0000004 per request
+        right_cost = settings.cached_token_cost(
+            cached_tokens=cached_tokens,   # these are FREE (self-hosted) or discounted (cloud)
+            new_tokens=new_tokens,          # only the actual question tokens
+            output_tokens=output_tokens,    # output same regardless of cache
+            tier=tier
+        )
+        # Add a tiny S3 GET cost (negligible but real: ~$0.0000004/request)
+        right_cost += 0.0000004
 
         right_metrics = {
             "ttft_ms":            round(infinia_check_latency, 1),
             "total_ms":           round(infinia_check_latency, 1),
             "tokens_sent":        new_tokens,       # Only the new question!
-            "cost_usd":           round(right_cost, 7),
+            "tokens_cached":      cached_tokens,    # How many were FREE
+            "cost_usd":           round(right_cost, 8),
             "source":             "INFINIA_CACHE",
             "infinia_latency_ms": round(infinia_check_latency, 1),
-            "response_tokens":    left_result.response_tokens,
+            "response_tokens":    output_tokens,
             "cache_key_preview":  cache_key[:8] + "...",
             "history_turns":      len(history),
+            "pricing_tier":       tier,
         }
     else:
         # ◯ CACHE MISS — first time this question was asked
         # Compute fresh, then STORE in Infinia so next ask hits
         response_text = left_result.response
+        right_cost = left_cost  # same cost on first miss
 
         store_latency = kv_cache.store(cache_key, {
             "response":      response_text,
@@ -355,11 +374,11 @@ async def chat_send(req: ChatRequest):
             "ttft_ms":            round(left_result.ttft_ms, 1),
             "total_ms":           round(left_result.total_ms, 1),
             "tokens_sent":        full_tokens,
-            "cost_usd":           round(max(0.0001, left_cost), 6),
+            "cost_usd":           round(right_cost, 8),
             "source":             "FIRST_MISS_STORED",   # ← clearer label
             "infinia_latency_ms": round(infinia_check_latency, 1),
             "store_latency_ms":   round(store_latency, 1),
-            "response_tokens":    left_result.response_tokens,
+            "response_tokens":    output_tokens,
             "cache_key_preview":  cache_key[:8] + "...",
             "history_turns":      len(history),
         }
@@ -369,8 +388,11 @@ async def chat_send(req: ChatRequest):
 
     # ── Savings ───────────────────────────────────────────────────────────
     savings_usd = max(0, left_metrics["cost_usd"] - right_metrics["cost_usd"])
-    savings_pct = round(savings_usd / max(0.000001, left_metrics["cost_usd"]) * 100, 1)
+    savings_pct = round(savings_usd / max(0.000000001, left_metrics["cost_usd"]) * 100, 1)
     speedup = round(left_metrics["ttft_ms"] / max(0.1, right_metrics["ttft_ms"]), 1)
+
+    # Get pricing tier label for UI
+    tier_info = settings.PRICING_TIERS.get(tier, settings.PRICING_TIERS["self_hosted_h100"])
 
     return {
         "response":  response_text,
@@ -379,10 +401,19 @@ async def chat_send(req: ChatRequest):
         "left":      left_metrics,
         "right":     right_metrics,
         "savings": {
-            "cost_usd":     round(savings_usd, 7),
+            "cost_usd":     round(savings_usd, 8),
             "pct":          savings_pct,
             "speedup_x":    speedup,
-            "tokens_saved": max(0, full_tokens - new_tokens) if cache_hit else 0,
+            "tokens_saved": cached_tokens if cache_hit else 0,
+            "input_tokens_billed_left":  full_tokens,
+            "input_tokens_billed_right": new_tokens if cache_hit else full_tokens,
+        },
+        "pricing": {
+            "tier":           tier,
+            "tier_label":     tier_info["label"],
+            "input_per_1m":   tier_info["input_per_1m"],
+            "output_per_1m":  tier_info["output_per_1m"],
+            "cache_discount": tier_info["cache_discount"],
         },
         "session_stats": {
             "turns": len(session["history"]),
@@ -506,10 +537,26 @@ async def run_prefix(req: PrefixRunRequest):
         cached_response = result_nocache.response
         infinia_latency = 0.0
 
-    # ── Cost calculation ──────────────────────────────────────────────────
-    cost_per_ms = settings.cost_per_ms()
-    cost_nocache = nocache_ms * cost_per_ms
-    cost_cached = (infinia_latency * 0.000001 + ollama_cached_ms * cost_per_ms) if prefix_data else cost_nocache
+    # ── Cost calculation (TOKEN-BASED) ─────────────────────────────────────────
+    # Without cache: pay for ALL system prompt + question tokens
+    # With cache: pay for ONLY the question tokens (system prompt is FREE from Infinia)
+    tier = "self_hosted_h100"  # can be made configurable
+    output_tokens_nocache = result_nocache.response_tokens
+
+    cost_nocache = settings.token_cost(full_tokens, output_tokens_nocache, tier)
+
+    if prefix_data:
+        output_tokens_cached = result_cached.response_tokens
+        # With cache: only new_tokens are billed for input (system prompt = FREE)
+        # Small Infinia S3 GET cost ($0.0000004 per request)
+        cost_cached = settings.cached_token_cost(
+            cached_tokens=len(system_prompt) // 4,  # the prefix we bypassed
+            new_tokens=new_tokens,
+            output_tokens=output_tokens_cached,
+            tier=tier
+        ) + 0.0000004
+    else:
+        cost_cached = cost_nocache
 
     savings_usd = max(0, cost_nocache - cost_cached)
     savings_pct = round(savings_usd / max(0.000001, cost_nocache) * 100, 1)

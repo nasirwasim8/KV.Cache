@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Trash2, RefreshCw, Zap, Database, Clock, DollarSign, Hash, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Send, Trash2, RefreshCw, Zap, Database, Clock, DollarSign, Hash, ToggleLeft, ToggleRight, Info } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { kvApi, ChatResponse, PanelMetrics } from '../services/api'
+import { kvApi, ChatResponse, PanelMetrics, PricingTier, PRICING_TIERS } from '../services/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,8 @@ interface Turn {
   cacheHit: boolean
   left: PanelMetrics
   right: PanelMetrics
-  savings: { cost_usd: number; pct: number; speedup_x: number; tokens_saved: number }
+  savings: { cost_usd: number; pct: number; speedup_x: number; tokens_saved: number; input_tokens_billed_left?: number; input_tokens_billed_right?: number }
+  pricing?: { tier: string; tier_label: string; input_per_1m: number; output_per_1m: number; cache_discount: number }
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -184,6 +185,7 @@ export default function ChatObservatory() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [demoMode, setDemoMode] = useState<'business' | 'technical'>('business')
+  const [pricingTier, setPricingTier] = useState<PricingTier>('self_hosted_h100')
   const [sessionId] = useState(() => `sess_${Date.now()}`)
   const [cumulativeSavings, setCumulativeSavings] = useState(0)
   const [totalHits, setTotalHits] = useState(0)
@@ -198,11 +200,17 @@ export default function ChatObservatory() {
     setLoading(true)
 
     try {
-      const result: ChatResponse = await kvApi.sendChat({ session_id: sessionId, message: msg, demo_mode: demoMode })
+      const result: ChatResponse = await kvApi.sendChat({
+        session_id: sessionId,
+        message: msg,
+        demo_mode: demoMode,
+        pricing_tier: pricingTier,
+      })
       const turn: Turn = {
         id: `t${Date.now()}`, userMessage: msg, response: result.response,
         timestamp: Date.now(), cacheHit: result.cache_hit,
         left: result.left, right: result.right, savings: result.savings,
+        pricing: result.pricing,
       }
       setTurns(prev => [...prev, turn])
       if (result.cache_hit) {
@@ -250,10 +258,31 @@ export default function ChatObservatory() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="section-title">Live Chat Observatory</h2>
-            <p className="section-description">Watch DDN Infinia KV Cache eliminate GPU recomputation in real time. Every cache hit is a real S3 GET from Infinia.</p>
+            <p className="section-description">Watch DDN Infinia KV Cache eliminate GPU recomputation. Every cache hit is a real S3 GET from Infinia.</p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Mode Toggle */}
+            {/* Pricing Tier Selector */}
+            <div className="flex items-center gap-1 p-1 rounded-lg border" style={{ borderColor: 'var(--border-default)', background: 'var(--surface-secondary)' }}>
+              {(Object.keys(PRICING_TIERS) as PricingTier[]).map(tier => (
+                <button
+                  key={tier}
+                  onClick={() => setPricingTier(tier)}
+                  title={PRICING_TIERS[tier].label}
+                  className="px-2.5 py-1 rounded-md text-xs font-semibold transition-all"
+                  style={pricingTier === tier ? {
+                    background: PRICING_TIERS[tier].color,
+                    color: '#fff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.15)'
+                  } : {
+                    color: 'var(--text-muted)',
+                    background: 'transparent'
+                  }}
+                >
+                  {PRICING_TIERS[tier].short}
+                </button>
+              ))}
+            </div>
+            {/* Tech/Business toggle */}
             <button
               onClick={() => setDemoMode(m => m === 'business' ? 'technical' : 'business')}
               className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all"
@@ -266,6 +295,16 @@ export default function ChatObservatory() {
               <Trash2 className="w-4 h-4" /> Clear
             </button>
           </div>
+        </div>
+
+        {/* Pricing model explanation pill */}
+        <div className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--surface-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+          <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: PRICING_TIERS[pricingTier].color }} />
+          <span>
+            <strong style={{ color: PRICING_TIERS[pricingTier].color }}>{PRICING_TIERS[pricingTier].label}</strong>
+            {' '}— Billed <strong>${PRICING_TIERS[pricingTier].input_per_1m}/1M</strong> input tokens + <strong>${PRICING_TIERS[pricingTier].output_per_1m}/1M</strong> output tokens.
+            {' '}{PRICING_TIERS[pricingTier].note}
+          </span>
         </div>
       </div>
 

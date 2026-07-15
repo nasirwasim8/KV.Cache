@@ -52,8 +52,51 @@ class Settings:
             }, f, indent=2)
 
     def cost_per_ms(self) -> float:
-        """GPU compute cost per millisecond"""
+        """GPU compute cost per millisecond (kept for prefix multiplier GPU cost path)"""
         return self.gpu_cost_per_hour / 3_600_000
+
+    # ── Token-based pricing tiers ───────────────────────────────────────────
+    # Standard industry model: $ per 1M tokens
+    # Source: real provider pricing (July 2026)
+    PRICING_TIERS = {
+        "cloud_openai": {
+            "label": "Cloud API (GPT-4o equivalent)",
+            "input_per_1m": 2.50,    # $/1M input tokens
+            "output_per_1m": 10.00,  # $/1M output tokens
+            "cache_discount": 0.50,  # 50% discount on cached input (OpenAI style)
+        },
+        "cloud_anthropic": {
+            "label": "Cloud API (Claude 3.5 equivalent)",
+            "input_per_1m": 3.00,
+            "output_per_1m": 15.00,
+            "cache_discount": 0.10,  # 90% discount (pay only 10% for cached)
+        },
+        "self_hosted_h100": {
+            "label": "Self-hosted H100 (Llama)",
+            "input_per_1m": 0.70,    # H100 amortized at $3/hr, ~1500 tok/s
+            "output_per_1m": 2.80,   # output is slower (autoregressive)
+            "cache_discount": 0.0,   # 100% free — cached tokens skipped entirely
+        },
+    }
+
+    def token_cost(self, input_tokens: int, output_tokens: int, tier: str = "self_hosted_h100") -> float:
+        """Calculate cost for a request using token-based pricing."""
+        p = self.PRICING_TIERS.get(tier, self.PRICING_TIERS["self_hosted_h100"])
+        return (input_tokens / 1_000_000 * p["input_per_1m"]
+                + output_tokens / 1_000_000 * p["output_per_1m"])
+
+    def cached_token_cost(self, cached_tokens: int, new_tokens: int, output_tokens: int, tier: str = "self_hosted_h100") -> float:
+        """
+        Cost when KV cache is active:
+        - Cached prefix tokens: FREE (self-hosted) or discounted (cloud)
+        - New message tokens: full price
+        - Output tokens: full price (generation is same regardless)
+        """
+        p = self.PRICING_TIERS.get(tier, self.PRICING_TIERS["self_hosted_h100"])
+        cached_cost = cached_tokens / 1_000_000 * p["input_per_1m"] * p["cache_discount"]
+        new_cost    = new_tokens   / 1_000_000 * p["input_per_1m"]
+        output_cost = output_tokens / 1_000_000 * p["output_per_1m"]
+        return cached_cost + new_cost + output_cost
 
 
 settings = Settings()
