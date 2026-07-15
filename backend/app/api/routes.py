@@ -627,6 +627,55 @@ async def cache_stats():
 
 @cache_router.delete("/clear")
 async def clear_cache():
-    """Clear all sessions (not Infinia objects — those persist)."""
+    """Clear all in-memory sessions (Infinia objects preserved)."""
     _sessions.clear()
     return {"success": True, "message": "Session cache cleared (Infinia objects preserved)"}
+
+
+@cache_router.delete("/purge-infinia")
+async def purge_infinia_cache():
+    """
+    Delete ALL kvcache/* objects from DDN Infinia.
+    Use this to reset for a fresh demo (first question will be a genuine MISS).
+    """
+    try:
+        client = kv_cache._get_client()
+        # List all objects under kvcache/ prefix
+        paginator = client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(
+            Bucket=settings.infinia_bucket,
+            Prefix="kvcache/"
+        )
+        keys_to_delete = []
+        for page in pages:
+            for obj in page.get("Contents", []):
+                keys_to_delete.append({"Key": obj["Key"]})
+
+        if not keys_to_delete:
+            return {"success": True, "deleted": 0, "message": "Cache was already empty"}
+
+        # Delete in batches of 1000 (S3 limit)
+        deleted_count = 0
+        for i in range(0, len(keys_to_delete), 1000):
+            batch = keys_to_delete[i:i+1000]
+            client.delete_objects(
+                Bucket=settings.infinia_bucket,
+                Delete={"Objects": batch, "Quiet": True}
+            )
+            deleted_count += len(batch)
+
+        # Reset in-memory hit/miss counters too
+        kv_cache._hit_count = 0
+        kv_cache._miss_count = 0
+        kv_cache._total_bytes_stored = 0
+        _sessions.clear()
+
+        logger.info(f"Purged {deleted_count} objects from Infinia bucket")
+        return {
+            "success": True,
+            "deleted": deleted_count,
+            "message": f"Purged {deleted_count} cached objects from DDN Infinia. Next question will be a genuine MISS."
+        }
+    except Exception as e:
+        logger.error(f"Purge error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

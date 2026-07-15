@@ -115,4 +115,5 @@ export const kvApi = {
     api.post('/prefix/run', { use_case, query, request_number }).then(r => r.data),
 
   getCacheStats: () => api.get('/cache/stats').then(r => r.data),
+  purgeInfiniaCache: () => api.delete('/cache/purge-infinia').then(r => r.data),
 }

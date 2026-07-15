@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react'
-import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash } from 'lucide-react'
+import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash, RotateCcw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { kvApi, ChatResponse, PanelMetrics, PricingTier, PRICING_TIERS } from '../services/api'
@@ -412,6 +412,21 @@ export default function ChatObservatory() {
     toast.success('Session cleared')
   }
 
+  // Purge ALL objects from Infinia — makes next question a genuine MISS
+  const purgeDemo = async () => {
+    const confirmed = window.confirm(
+      'Reset Demo Cache?\n\nThis will DELETE all cached objects from DDN Infinia.\nThe next question will be a genuine MISS (stored fresh).\n\nThis is useful to demonstrate the MISS → STORE → HIT flow from scratch.'
+    )
+    if (!confirmed) return
+    try {
+      const res = await kvApi.purgeInfiniaCache()
+      setTurns([]); setCumulativeSavings(0); setTotalHits(0)
+      toast.success(`🗑️ ${res.message}`, { duration: 5000 })
+    } catch (e: any) {
+      toast.error('Purge failed: ' + (e?.response?.data?.detail || e?.message || 'Unknown error'))
+    }
+  }
+
   const hitRate = turns.length > 0 ? Math.round((totalHits / turns.length) * 100) : 0
   const totalTokensSaved = turns.reduce((a, t) => a + (t.savings?.tokens_saved || 0), 0)
 
@@ -465,7 +480,15 @@ export default function ChatObservatory() {
               {demoMode === 'business' ? 'Business' : 'Technical'} Mode
             </button>
             <button onClick={clearSession} className="btn-secondary flex items-center gap-2">
-              <Trash2 className="w-4 h-4" /> Clear
+              <Trash2 className="w-4 h-4" /> Clear UI
+            </button>
+            <button
+              onClick={purgeDemo}
+              title="Delete all cached objects from DDN Infinia — next question will be a genuine MISS"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-all hover:opacity-80"
+              style={{ borderColor: 'rgba(237,39,56,0.4)', color: '#ED2738', background: 'rgba(237,39,56,0.06)' }}
+            >
+              <RotateCcw className="w-4 h-4" /> Reset Demo
             </button>
           </div>
         </div>
