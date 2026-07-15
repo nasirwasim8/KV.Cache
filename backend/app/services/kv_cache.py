@@ -61,11 +61,11 @@ class InfiniaKVCacheManager:
     def compute_prefix_key(use_case: str) -> str:
         return f"prefix/{use_case}"
 
-    def check(self, key: str) -> tuple[bool, Optional[dict], float]:
+    def check(self, key: str) -> tuple[bool, Optional[dict], float, dict]:
         """
         Check Infinia for cached entry.
-        Returns: (hit, data, latency_ms)
-        Latency is REAL — measured S3 GET time.
+        Returns: (hit, data, latency_ms, object_meta)
+        object_meta contains S3 metadata: size, key, cached_at — for the UI inspector.
         """
         object_key = f"kvcache/{key}.json"
         t0 = time.perf_counter()
@@ -75,30 +75,45 @@ class InfiniaKVCacheManager:
                 Bucket=settings.infinia_bucket,
                 Key=object_key
             )
-            data = json.loads(response["Body"].read())
+            body = response["Body"].read()
+            data = json.loads(body)
             latency_ms = (time.perf_counter() - t0) * 1000
             self._hit_count += 1
-            logger.info(f"CACHE HIT: {key[:8]}... latency={latency_ms:.1f}ms")
-            return True, data, latency_ms
+            object_meta = {
+                "s3_key":       object_key,
+                "s3_bucket":    settings.infinia_bucket,
+                "s3_endpoint":  settings.infinia_endpoint,
+                "size_bytes":   len(body),
+                "size_kb":      round(len(body) / 1024, 1),
+                "cached_at":    data.get("_cached_at", "unknown"),
+                "context_tokens": len(data.get("context", [])),
+                "query_preview":  data.get("query", "")[:80],
+                "response_preview": data.get("response", "")[:120] + "...",
+                "full_tokens":  data.get("full_tokens", 0),
+                "compute_ms":   data.get("compute_ms", 0),
+            }
+            logger.info(f"CACHE HIT: {key[:8]}... size={len(body)}B latency={latency_ms:.1f}ms")
+            return True, data, latency_ms, object_meta
         except ClientError as e:
             if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 latency_ms = (time.perf_counter() - t0) * 1000
                 self._miss_count += 1
                 logger.info(f"CACHE MISS: {key[:8]}... latency={latency_ms:.1f}ms")
-                return False, None, latency_ms
+                return False, None, latency_ms, {}
             raise
         except Exception as e:
             latency_ms = (time.perf_counter() - t0) * 1000
             logger.warning(f"Cache check error: {e}")
-            return False, None, latency_ms
+            return False, None, latency_ms, {}
 
-    def store(self, key: str, data: dict) -> float:
+    def store(self, key: str, data: dict) -> dict:
         """
         Store cache entry in Infinia.
-        Returns: store_latency_ms (real S3 PUT time)
+        Returns rich StoreMeta dict with S3 details for the UI inspector.
         """
         object_key = f"kvcache/{key}.json"
-        data["_cached_at"] = datetime.utcnow().isoformat()
+        cached_at = datetime.utcnow().isoformat()
+        data["_cached_at"] = cached_at
         data["_key"] = key
         body = json.dumps(data).encode()
         t0 = time.perf_counter()
@@ -110,13 +125,26 @@ class InfiniaKVCacheManager:
                 Body=body,
                 ContentType="application/json",
             )
-            latency_ms = (time.perf_counter() - t0) * 1000
+            store_ms = (time.perf_counter() - t0) * 1000
             self._total_bytes_stored += len(body)
-            logger.info(f"CACHE STORE: {key[:8]}... size={len(body)}B latency={latency_ms:.1f}ms")
-            return latency_ms
+            logger.info(f"CACHE STORE: {key[:8]}... size={len(body)}B latency={store_ms:.1f}ms")
+            return {
+                "store_latency_ms":  round(store_ms, 1),
+                "s3_key":            object_key,
+                "s3_bucket":         settings.infinia_bucket,
+                "s3_endpoint":       settings.infinia_endpoint,
+                "size_bytes":        len(body),
+                "size_kb":           round(len(body) / 1024, 1),
+                "cached_at":         cached_at,
+                "context_tokens":    len(data.get("context", [])),
+                "query_preview":     data.get("query", "")[:80],
+                "response_preview":  data.get("response", "")[:120] + "...",
+                "full_tokens":       data.get("full_tokens", 0),
+                "compute_ms":        data.get("compute_ms", 0),
+            }
         except Exception as e:
             logger.error(f"Cache store error: {e}")
-            return 0.0
+            return {"store_latency_ms": 0.0, "error": str(e)}
 
     def store_prefix(self, use_case: str, context: list, system_prompt: str) -> float:
         """Store a scenario prefix (system prompt KV state) in Infinia."""

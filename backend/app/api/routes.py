@@ -292,7 +292,7 @@ async def chat_send(req: ChatRequest):
 
     # ── Check Infinia Cache FIRST (right panel) ──────────────────────────
     t_cache_check = time.perf_counter()
-    cache_hit, cached_data, infinia_check_latency = kv_cache.check(cache_key)
+    cache_hit, cached_data, infinia_check_latency, object_meta = kv_cache.check(cache_key)
 
     # ── Left Panel: Always full recompute (even on cache hit) ────────────
     # Left always resends the FULL prompt including growing history → token count grows each turn
@@ -356,19 +356,22 @@ async def chat_send(req: ChatRequest):
             "history_turns":      len(history),
             "pricing_tier":       tier,
         }
+        store_meta = object_meta   # already have the metadata from the GET
+        store_meta["operation"] = "GET"
     else:
         # ◯ CACHE MISS — first time this question was asked
         # Compute fresh, then STORE in Infinia so next ask hits
         response_text = left_result.response
         right_cost = left_cost  # same cost on first miss
 
-        store_latency = kv_cache.store(cache_key, {
+        store_meta = kv_cache.store(cache_key, {
             "response":      response_text,
             "context":       left_result.context,
             "full_tokens":   full_tokens,
             "compute_ms":    left_result.total_ms,
             "query":         req.message,
         })
+        store_meta["operation"] = "PUT"
 
         right_metrics = {
             "ttft_ms":            round(left_result.ttft_ms, 1),
@@ -377,7 +380,7 @@ async def chat_send(req: ChatRequest):
             "cost_usd":           round(right_cost, 8),
             "source":             "FIRST_MISS_STORED",   # ← clearer label
             "infinia_latency_ms": round(infinia_check_latency, 1),
-            "store_latency_ms":   round(store_latency, 1),
+            "store_latency_ms":   round(store_meta.get("store_latency_ms", 0), 1),
             "response_tokens":    output_tokens,
             "cache_key_preview":  cache_key[:8] + "...",
             "history_turns":      len(history),
@@ -400,6 +403,21 @@ async def chat_send(req: ChatRequest):
         "cache_key": cache_key[:8] + "...",
         "left":      left_metrics,
         "right":     right_metrics,
+        "infinia_object": {
+            "operation":      store_meta.get("operation", "PUT"),
+            "s3_key":         store_meta.get("s3_key", f"kvcache/{cache_key}.json"),
+            "s3_bucket":      store_meta.get("s3_bucket", settings.infinia_bucket),
+            "s3_endpoint":    store_meta.get("s3_endpoint", settings.infinia_endpoint),
+            "size_kb":        store_meta.get("size_kb", 0),
+            "size_bytes":     store_meta.get("size_bytes", 0),
+            "cached_at":      store_meta.get("cached_at", ""),
+            "context_tokens": store_meta.get("context_tokens", 0),
+            "query_preview":  store_meta.get("query_preview", req.message[:80]),
+            "response_preview": store_meta.get("response_preview", response_text[:120] + "..."),
+            "full_tokens":    store_meta.get("full_tokens", full_tokens),
+            "compute_ms":     store_meta.get("compute_ms", left_result.total_ms),
+            "store_latency_ms": store_meta.get("store_latency_ms", 0),
+        },
         "savings": {
             "cost_usd":     round(savings_usd, 8),
             "pct":          savings_pct,
