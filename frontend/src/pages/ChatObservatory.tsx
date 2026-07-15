@@ -473,22 +473,26 @@ export default function ChatObservatory() {
             {/* Tech/Business toggle */}
             <button
               onClick={() => setDemoMode(m => m === 'business' ? 'technical' : 'business')}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all"
               style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', background: 'var(--surface-card)' }}
             >
-              {demoMode === 'business' ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4 text-[#1A81AF]" />}
+              {demoMode === 'business' ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5 text-[#1A81AF]" />}
               {demoMode === 'business' ? 'Business' : 'Technical'} Mode
             </button>
-            <button onClick={clearSession} className="btn-secondary flex items-center gap-2">
-              <Trash2 className="w-4 h-4" /> Clear UI
+            <button
+              onClick={clearSession}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all hover:opacity-80"
+              style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', background: 'var(--surface-card)' }}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear UI
             </button>
             <button
               onClick={purgeDemo}
               title="Delete all cached objects from DDN Infinia — next question will be a genuine MISS"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-all hover:opacity-80"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80"
               style={{ borderColor: 'rgba(237,39,56,0.4)', color: '#ED2738', background: 'rgba(237,39,56,0.06)' }}
             >
-              <RotateCcw className="w-4 h-4" /> Reset Demo
+              <RotateCcw className="w-3.5 h-3.5" /> Reset Demo
             </button>
           </div>
         </div>
