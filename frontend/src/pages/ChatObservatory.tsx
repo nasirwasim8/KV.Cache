@@ -1,8 +1,32 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, Server } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react'
+import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { kvApi, ChatResponse, PanelMetrics, PricingTier, PRICING_TIERS } from '../services/api'
+
+// ─── Error Boundary ────────────────────────────────────────────────────────────
+
+class TurnErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(e: Error) { return { error: e.message } }
+  componentDidCatch(e: Error, _i: ErrorInfo) { console.error('TurnRow crash:', e) }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-3 m-2 rounded-xl text-xs" style={{ background: 'rgba(237,39,56,0.06)', border: '1px solid rgba(237,39,56,0.2)', color: '#ED2738' }}>
+          <strong>Display error (response was received OK):</strong> {this.state.error}
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// safe number formatter — never crashes on undefined/null/NaN/Infinity
+const n = (v: unknown, dec = 0): string => {
+  if (v == null || typeof v !== 'number' || !isFinite(v)) return '—'
+  return v.toFixed(dec)
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,12 +54,12 @@ interface Turn {
   cacheHit: boolean
   left: PanelMetrics
   right: PanelMetrics
-  savings: { cost_usd: number; pct: number; speedup_x: number; tokens_saved: number; input_tokens_billed_left?: number; input_tokens_billed_right?: number }
+  savings: { cost_usd: number; pct: number; speedup_x: number; tokens_saved: number }
   pricing?: { tier: string; tier_label: string; input_per_1m: number; output_per_1m: number; cache_discount: number }
   infinia_object?: InfiniaObject
 }
 
-// ─── Infinia Object Inspector ─────────────────────────────────────────────────
+// ─── Infinia Object Inspector ──────────────────────────────────────────────────
 
 function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
   const [open, setOpen] = useState(false)
@@ -44,28 +68,27 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
   const isPut  = obj.operation === 'PUT'
   const color  = isPut ? '#1A81AF' : '#00C280'
   const Icon   = isPut ? Upload : Download
-  const label  = isPut ? '\u{1F4E4} Stored in DDN Infinia' : '\u{1F4E5} Retrieved from DDN Infinia'
+  const label  = isPut ? '📤 Stored in DDN Infinia' : '📥 Retrieved from DDN Infinia'
   const opLabel = isPut ? 'S3 PUT' : 'S3 GET'
 
-  // Safe formatters — never crash on null / undefined / non-number
-  const fms  = (v: unknown) => typeof v === 'number' ? v.toFixed(1) : '\u2014'
-  const fint = (v: unknown) => typeof v === 'number' ? v.toLocaleString() : '\u2014'
-  const fstr = (v: unknown) => (v != null ? String(v) : '\u2014')
+  const fms  = (v: unknown) => typeof v === 'number' ? v.toFixed(1) : '—'
+  const fint = (v: unknown) => typeof v === 'number' ? v.toLocaleString() : '—'
+  const fstr = (v: unknown) => (v != null ? String(v) : '—')
 
   const cachedAt = (() => {
-    try { return obj.cached_at ? new Date(obj.cached_at).toLocaleTimeString() : '\u2014' }
+    try { return obj.cached_at ? new Date(obj.cached_at).toLocaleTimeString() : '—' }
     catch { return fstr(obj.cached_at) }
   })()
 
   const endpoint = obj.s3_endpoint
     ? String(obj.s3_endpoint).replace('https://', '').replace('http://', '')
-    : '\u2014'
+    : '—'
 
   const rows = [
     { k: 'Bucket',                  v: fstr(obj.s3_bucket) },
     { k: 'Object Key',              v: fstr(obj.s3_key) },
     { k: 'Endpoint',                v: endpoint },
-    { k: 'Object Size',             v: `${fint(obj.size_bytes)} bytes (${fstr(obj.size_kb)} KB)` },
+    { k: 'Object Size',             v: `${fint(obj.size_bytes)} bytes  (${fstr(obj.size_kb)} KB)` },
     { k: 'Stored At (UTC)',         v: cachedAt },
     { k: isPut ? 'Write Latency' : 'Read Latency', v: `${fms(obj.store_latency_ms)} ms` },
     { k: 'KV State Tokens',         v: `${fint(obj.context_tokens)} token IDs` },
@@ -81,7 +104,6 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
       className="mt-2 rounded-xl overflow-hidden border-2"
       style={{ borderColor: `${color}40`, background: `${color}06` }}
     >
-      {/* Collapsed header — always visible */}
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:opacity-80 transition-opacity"
@@ -104,7 +126,6 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
         </div>
       </button>
 
-      {/* Expandable detail */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -115,7 +136,6 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
             className="overflow-hidden"
           >
             <div className="px-3 pb-3 space-y-2 border-t" style={{ borderColor: `${color}20` }}>
-              {/* S3 metadata grid */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 {rows.map(row => (
                   <div key={row.k} className="p-2 rounded-lg" style={{ background: `${color}08` }}>
@@ -130,7 +150,6 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
                 ))}
               </div>
 
-              {/* Cached response preview */}
               {obj.response_preview && (
                 <div className="p-2 rounded-lg" style={{ background: `${color}08` }}>
                   <div className="font-semibold text-neutral-500 mb-1"
@@ -141,7 +160,6 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
                 </div>
               )}
 
-              {/* KV state explanation */}
               <div className="p-2 rounded-lg text-xs"
                 style={{ background: 'rgba(128,119,120,0.06)', border: '1px solid rgba(128,119,120,0.15)' }}>
                 <span className="font-semibold text-neutral-600">What is the KV state? </span>
@@ -159,6 +177,8 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
   )
 }
 
+// ─── MetricCard ───────────────────────────────────────────────────────────────
+
 function MetricCard({ label, value, unit, highlight, icon: Icon }: {
   label: string; value: string | number; unit?: string; highlight?: 'green' | 'red' | 'blue'; icon?: any
 }) {
@@ -168,7 +188,6 @@ function MetricCard({ label, value, unit, highlight, icon: Icon }: {
     blue:  { bg: 'rgba(26,129,175,0.08)', text: '#1A81AF', border: 'rgba(26,129,175,0.2)' },
   }
   const c = highlight ? colors[highlight] : null
-
   return (
     <div className="metric-card" style={c ? { background: c.bg, borderColor: c.border } : {}}>
       {Icon && <Icon className="w-4 h-4 mb-2" style={{ color: c ? c.text : 'var(--text-muted)' }} />}
@@ -180,12 +199,13 @@ function MetricCard({ label, value, unit, highlight, icon: Icon }: {
   )
 }
 
+// ─── PanelHeader ──────────────────────────────────────────────────────────────
+
 function PanelHeader({ title, subtitle, isCache, source, latency }: {
   title: string; subtitle: string; isCache: boolean; source?: string; latency?: number
 }) {
   const isHit  = source === 'INFINIA_CACHE'
   const isMiss = source === 'FIRST_MISS_STORED'
-
   return (
     <div className={`p-4 border-b ${isCache ? (isHit ? 'panel-cached' : 'panel-nocache') : 'panel-nocache'}`} style={{ borderBottomColor: 'var(--border-subtle)' }}>
       <div className="flex items-center justify-between">
@@ -200,7 +220,7 @@ function PanelHeader({ title, subtitle, isCache, source, latency }: {
           {isCache && isHit && (
             <>
               <div className="badge badge-success text-xs">⚡ INFINIA HIT</div>
-              {latency !== undefined && <div className="text-xs font-mono" style={{ color: '#00C280' }}>{latency.toFixed(0)}ms</div>}
+              {latency !== undefined && <div className="text-xs font-mono" style={{ color: '#00C280' }}>{n(latency)}ms</div>}
             </>
           )}
           {isCache && isMiss && (
@@ -215,114 +235,121 @@ function PanelHeader({ title, subtitle, isCache, source, latency }: {
   )
 }
 
+// ─── TurnRow ──────────────────────────────────────────────────────────────────
+
 function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
-  const isHit = turn.right.source === 'INFINIA_CACHE'
-  const isMiss = turn.right.source === 'FIRST_MISS_STORED'
+  const isHit  = turn.right?.source === 'INFINIA_CACHE'
+  const isMiss = turn.right?.source === 'FIRST_MISS_STORED'
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: idx * 0.05 }}
-      className="border-b last:border-0"
-      style={{ borderColor: 'var(--border-subtle)' }}
-    >
-      {/* User message */}
-      <div className="flex justify-end p-3">
-        <div className="chat-bubble-user">{turn.userMessage}</div>
-      </div>
+    <TurnErrorBoundary>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: idx * 0.05 }}
+        className="border-b last:border-0"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
+        {/* User message */}
+        <div className="flex justify-end p-3">
+          <div className="chat-bubble-user">{turn.userMessage}</div>
+        </div>
 
-      {/* Side-by-side response panels */}
-      <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--border-subtle)' }}>
-        {/* Left — No Cache: always GPU recompute, token count grows with history */}
-        <div style={{ background: 'var(--surface-card)' }}>
-          <PanelHeader title="No KV Cache" subtitle="Full GPU recompute every turn" isCache={false} source="GPU_COMPUTED" />
-          <div className="p-3">
-            <div className="chat-bubble-ai text-xs leading-relaxed mb-3">{turn.response}</div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
-                <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>{turn.left.ttft_ms.toFixed(0)}ms</div>
-                <div className="metric-label" style={{ fontSize: '9px' }}>TTFT</div>
-              </div>
-              <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
-                <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>{turn.left.tokens_sent}</div>
-                <div className="metric-label" style={{ fontSize: '9px' }}>TOKENS SENT</div>
-              </div>
-              <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
-                <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>${turn.left.cost_usd.toFixed(4)}</div>
-                <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
+        {/* Side-by-side panels */}
+        <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--border-subtle)' }}>
+
+          {/* LEFT — No Cache */}
+          <div style={{ background: 'var(--surface-card)' }}>
+            <PanelHeader title="No KV Cache" subtitle="Full GPU recompute every turn" isCache={false} source="GPU_COMPUTED" />
+            <div className="p-3">
+              <div className="chat-bubble-ai text-xs leading-relaxed mb-3">{turn.response}</div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
+                  <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>{n(turn.left?.ttft_ms)}ms</div>
+                  <div className="metric-label" style={{ fontSize: '9px' }}>TTFT</div>
+                </div>
+                <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
+                  <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>{turn.left?.tokens_sent ?? '—'}</div>
+                  <div className="metric-label" style={{ fontSize: '9px' }}>TOKENS SENT</div>
+                </div>
+                <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
+                  <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>${n(turn.left?.cost_usd, 4)}</div>
+                  <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Right — With Cache */}
-        <div className={isHit ? 'cache-hit-flash' : ''} style={{ background: 'var(--surface-card)' }}>
-          <PanelHeader
-            title="DDN Infinia Cache"
-            subtitle={isHit ? 'Served from Infinia Object Store' : isMiss ? 'First compute → stored in Infinia' : 'KV state from object store'}
-            isCache={true}
-            source={turn.right.source}
-            latency={turn.right.infinia_latency_ms}
-          />
-          <div className="p-3">
-            <div className="chat-bubble-ai text-xs leading-relaxed mb-3">{turn.response}</div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
-                <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
-                  {isHit ? `${turn.right.ttft_ms.toFixed(0)}ms` : `${turn.right.ttft_ms.toFixed(0)}ms`}
+          {/* RIGHT — Infinia Cache */}
+          <div className={isHit ? 'cache-hit-flash' : ''} style={{ background: 'var(--surface-card)' }}>
+            <PanelHeader
+              title="DDN Infinia Cache"
+              subtitle={isHit ? 'Served from Infinia Object Store' : isMiss ? 'First compute → stored in Infinia' : 'KV state from object store'}
+              isCache={true}
+              source={turn.right?.source}
+              latency={turn.right?.infinia_latency_ms}
+            />
+            <div className="p-3">
+              <div className="chat-bubble-ai text-xs leading-relaxed mb-3">{turn.response}</div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
+                  <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
+                    {n(turn.right?.ttft_ms)}ms
+                  </div>
+                  <div className="metric-label" style={{ fontSize: '9px' }}>TTFT</div>
                 </div>
-                <div className="metric-label" style={{ fontSize: '9px' }}>TTFT</div>
-              </div>
-              <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
-                <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
-                  {isHit ? `${turn.right.tokens_sent} ✓` : turn.right.tokens_sent}
+                <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
+                  <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
+                    {isHit ? `${turn.right?.tokens_sent ?? '—'} ✓` : (turn.right?.tokens_sent ?? '—')}
+                  </div>
+                  <div className="metric-label" style={{ fontSize: '9px' }}>TOKENS {isHit ? 'NEW ONLY' : 'SENT'}</div>
                 </div>
-                <div className="metric-label" style={{ fontSize: '9px' }}>TOKENS {isHit ? 'SAVED' : 'SENT'}</div>
-              </div>
-              <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
-                <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
-                  ${isHit ? turn.right.cost_usd.toFixed(7) : turn.right.cost_usd.toFixed(4)}
+                <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
+                  <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
+                    ${n(turn.right?.cost_usd, isHit ? 7 : 4)}
+                  </div>
+                  <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
                 </div>
-                <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
               </div>
+
+              {/* Cache HIT summary bar */}
+              {isHit && (
+                <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs font-semibold" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
+                  <Database className="w-3 h-3 flex-shrink-0" />
+                  {n(turn.right?.infinia_latency_ms)}ms S3 GET
+                  <span className="mx-1 opacity-40">·</span>
+                  {turn.savings?.speedup_x ?? '—'}× faster
+                  <span className="mx-1 opacity-40">·</span>
+                  {n(turn.savings?.pct)}% cheaper
+                  <span className="mx-1 opacity-40">·</span>
+                  {turn.savings?.tokens_saved ?? 0} tokens saved
+                </div>
+              )}
+
+              {/* First MISS hint */}
+              {isMiss && (
+                <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs" style={{ background: 'rgba(26,129,175,0.08)', color: '#1A81AF' }}>
+                  <Database className="w-3 h-3 flex-shrink-0" />
+                  Computed & stored in Infinia — <strong>ask again to see the cache hit!</strong>
+                  {(turn.right?.store_latency_ms ?? 0) > 0 && (
+                    <span className="ml-1 opacity-60">({n(turn.right?.store_latency_ms)}ms write)</span>
+                  )}
+                </div>
+              )}
+
+              {/* Infinia Object Inspector */}
+              {turn.infinia_object && (
+                <InfiniaObjectCard obj={turn.infinia_object} />
+              )}
             </div>
-
-            {/* Cache HIT summary bar */}
-            {isHit && (
-              <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs font-semibold" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
-                <Database className="w-3 h-3 flex-shrink-0" />
-                {turn.right.infinia_latency_ms?.toFixed(0)}ms S3 GET
-                <span className="mx-1 opacity-40">·</span>
-                {turn.savings.speedup_x}× faster
-                <span className="mx-1 opacity-40">·</span>
-                {turn.savings.pct.toFixed(0)}% cheaper
-                <span className="mx-1 opacity-40">·</span>
-                {turn.savings.tokens_saved} tokens saved
-              </div>
-            )}
-
-            {/* First MISS hint */}
-            {isMiss && (
-              <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs" style={{ background: 'rgba(26,129,175,0.08)', color: '#1A81AF' }}>
-                <Database className="w-3 h-3 flex-shrink-0" />
-                Computed &amp; stored in Infinia — <strong>ask again to see the cache hit!</strong>
-                {turn.right.store_latency_ms && <span className="ml-1 opacity-60">({turn.right.store_latency_ms.toFixed(0)}ms write)</span>}
-              </div>
-            )}
-
-            {/* ── Infinia Object Inspector ────────────────────────── */}
-            {turn.infinia_object && (
-              <InfiniaObjectCard obj={turn.infinia_object as InfiniaObject} />
-            )}
           </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </TurnErrorBoundary>
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function ChatObservatory() {
   const [turns, setTurns] = useState<Turn[]>([])
@@ -359,21 +386,21 @@ export default function ChatObservatory() {
       }
       setTurns(prev => [...prev, turn])
       if (result.cache_hit) {
-        setCumulativeSavings(p => p + (result.savings.cost_usd || 0))
+        setCumulativeSavings(p => p + (result.savings?.cost_usd || 0))
         setTotalHits(p => p + 1)
         toast.success(
-          `⚡ INFINIA HIT — ${result.savings.speedup_x}x faster · ${result.savings.pct.toFixed(0)}% cheaper · $${(result.savings.cost_usd || 0).toFixed(5)} saved`,
+          `⚡ INFINIA HIT — ${result.savings?.speedup_x ?? '?'}x faster · ${n(result.savings?.pct)}% cheaper`,
           { duration: 4000, icon: '🗄️' }
         )
       } else {
-        toast('◯ Cache MISS — response stored in Infinia. Ask again to see the hit! →', { duration: 3000, icon: '💾' })
+        toast('◯ Cache MISS — stored in Infinia. Ask again to see the hit!', { duration: 3000, icon: '💾' })
       }
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Request failed — is Ollama running?')
     } finally {
       setLoading(false)
     }
-  }, [input, loading, sessionId, demoMode])
+  }, [input, loading, sessionId, demoMode, pricingTier])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
@@ -386,7 +413,7 @@ export default function ChatObservatory() {
   }
 
   const hitRate = turns.length > 0 ? Math.round((totalHits / turns.length) * 100) : 0
-  const totalTokensSaved = turns.reduce((a, t) => a + (t.savings.tokens_saved || 0), 0)
+  const totalTokensSaved = turns.reduce((a, t) => a + (t.savings?.tokens_saved || 0), 0)
 
   const DEMO_QUESTIONS = [
     'What is DDN Infinia?',
@@ -427,6 +454,7 @@ export default function ChatObservatory() {
                 </button>
               ))}
             </div>
+
             {/* Tech/Business toggle */}
             <button
               onClick={() => setDemoMode(m => m === 'business' ? 'technical' : 'business')}
@@ -442,124 +470,83 @@ export default function ChatObservatory() {
           </div>
         </div>
 
-        {/* Pricing model explanation pill */}
+        {/* Pricing info pill */}
         <div className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--surface-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
           <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: PRICING_TIERS[pricingTier].color }} />
           <span>
             <strong style={{ color: PRICING_TIERS[pricingTier].color }}>{PRICING_TIERS[pricingTier].label}</strong>
-            {' '}— Billed <strong>${PRICING_TIERS[pricingTier].input_per_1m}/1M</strong> input tokens + <strong>${PRICING_TIERS[pricingTier].output_per_1m}/1M</strong> output tokens.
+            {' '}— Billed <strong>${PRICING_TIERS[pricingTier].input_per_1m}/1M</strong> input + <strong>${PRICING_TIERS[pricingTier].output_per_1m}/1M</strong> output.
             {' '}{PRICING_TIERS[pricingTier].note}
           </span>
         </div>
       </div>
 
       {/* Session Stats Bar */}
-      {turns.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-4 gap-3">
-          <MetricCard label="Session Savings" value={`$${cumulativeSavings.toFixed(4)}`} highlight="green" icon={DollarSign} />
-          <MetricCard label="Cache Hit Rate" value={`${hitRate}%`} highlight={hitRate >= 50 ? 'green' : 'blue'} icon={Database} />
-          <MetricCard label="Tokens Saved" value={totalTokensSaved.toLocaleString()} icon={Hash} />
-          <MetricCard label="Conversation Turns" value={turns.length} icon={RefreshCw} />
-        </motion.div>
-      )}
+      <div className="grid grid-cols-4 gap-4">
+        <MetricCard label="Session Savings"   value={`$${n(cumulativeSavings, 4)}`} highlight="green" icon={DollarSign} />
+        <MetricCard label="Cache Hit Rate"    value={`${hitRate}%`}                 highlight={hitRate > 0 ? 'green' : undefined} icon={Zap} />
+        <MetricCard label="Tokens Saved"      value={totalTokensSaved.toLocaleString()} icon={Hash} />
+        <MetricCard label="Conversation Turns" value={turns.length}                 icon={Database} />
+      </div>
 
-      {/* Main Observatory Panel */}
-      <div className="card overflow-hidden">
-        {/* Column Headers */}
-        <div className="grid grid-cols-2 gap-px border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--border-subtle)' }}>
-          <div className="p-3 flex items-center gap-2" style={{ background: 'var(--surface-secondary)' }}>
-            <span className="text-base">❌</span>
-            <div>
-              <div className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Without KV Cache</div>
-              <div className="text-xs text-neutral-500">Full context recomputed every turn</div>
-            </div>
-          </div>
-          <div className="p-3 flex items-center gap-2" style={{ background: 'rgba(0,194,128,0.04)' }}>
-            <span className="text-base">✅</span>
-            <div>
-              <div className="text-xs font-bold uppercase tracking-wider" style={{ color: '#00C280' }}>With DDN Infinia KV Cache</div>
-              <div className="text-xs text-neutral-500">KV state retrieved from Infinia Object Store</div>
-            </div>
-          </div>
+      {/* Panel Column Headers */}
+      <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--border-subtle)' }}>
+        <div className="p-3 text-center font-semibold text-sm" style={{ background: 'rgba(237,39,56,0.04)', color: '#ED2738' }}>
+          ❌ WITHOUT KV CACHE<br /><span className="text-xs font-normal text-neutral-500">Full context recomputed every turn</span>
         </div>
-
-        {/* Turns */}
-        <div className="min-h-[300px] max-h-[500px] overflow-y-auto">
-          {turns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <div className="text-4xl mb-4">🔬</div>
-              <p className="text-neutral-600 font-medium">Start a conversation to observe KV Cache in action</p>
-              <p className="text-sm text-neutral-400 mt-1">Step 1: Ask any question → MISS (both compute, result stored in Infinia)</p>
-              <p className="text-sm font-medium mt-0.5" style={{ color: '#00C280' }}>Step 2: Ask the SAME question → RIGHT panel shows ⚡ INFINIA HIT with real latency!</p>
-              <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-lg">
-                {DEMO_QUESTIONS.map(q => (
-                  <button key={q} onClick={() => setInput(q)}
-                    className="text-xs px-3 py-1.5 rounded-full border transition-all hover:border-[#ED2738] hover:text-[#ED2738]"
-                    style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', background: 'var(--surface-card)' }}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div>
-              {turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} />)}
-              {loading && (
-                <div className="p-4 flex items-center gap-3 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-                  <div className="flex gap-1.5"><div className="typing-dot"/><div className="typing-dot"/><div className="typing-dot"/></div>
-                  <span className="text-sm text-neutral-500">Ollama generating on RTX 5090...</span>
-                </div>
-              )}
-              <div ref={bottomRef} />
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div className="border-t p-4" style={{ borderColor: 'var(--border-subtle)' }}>
-          <div className="flex gap-3 items-end">
-            <textarea
-              value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Ask anything… try asking the same question twice to see the cache hit!"
-              className="input-field flex-1 resize-none" rows={2} disabled={loading}
-            />
-            <button onClick={sendMessage} disabled={loading || !input.trim()} className="btn-primary h-12 px-6">
-              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            </button>
-          </div>
-          <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-            Press Enter to send · Shift+Enter for new line · Ask same question again to trigger Infinia cache hit
-          </p>
+        <div className="p-3 text-center font-semibold text-sm" style={{ background: 'rgba(0,194,128,0.04)', color: '#00C280' }}>
+          ✅ WITH DDN INFINIA KV CACHE<br /><span className="text-xs font-normal text-neutral-500">KV state retrieved from Infinia Object Store</span>
         </div>
       </div>
 
-      {/* How it works box */}
-      {demoMode === 'technical' && (
-        <div className="card p-5" style={{ borderLeft: '3px solid #1A81AF' }}>
-          <h4 className="font-semibold text-sm mb-3" style={{ color: '#1A81AF' }}>🔧 Technical Mode: What's happening</h4>
-          <div className="grid grid-cols-2 gap-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
-            <div>
-              <strong style={{ color: 'var(--text-primary)' }}>Left Panel (No Cache):</strong>
-              <ol className="mt-1 space-y-1 list-decimal list-inside">
-                <li>Build full prompt: system + history + new message</li>
-                <li>POST /api/generate to Ollama with all tokens</li>
-                <li>Measure real TTFT from streaming response</li>
-                <li>Count total tokens sent (full context)</li>
-              </ol>
-            </div>
-            <div>
-              <strong style={{ color: 'var(--text-primary)' }}>Right Panel (Infinia Cache):</strong>
-              <ol className="mt-1 space-y-1 list-decimal list-inside">
-                <li>Hash conversation context → lookup key</li>
-                <li>GET <code className="font-mono bg-black/5 px-1 rounded">kvcache/{'<hash>'}.json</code> from Infinia S3</li>
-                <li>HIT: Infinia read latency = TTFT. Only new tokens counted.</li>
-                <li>MISS: Same as left + PUT response to Infinia for next time</li>
-              </ol>
+      {/* Chat turns */}
+      <div className="card overflow-hidden">
+        {turns.length === 0 ? (
+          <div className="p-8 text-center space-y-4">
+            <div className="text-4xl">🗄️</div>
+            <div className="font-semibold text-neutral-700">Ask a question to start the demo</div>
+            <p className="text-sm text-neutral-500 max-w-md mx-auto">
+              First question → MISS (stored in Infinia). Ask <strong>same question again</strong> → HIT (instantly retrieved). The Infinia Object Inspector shows exactly what was stored.
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center mt-4">
+              {DEMO_QUESTIONS.map(q => (
+                <button key={q} onClick={() => setInput(q)}
+                  className="px-3 py-1.5 rounded-full text-xs border font-medium hover:border-ddn-red hover:text-ddn-red transition-colors"
+                  style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
+                  {q}
+                </button>
+              ))}
             </div>
           </div>
+        ) : (
+          turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} />)
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="card p-4">
+        <div className="flex gap-3 items-end">
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask anything... (first ask = MISS stored in Infinia, repeat = HIT retrieved instantly)"
+            className="flex-1 resize-none rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-all"
+            style={{ borderColor: 'var(--border-default)', background: 'var(--surface-secondary)', color: 'var(--text-primary)', minHeight: '52px', maxHeight: '120px', focusRingColor: '#ED2738' } as any}
+            rows={1}
+            disabled={loading}
+          />
+          <button
+            onClick={sendMessage}
+            disabled={loading || !input.trim()}
+            className="btn-primary flex items-center gap-2 px-4 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
+            {loading ? 'Thinking...' : 'Send'}
+          </button>
         </div>
-      )}
+      </div>
     </div>
   )
 }
