@@ -304,7 +304,10 @@ export default function PrefixMultiplier() {
           <div className="grid grid-cols-4 gap-4 mb-6">
             <div className="metric-card" style={{ background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' }}>
               <AnimatedNumber value={cumulativeSavings} decimals={5} prefix="$" className="metric-value" style={{ color: '#00C280', fontSize: '1.4rem', fontFamily: 'var(--font-mono)', fontWeight: 700 } as any} />
-              <div className="metric-label">Session Savings</div>
+              <div className="metric-label">Session Savings (Total)</div>
+              <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '4px', lineHeight: 1.3 }}>
+                Sum of {results.filter(r => r.with_cache.source === 'INFINIA_HIT').length} cache hit{results.filter(r => r.with_cache.source === 'INFINIA_HIT').length !== 1 ? 's' : ''} in this session
+              </div>
             </div>
             <div className="metric-card">
               <div className="metric-value" style={{ fontSize: '1.4rem' }}>{results.filter(r => r.with_cache.source === 'INFINIA_HIT').length}/{results.length}</div>
@@ -326,8 +329,14 @@ export default function PrefixMultiplier() {
 
           {scaleProjection && (
             <div className="p-4 rounded-xl" style={{ background: 'rgba(0,194,128,0.06)', border: '1px solid rgba(0,194,128,0.2)' }}>
-              <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#00C280' }}>
-                📊 Scale to {scaleProjection.daily_requests.toLocaleString()} requests/day ({scenario?.name})
+              <div className="flex items-start justify-between mb-3">
+                <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#00C280' }}>
+                  📊 Scale to {scaleProjection.daily_requests.toLocaleString()} requests/day ({scenario?.name})
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#888', textAlign: 'right', lineHeight: 1.4, maxWidth: '260px' }}>
+                  Based on <span style={{ fontFamily: 'monospace', color: '#00C280', fontWeight: 700 }}>${lastResult?.savings.cost_usd.toFixed(5)}</span> saved per request
+                  &nbsp;×&nbsp;{scaleProjection.daily_requests.toLocaleString()}/day&nbsp;×&nbsp;30 days
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 {[
@@ -340,6 +349,10 @@ export default function PrefixMultiplier() {
                     <div className="text-xs text-neutral-500 mt-1">{item.label}</div>
                   </div>
                 ))}
+              </div>
+              <div style={{ marginTop: '12px', fontSize: '0.68rem', color: '#aaa', borderTop: '1px solid rgba(0,194,128,0.15)', paddingTop: '10px' }}>
+                💡 <em>Note: "Session Savings" above is the cumulative total across all {results.length} requests in this session.
+                The scale projection multiplies the <strong>per-request savings</strong> (${lastResult?.savings.cost_usd.toFixed(5)}) by daily volume.</em>
               </div>
             </div>
           )}
