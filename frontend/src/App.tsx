@@ -6,13 +6,15 @@ import DemoSidebar from './components/DemoSidebar'
 import Configuration from './pages/Configuration'
 import ChatObservatory from './pages/ChatObservatory'
 import PrefixMultiplier from './pages/PrefixMultiplier'
+import ROICalculator from './pages/ROICalculator'
 import About from './pages/About'
 
 const TABS = [
-  { id: 'configuration', label: 'Configuration', icon: 'settings' },
-  { id: 'observatory',   label: 'Chat Observatory',    icon: 'message-sq' },
-  { id: 'prefix',        label: 'Prefix Multiplier',   icon: 'bar-chart' },
-  { id: 'about',         label: 'Architecture',         icon: 'info' },
+  { id: 'configuration', label: 'Configuration',      icon: 'settings'   },
+  { id: 'observatory',   label: 'Chat Observatory',   icon: 'message-sq' },
+  { id: 'prefix',        label: 'Prefix Multiplier',  icon: 'bar-chart'  },
+  { id: 'roi',           label: 'ROI Calculator',     icon: 'calculator' },
+  { id: 'about',         label: 'Architecture',       icon: 'info'       },
 ]
 
 const HEADER_TABS = [
@@ -44,6 +46,7 @@ export default function App() {
               {activeTab === 'configuration' && <Configuration />}
               {activeTab === 'observatory'   && <ChatObservatory />}
               {activeTab === 'prefix'        && <PrefixMultiplier />}
+              {activeTab === 'roi'           && <ROICalculator />}
               {activeTab === 'about'         && <About />}
             </main>
           </div>

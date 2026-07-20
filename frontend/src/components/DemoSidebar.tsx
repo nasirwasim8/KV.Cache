@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database } from 'lucide-react'
+import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 interface Tab { id: string; label: string; icon: string }
@@ -9,6 +9,7 @@ const iconMap: Record<string, React.ReactNode> = {
   settings:     <Settings      className="w-5 h-5" />,
   'message-sq': <MessageSquare className="w-5 h-5" />,
   'bar-chart':  <BarChart3     className="w-5 h-5" />,
+  calculator:   <Calculator    className="w-5 h-5" />,
   info:         <Info          className="w-5 h-5" />,
 }
 
