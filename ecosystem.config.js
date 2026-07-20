@@ -40,7 +40,8 @@ module.exports = {
       watch: false,
       max_memory_restart: "500M",
       env: {
-        NODE_ENV: "development"
+        NODE_ENV: "development",
+        VITE_API_HOST: "127.0.0.1"   // proxy target — always local uvicorn inside WSL
       },
       error_file: "/home/nwasim/projects/ddn-kv-cache/logs/frontend-error.log",
       out_file:   "/home/nwasim/projects/ddn-kv-cache/logs/frontend-out.log",
