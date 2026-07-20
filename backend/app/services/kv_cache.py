@@ -161,7 +161,7 @@ class InfiniaKVCacheManager:
     def get_prefix(self, use_case: str) -> tuple[Optional[dict], float]:
         """Retrieve a scenario prefix from Infinia. Returns (data, latency_ms)."""
         key = self.compute_prefix_key(use_case)
-        hit, data, latency = self.check(key)
+        hit, data, latency, _ = self.check(key)  # _ = object_meta (not needed here)
         if hit:
             return data, latency
         return None, latency
