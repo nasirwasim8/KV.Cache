@@ -106,7 +106,7 @@ function WaterfallRow({ result, maxTime, isCurrent }: { result: RunResult; maxTi
 
 export default function PrefixMultiplier() {
   const [scenarios, setScenarios] = useState<Record<string, ScenarioMeta>>({})
-  const [activeScenario, setActiveScenario] = useState<string>('legal')
+  const [activeScenario, setActiveScenario] = useState<string>('contact_center')
   const [seeded, setSeeded] = useState<Record<string, boolean>>({})
   const [seedInfo, setSeedInfo] = useState<Record<string, any>>({})
   const [seeding, setSeeding] = useState(false)
