@@ -360,6 +360,10 @@ export default function ChatObservatory() {
   const [sessionId] = useState(() => `sess_${Date.now()}`)
   const [cumulativeSavings, setCumulativeSavings] = useState(0)
   const [totalHits, setTotalHits] = useState(0)
+  const [gpuFlushed, setGpuFlushed] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [persistedTurns, setPersistedTurns] = useState(0)
+  const [resumeLatency, setResumeLatency] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns])
@@ -409,7 +413,57 @@ export default function ChatObservatory() {
   const clearSession = async () => {
     await kvApi.clearSession(sessionId).catch(() => {})
     setTurns([]); setCumulativeSavings(0); setTotalHits(0)
+    setGpuFlushed(false); setPersistedTurns(0); setResumeLatency(null)
     toast.success('Session cleared')
+  }
+
+  // GPU Memory Flush — persists to Infinia FIRST, then wipes UI
+  const flushGpuMemory = async () => {
+    if (turns.length === 0) {
+      toast.error('No conversation to flush — ask a few questions first')
+      return
+    }
+    try {
+      // Step 1: persist current conversation to Infinia
+      const res = await kvApi.persistSession(sessionId)
+      setPersistedTurns(res.turns_persisted || turns.length)
+      // Step 2: wipe local session memory (GPU forgot you)
+      await kvApi.clearSession(sessionId).catch(() => {})
+      setTurns([]); setCumulativeSavings(0); setTotalHits(0); setResumeLatency(null)
+      setGpuFlushed(true)
+      toast.success(`💾 ${res.turns_persisted} turns written to Infinia in ${res.store_latency_ms}ms`, { duration: 5000 })
+    } catch {
+      toast.error('Could not persist to Infinia — check connection')
+    }
+  }
+
+  // Restore from Infinia — reload the conversation after GPU flush
+  const restoreFromInfinia = async () => {
+    setRestoring(true)
+    try {
+      const res = await kvApi.getSessionHistory(sessionId)
+      if (res.found && res.turns?.length > 0) {
+        const restoredTurns: Turn[] = res.turns.map((t: any, i: number) => ({
+          id: `restored_${i}`,
+          userMessage: t.user,
+          response: t.assistant,
+          timestamp: Date.now() - (res.turns.length - i) * 1000,
+          cacheHit: true,
+          left: { ttft_ms: 0, total_ms: 0, tokens_sent: 0, cost_usd: 0, source: 'RESTORED', response_tokens: 0 },
+          right: { ttft_ms: res.infinia_latency_ms || res.latency_ms, total_ms: res.latency_ms, tokens_sent: 0, cost_usd: 0, source: 'INFINIA_CACHE', infinia_latency_ms: res.infinia_latency_ms || res.latency_ms, response_tokens: 0 },
+        }))
+        setTurns(restoredTurns)
+        setResumeLatency(res.latency_ms)
+        setGpuFlushed(false)
+        toast.success(`⚡ Restored ${res.turn_count} turns from Infinia in ${res.latency_ms}ms`, { duration: 5000, icon: '🗄️' })
+      } else {
+        toast.error('No session found in Infinia — flush the session first')
+      }
+    } catch {
+      toast.error('Restore failed — check Infinia connection')
+    } finally {
+      setRestoring(false)
+    }
   }
 
   // Purge ALL objects from Infinia — makes next question a genuine MISS
@@ -486,6 +540,32 @@ export default function ChatObservatory() {
             >
               <Trash2 className="w-3.5 h-3.5" /> Clear UI
             </button>
+            {/* GPU Memory Flush button */}
+            <button
+              onClick={flushGpuMemory}
+              disabled={turns.length === 0}
+              title="Persist conversation to Infinia then clear GPU memory — demonstrates session eviction"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ borderColor: 'rgba(237,140,0,0.5)', color: '#D97706', background: 'rgba(237,140,0,0.07)' }}
+            >
+              <span className="text-xs">🔴</span> GPU Memory Flushed
+            </button>
+
+            {/* Restore from Infinia button — only visible after flush */}
+            {gpuFlushed && (
+              <button
+                onClick={restoreFromInfinia}
+                disabled={restoring}
+                title="Reload conversation from DDN Infinia object store"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-50"
+                style={{ borderColor: 'rgba(0,194,128,0.5)', color: '#00C280', background: 'rgba(0,194,128,0.08)' }}
+              >
+                {restoring
+                  ? <><div className="w-3 h-3 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /> Restoring…</>
+                  : <><span className="text-xs">⚡</span> Restore from Infinia</>}
+              </button>
+            )}
+
             <button
               onClick={purgeDemo}
               title="Delete all cached objects from DDN Infinia — next question will be a genuine MISS"
@@ -525,6 +605,43 @@ export default function ChatObservatory() {
           ✅ WITH DDN INFINIA KV CACHE<br /><span className="text-xs font-normal text-neutral-500">KV state retrieved from Infinia Object Store</span>
         </div>
       </div>
+
+      {/* GPU Memory Flushed Banner */}
+      {gpuFlushed && (
+        <div className="rounded-xl p-4 flex items-start gap-4" style={{ background: 'rgba(217,119,6,0.07)', border: '2px solid rgba(217,119,6,0.35)' }}>
+          <div className="text-3xl flex-shrink-0">🔴</div>
+          <div className="flex-1">
+            <div className="font-bold text-sm mb-1" style={{ color: '#D97706' }}>GPU HBM Cleared — Session Evicted from Memory</div>
+            <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              The GPU has been serving other users. Your {persistedTurns}-turn conversation was evicted from GPU memory
+              to make room. <strong style={{ color: '#D97706' }}>Without Infinia</strong>, this context is gone — you'd have to start over.
+              <br />
+              <strong style={{ color: '#00C280' }}>With DDN Infinia</strong>, your full conversation state was persisted to the object store.
+              Click <strong>⚡ Restore from Infinia</strong> to reload it.
+            </div>
+          </div>
+          <button
+            onClick={restoreFromInfinia}
+            disabled={restoring}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ background: '#00C280', color: '#fff' }}
+          >
+            {restoring ? 'Restoring…' : '⚡ Restore from Infinia'}
+          </button>
+        </div>
+      )}
+
+      {/* Session Resume Success Banner */}
+      {resumeLatency !== null && !gpuFlushed && turns.length > 0 && (
+        <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'rgba(0,194,128,0.07)', border: '1px solid rgba(0,194,128,0.3)' }}>
+          <span className="text-xl">⚡</span>
+          <div className="flex-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <strong style={{ color: '#00C280' }}>Session restored from DDN Infinia in {resumeLatency}ms</strong> — {turns.length} conversation turns reloaded.
+            GPU re-processing skipped entirely. Continue the conversation below.
+          </div>
+          <button onClick={() => setResumeLatency(null)} className="text-xs opacity-50 hover:opacity-100" style={{ color: 'var(--text-muted)' }}>✕</button>
+        </div>
+      )}
 
       {/* Chat turns */}
       <div className="card overflow-hidden">

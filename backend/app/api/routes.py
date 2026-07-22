@@ -446,6 +446,98 @@ async def clear_session(session_id: str):
     return {"success": True}
 
 
+@chat_router.get("/session/{session_id}/history")
+async def get_session_history(session_id: str):
+    """
+    Return the conversation history for a session.
+    Used for Session Resume demo: after GPU memory flush, reload from Infinia.
+    If session is in memory → return it directly.
+    If session was flushed → look it up from Infinia object store.
+    """
+    t0 = time.perf_counter()
+
+    # Check in-memory first (session still alive)
+    if session_id in _sessions:
+        session = _sessions[session_id]
+        turns = session["history"]
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        return {
+            "found": True,
+            "source": "memory",
+            "latency_ms": latency_ms,
+            "turn_count": len(turns),
+            "turns": [
+                {"user": t["user"], "assistant": t["assistant"]}
+                for t in turns
+            ],
+        }
+
+    # Not in memory → try Infinia (session was evicted / backend restarted)
+    try:
+        hit, data, infinia_latency = kv_cache.check(f"session/{session_id}")
+        if hit and data:
+            # Restore into memory
+            _sessions[session_id] = {
+                "history": data.get("turns", []),
+                "created_at": time.time(),
+                "restored_from_infinia": True,
+            }
+            latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+            return {
+                "found": True,
+                "source": "infinia",
+                "latency_ms": latency_ms,
+                "infinia_latency_ms": round(infinia_latency, 1),
+                "turn_count": len(data.get("turns", [])),
+                "turns": data.get("turns", []),
+            }
+    except Exception as e:
+        logger.warning(f"Infinia session lookup failed: {e}")
+
+    return {
+        "found": False,
+        "source": "none",
+        "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+        "turn_count": 0,
+        "turns": [],
+    }
+
+
+@chat_router.post("/session/{session_id}/persist")
+async def persist_session_to_infinia(session_id: str):
+    """
+    Persist the current in-memory session to Infinia.
+    Call this BEFORE doing a GPU memory flush demo so the data is available to restore.
+    """
+    if session_id not in _sessions:
+        return {"success": False, "message": "Session not found in memory"}
+
+    session = _sessions[session_id]
+    turns = session["history"]
+    if not turns:
+        return {"success": False, "message": "No conversation turns to persist"}
+
+    t0 = time.perf_counter()
+    data = {
+        "session_id": session_id,
+        "turns": [{"user": t["user"], "assistant": t["assistant"]} for t in turns],
+        "turn_count": len(turns),
+        "total_tokens": sum(len(t["user"].split()) + len(t["assistant"].split()) for t in turns),
+    }
+    store_latency = kv_cache.store(f"session/{session_id}", data)
+    total_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "turns_persisted": len(turns),
+        "store_latency_ms": round(store_latency, 1),
+        "total_ms": total_ms,
+        "s3_key": f"kvcache/session/{session_id}.json",
+        "message": f"✅ {len(turns)} conversation turns written to DDN Infinia in {store_latency:.0f}ms",
+    }
+
+
 # ── Prefix Multiplier ─────────────────────────────────────────────────────────
 
 @prefix_router.get("/scenarios")

@@ -108,6 +108,8 @@ export const kvApi = {
   sendChat: (req: ChatRequest): Promise<ChatResponse> =>
     api.post('/chat/send', req).then(r => r.data),
   clearSession: (id: string) => api.delete(`/chat/session/${id}`).then(r => r.data),
+  getSessionHistory: (id: string) => api.get(`/chat/session/${id}/history`).then(r => r.data),
+  persistSession: (id: string) => api.post(`/chat/session/${id}/persist`).then(r => r.data),
 
   getScenarios: () => api.get('/prefix/scenarios').then(r => r.data),
   seedPrefix: (use_case: string) => api.post('/prefix/seed', { use_case }).then(r => r.data),
