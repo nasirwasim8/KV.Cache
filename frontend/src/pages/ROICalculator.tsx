@@ -251,88 +251,91 @@ export default function ROICalculator() {
         </div>
       </div>
 
+      {/* ── TOP ROW: Workload Parameters (left) + GPU Compute Breakdown (right) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Workload sliders */}
+        <div className="card-elevated p-6 space-y-6" style={{ borderLeft: `3px solid ${accent}` }}>
+          <h3 className="font-semibold text-sm uppercase tracking-wider" style={{ color: accent }}>Workload Parameters</h3>
+          <Slider label="System Prompt Size" value={systemTokens} min={1000} max={500000} step={1000}
+            onChange={setSystemTokens} format={v => `${fmtNum(v)} tokens`} color={accent}
+            hint="Shared context per request — contract, manual, compliance script, clinical notes, etc." />
+          <Slider label="Daily Requests" value={dailyRequests} min={1000} max={5000000} step={1000}
+            onChange={setDailyRequests} format={v => `${fmtNum(v)}/day`} color={accent}
+            hint="Total queries across all users per day." />
+          <Slider label="Avg New Tokens Per Query" value={avgNewTokens} min={50} max={2000} step={50}
+            onChange={setAvgNewTokens} format={v => `${v} tokens`} color={accent}
+            hint="The user's actual question length. Only these tokens are processed on a cache hit." />
+          <Slider label="Cache Hit Rate" value={hitRate} min={10} max={99} step={1}
+            onChange={setHitRate} format={v => `${v}%`} color={accent}
+            hint="% of requests that reuse the same system prompt. Shared templates = higher hit rate." />
+        </div>
+
+        {/* GPU Compute Breakdown */}
+        <div className="card p-5" style={{ borderLeft: `3px solid ${accent}` }}>
+          <div className="font-semibold text-sm mb-3 flex items-center gap-2" style={{ color: accent }}>
+            <Zap className="w-4 h-4" /> GPU Compute Breakdown
+          </div>
+          <p className="text-xs mb-4 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            This shows how many GPU tokens are skipped on each cache hit — the foundation for every number in the results panel.
+          </p>
+
+          {/* Visual token bars */}
+          <div className="space-y-3 mb-4">
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-red-500 font-medium">❌ Without Cache — full context every request</span>
+                <span className="font-mono font-bold">{fmtNum(systemTokens + avgNewTokens)} tokens</span>
+              </div>
+              <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
+                <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #ED2738, #ff6b7a)', width: '100%' }} initial={{ width: 0 }} animate={{ width: '100%' }} />
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                System prompt ({fmtNum(systemTokens)}) + question ({avgNewTokens}) — recomputed every turn
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-xs mb-1" style={{ color: '#00C280' }}>
+                <span className="font-medium">✅ With DDN Infinia — only new tokens on hit</span>
+                <span className="font-mono font-bold">{avgNewTokens} tokens</span>
+              </div>
+              <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
+                <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #00C280, #4deba0)', width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} initial={{ width: 0 }} animate={{ width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} />
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                Only the question ({avgNewTokens} tokens) — system prompt already in Infinia
+              </div>
+            </div>
+          </div>
+
+          {/* Formula table */}
+          <div className="rounded-xl overflow-hidden border text-xs" style={{ borderColor: 'var(--border-subtle)' }}>
+            {[
+              { label: 'Tokens skipped per cache hit',   formula: `${fmtNum(systemTokens)} (system prompt)`,                                          value: `${fmtNum(systemTokens)} tokens`,             c: '#00C280' },
+              { label: 'GPU seconds saved per hit',      formula: `${fmtNum(systemTokens)} tokens ÷ 3,000 tok/s`,                                     value: `${(systemTokens / 3000).toFixed(2)}s`,       c: '#76B900' },
+              { label: 'Cache hits per day',             formula: `${fmtNum(dailyRequests)} req/day × ${hitRate}% hit rate`,                          value: fmtNum(roi.dailyHits),                        c: accent },
+              { label: 'GPU-hours freed per day',        formula: `${(systemTokens/3000).toFixed(2)}s × ${fmtNum(roi.dailyHits)} hits ÷ 3,600`,       value: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs`,  c: '#1A81AF' },
+              { label: 'GPU-hours freed per year',       formula: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs/day × 365`,                              value: `${roi.gpuHoursSavedAnnually.toFixed(0)} hrs`,c: '#1A81AF' },
+            ].map((row, i) => (
+              <div key={row.label} className="flex flex-col px-3 py-2" style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)' }}>
+                <div className="flex justify-between items-start">
+                  <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
+                  <span className="font-mono font-bold ml-2 flex-shrink-0" style={{ color: row.c }}>{row.value}</span>
+                </div>
+                <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                  = {row.formula}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── BOTTOM ROW: Tier Picker (left) + Results (right) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
-        {/* ── LEFT: Controls ── */}
-        <div className="lg:col-span-2 space-y-5">
-
-          {/* GPU Compute Breakdown — always visible, sits ABOVE sliders */}
-          <div className="card p-5" style={{ borderLeft: `3px solid ${accent}` }}>
-            <div className="font-semibold text-sm mb-3 flex items-center gap-2" style={{ color: accent }}>
-              <Zap className="w-4 h-4" /> GPU Compute Breakdown
-            </div>
-            <p className="text-xs mb-4 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-              This shows how many GPU tokens are skipped on each cache hit — the foundation for every number in the results panel.
-            </p>
-
-            {/* Visual token bars */}
-            <div className="space-y-3 mb-4">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-red-500 font-medium">❌ Without Cache — full context every request</span>
-                  <span className="font-mono font-bold">{fmtNum(systemTokens + avgNewTokens)} tokens</span>
-                </div>
-                <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
-                  <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #ED2738, #ff6b7a)', width: '100%' }} initial={{ width: 0 }} animate={{ width: '100%' }} />
-                </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                  System prompt ({fmtNum(systemTokens)}) + question ({avgNewTokens}) — recomputed every turn
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1" style={{ color: '#00C280' }}>
-                  <span className="font-medium">✅ With DDN Infinia — only new tokens on hit</span>
-                  <span className="font-mono font-bold">{avgNewTokens} tokens</span>
-                </div>
-                <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
-                  <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #00C280, #4deba0)', width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} initial={{ width: 0 }} animate={{ width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} />
-                </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Only the question ({avgNewTokens} tokens) — system prompt already in Infinia
-                </div>
-              </div>
-            </div>
-
-            {/* Formula table */}
-            <div className="rounded-xl overflow-hidden border text-xs" style={{ borderColor: 'var(--border-subtle)' }}>
-              {[
-                { label: 'Tokens skipped per cache hit',   formula: `${fmtNum(systemTokens)} (system prompt)`,                                           value: `${fmtNum(systemTokens)} tokens`,                    c: '#00C280' },
-                { label: 'GPU seconds saved per hit',      formula: `${fmtNum(systemTokens)} tokens ÷ 3,000 tok/s`,                                      value: `${(systemTokens / 3000).toFixed(2)}s`,              c: '#76B900' },
-                { label: 'Cache hits per day',             formula: `${fmtNum(dailyRequests)} req/day × ${hitRate}% hit rate`,                           value: fmtNum(roi.dailyHits),                               c: accent },
-                { label: 'GPU-hours freed per day',        formula: `${(systemTokens/3000).toFixed(2)}s × ${fmtNum(roi.dailyHits)} hits ÷ 3,600`,        value: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs`,         c: '#1A81AF' },
-                { label: 'GPU-hours freed per year',       formula: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs/day × 365`,                               value: `${roi.gpuHoursSavedAnnually.toFixed(0)} hrs`,       c: '#1A81AF' },
-              ].map((row, i) => (
-                <div key={row.label} className="flex flex-col px-3 py-2" style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)' }}>
-                  <div className="flex justify-between items-start">
-                    <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-                    <span className="font-mono font-bold ml-2 flex-shrink-0" style={{ color: row.c }}>{row.value}</span>
-                  </div>
-                  <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
-                    = {row.formula}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Workload sliders */}
-          <div className="card-elevated p-6 space-y-6">
-            <h3 className="font-semibold text-sm uppercase tracking-wider" style={{ color: accent }}>Workload Parameters</h3>
-            <Slider label="System Prompt Size" value={systemTokens} min={1000} max={500000} step={1000}
-              onChange={setSystemTokens} format={v => `${fmtNum(v)} tokens`} color={accent}
-              hint="Shared context per request — contract, manual, compliance script, clinical notes, etc." />
-            <Slider label="Daily Requests" value={dailyRequests} min={1000} max={5000000} step={1000}
-              onChange={setDailyRequests} format={v => `${fmtNum(v)}/day`} color={accent}
-              hint="Total queries across all users per day." />
-            <Slider label="Avg New Tokens Per Query" value={avgNewTokens} min={50} max={2000} step={50}
-              onChange={setAvgNewTokens} format={v => `${v} tokens`} color={accent}
-              hint="The user's actual question length. Only these tokens are processed on a cache hit." />
-            <Slider label="Cache Hit Rate" value={hitRate} min={10} max={99} step={1}
-              onChange={setHitRate} format={v => `${v}%`} color={accent}
-              hint="% of requests that reuse the same system prompt. Shared templates = higher hit rate." />
-          </div>
-
-          {/* Tier picker */}
+        {/* Tier picker */}
+        <div className="lg:col-span-2">
           <div className="card p-5">
             <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>Infrastructure / Billing Model</h3>
             <div className="space-y-2">
