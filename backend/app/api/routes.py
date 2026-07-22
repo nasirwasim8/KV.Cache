@@ -474,7 +474,7 @@ async def get_session_history(session_id: str):
 
     # Not in memory → try Infinia (session was evicted / backend restarted)
     try:
-        hit, data, infinia_latency = kv_cache.check(f"session/{session_id}")
+        hit, data, infinia_latency, _meta = kv_cache.check(f"session/{session_id}")
         if hit and data:
             # Restore into memory
             _sessions[session_id] = {
@@ -524,17 +524,19 @@ async def persist_session_to_infinia(session_id: str):
         "turn_count": len(turns),
         "total_tokens": sum(len(t["user"].split()) + len(t["assistant"].split()) for t in turns),
     }
-    store_latency = kv_cache.store(f"session/{session_id}", data)
+    store_result = kv_cache.store(f"session/{session_id}", data)
+    # store() returns a dict with store_latency_ms inside it
+    store_latency_ms = store_result.get("store_latency_ms", 0.0) if isinstance(store_result, dict) else float(store_result or 0)
     total_ms = round((time.perf_counter() - t0) * 1000, 1)
 
     return {
         "success": True,
         "session_id": session_id,
         "turns_persisted": len(turns),
-        "store_latency_ms": round(store_latency, 1),
+        "store_latency_ms": round(store_latency_ms, 1),
         "total_ms": total_ms,
         "s3_key": f"kvcache/session/{session_id}.json",
-        "message": f"✅ {len(turns)} conversation turns written to DDN Infinia in {store_latency:.0f}ms",
+        "message": f"✅ {len(turns)} conversation turns written to DDN Infinia in {store_latency_ms:.0f}ms",
     }
 
 
