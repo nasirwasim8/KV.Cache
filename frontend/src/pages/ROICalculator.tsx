@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calculator, TrendingUp, DollarSign, Zap, Users, ChevronDown, ChevronUp, Info, Server, Cloud, AlertTriangle } from 'lucide-react'
+import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TierKey = 'self_hosted_h100' | 'azure_a100' | 'openai_gpt4'
@@ -180,7 +180,6 @@ export default function ROICalculator() {
   const [avgNewTokens, setAvgNewTokens]   = useState(initial.avgNewTokens)
   const [hitRate, setHitRate]             = useState(initial.hitRate)
   const [tier, setTier]                   = useState<string>(initial.tier)
-  const [showBreakdown, setShowBreakdown] = useState(false)
 
   const roi = useMemo(() => computeROI({ systemTokens, dailyRequests, avgNewTokens, hitRate, tier }), [systemTokens, dailyRequests, avgNewTokens, hitRate, tier])
 
@@ -256,7 +255,68 @@ export default function ROICalculator() {
 
         {/* ── LEFT: Controls ── */}
         <div className="lg:col-span-2 space-y-5">
-          <div className="card-elevated p-6 space-y-6" style={{ borderLeft: `3px solid ${accent}` }}>
+
+          {/* GPU Compute Breakdown — always visible, sits ABOVE sliders */}
+          <div className="card p-5" style={{ borderLeft: `3px solid ${accent}` }}>
+            <div className="font-semibold text-sm mb-3 flex items-center gap-2" style={{ color: accent }}>
+              <Zap className="w-4 h-4" /> GPU Compute Breakdown
+            </div>
+            <p className="text-xs mb-4 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              This shows how many GPU tokens are skipped on each cache hit — the foundation for every number in the results panel.
+            </p>
+
+            {/* Visual token bars */}
+            <div className="space-y-3 mb-4">
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-red-500 font-medium">❌ Without Cache — full context every request</span>
+                  <span className="font-mono font-bold">{fmtNum(systemTokens + avgNewTokens)} tokens</span>
+                </div>
+                <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
+                  <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #ED2738, #ff6b7a)', width: '100%' }} initial={{ width: 0 }} animate={{ width: '100%' }} />
+                </div>
+                <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  System prompt ({fmtNum(systemTokens)}) + question ({avgNewTokens}) — recomputed every turn
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs mb-1" style={{ color: '#00C280' }}>
+                  <span className="font-medium">✅ With DDN Infinia — only new tokens on hit</span>
+                  <span className="font-mono font-bold">{avgNewTokens} tokens</span>
+                </div>
+                <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
+                  <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #00C280, #4deba0)', width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} initial={{ width: 0 }} animate={{ width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} />
+                </div>
+                <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Only the question ({avgNewTokens} tokens) — system prompt already in Infinia
+                </div>
+              </div>
+            </div>
+
+            {/* Formula table */}
+            <div className="rounded-xl overflow-hidden border text-xs" style={{ borderColor: 'var(--border-subtle)' }}>
+              {[
+                { label: 'Tokens skipped per cache hit',   formula: `${fmtNum(systemTokens)} (system prompt)`,                                           value: `${fmtNum(systemTokens)} tokens`,                    c: '#00C280' },
+                { label: 'GPU seconds saved per hit',      formula: `${fmtNum(systemTokens)} tokens ÷ 3,000 tok/s`,                                      value: `${(systemTokens / 3000).toFixed(2)}s`,              c: '#76B900' },
+                { label: 'Cache hits per day',             formula: `${fmtNum(dailyRequests)} req/day × ${hitRate}% hit rate`,                           value: fmtNum(roi.dailyHits),                               c: accent },
+                { label: 'GPU-hours freed per day',        formula: `${(systemTokens/3000).toFixed(2)}s × ${fmtNum(roi.dailyHits)} hits ÷ 3,600`,        value: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs`,         c: '#1A81AF' },
+                { label: 'GPU-hours freed per year',       formula: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs/day × 365`,                               value: `${roi.gpuHoursSavedAnnually.toFixed(0)} hrs`,       c: '#1A81AF' },
+              ].map((row, i) => (
+                <div key={row.label} className="flex flex-col px-3 py-2" style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)' }}>
+                  <div className="flex justify-between items-start">
+                    <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
+                    <span className="font-mono font-bold ml-2 flex-shrink-0" style={{ color: row.c }}>{row.value}</span>
+                  </div>
+                  <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                    = {row.formula}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Workload sliders */}
+          <div className="card-elevated p-6 space-y-6">
             <h3 className="font-semibold text-sm uppercase tracking-wider" style={{ color: accent }}>Workload Parameters</h3>
             <Slider label="System Prompt Size" value={systemTokens} min={1000} max={500000} step={1000}
               onChange={setSystemTokens} format={v => `${fmtNum(v)} tokens`} color={accent}
@@ -309,16 +369,28 @@ export default function ROICalculator() {
                 <KpiCard value={fmt$(roi.monthlySavingsCloud)} label="Monthly Savings" sublabel="Direct invoice reduction" color={TIERS[tier].color} />
                 <KpiCard value={fmt$(roi.annualSavingsCloud)} label="Annual Savings" sublabel="Verifiable cost avoidance" color={TIERS[tier].color} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <KpiCard value={roi.costReductionPct.toFixed(1)} label="Cost Reduction" sublabel="% of token bill eliminated" color="#00C280" suffix="%" />
                 <KpiCard value={`${roi.throughputMultiplier.toFixed(0)}×`} label="Throughput Multiplier" sublabel="Same requests, less compute" color="#1A81AF" />
               </div>
-              <div className="mt-4 flex items-start gap-2 p-3 rounded-xl text-xs" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.15)' }}>
-                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-[#1A81AF]" />
-                <span style={{ color: 'var(--text-muted)' }}>
-                  Formula: <code className="font-mono">{fmtNum(systemTokens)} skipped tokens × ${TIERS[tier].costPer1kTokens.toFixed(4)}/1K × {fmtNum(roi.dailyHits)} hits/day × 365</code>
-                  &nbsp;= <strong style={{ color: TIERS[tier].color }}>{fmt$(roi.annualSavingsCloud)}/yr</strong>
-                </span>
+              {/* Formula breakdown */}
+              <div className="rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.15)' }}>
+                <div className="font-semibold" style={{ color: TIERS[tier].color }}>How we calculate these numbers:</div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  Cost saved/hit = {fmtNum(systemTokens)} tokens × ${TIERS[tier].costPer1kTokens.toFixed(4)}/1K = <span style={{ color: TIERS[tier].color }}>${roi.savingsPerHitCloud.toFixed(5)}</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  Daily savings = ${roi.savingsPerHitCloud.toFixed(5)} × {fmtNum(roi.dailyHits)} hits/day = <span style={{ color: TIERS[tier].color }}>{fmt$(roi.dailySavingsCloud)}</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  Annual savings = {fmt$(roi.dailySavingsCloud)}/day × 365 = <span style={{ color: TIERS[tier].color }}>{fmt$(roi.annualSavingsCloud)}/yr</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  Cost reduction % = (cost without − cost with) ÷ cost without × 100 = <span style={{ color: '#00C280' }}>{roi.costReductionPct.toFixed(1)}%</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  Throughput ×  = ({fmtNum(systemTokens)} + {avgNewTokens}) ÷ {avgNewTokens} = <span style={{ color: '#1A81AF' }}>{roi.throughputMultiplier.toFixed(0)}×</span>
+                </div>
               </div>
             </motion.div>
           )}
@@ -352,10 +424,18 @@ export default function ROICalculator() {
                   <KpiCard value={`${roi.throughputMultiplier.toFixed(0)}×`} label="More Requests, Same HW" sublabel={`${fmtNum(systemTokens)} tokens skipped per hit`} color="#76B900" />
                   <KpiCard value={`${roi.gpuUtilFreedPct.toFixed(1)}`} label="GPU Compute Freed" sublabel="Available for net-new workloads" color="#76B900" suffix="%" />
                 </div>
-                <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
-                  Each cache hit skips {fmtNum(systemTokens)} prefill tokens. Your existing GPUs process only the {avgNewTokens}-token question.
-                  This means <strong style={{ color: '#76B900' }}>{roi.throughputMultiplier.toFixed(0)}× more users</strong> can be served before you need to buy more hardware.
-                </p>
+                {/* Formula callout */}
+                <div className="mt-3 rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(118,185,0,0.06)', border: '1px solid rgba(118,185,0,0.15)' }}>
+                  <div className="font-semibold" style={{ color: '#76B900' }}>How we calculate these numbers:</div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    <span style={{ color: '#76B900' }}>{roi.throughputMultiplier.toFixed(0)}×</span> = ({fmtNum(systemTokens)} + {avgNewTokens}) ÷ {avgNewTokens}
+                    <span className="ml-2" style={{ color: 'var(--text-muted)' }}>= (system + question) ÷ question only</span>
+                  </div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    <span style={{ color: '#76B900' }}>{roi.gpuUtilFreedPct.toFixed(1)}%</span> = {roi.gpuHoursSavedAnnually.toFixed(0)} GPU-hrs freed ÷ (24h × 365) × 100
+                  </div>
+                  <div style={{ color: 'var(--text-muted)' }}>Each hit skips {fmtNum(systemTokens)} tokens — GPU only sees the {avgNewTokens}-token question.</div>
+                </div>
               </div>
 
               {/* Source 2 — CapEx Avoidance */}
@@ -368,10 +448,22 @@ export default function ROICalculator() {
                   <KpiCard value={fmt$(roi.capexAvoidance)} label="CapEx Avoided" sublabel="@$300K/DGX server" color="#1A81AF" />
                   <KpiCard value={fmt$(roi.annualCapexAmortised)} label="Annual Equivalent" sublabel="Over 3-yr server lifecycle" color="#1A81AF" />
                 </div>
-                <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
-                  Without caching, serving {fmtNum(dailyRequests)} requests/day requires ~{roi.serversNeededWithout ?? '?'} DGX servers.
-                  With DDN Infinia handling the prefix for {hitRate}% of requests, you need ~{roi.serversNeededWith ?? '?'} — avoiding ${fmt$(roi.capexAvoidance)} in hardware spend.
-                </p>
+                {/* Formula callout */}
+                <div className="mt-3 rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.15)' }}>
+                  <div className="font-semibold" style={{ color: '#1A81AF' }}>How we calculate these numbers:</div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    Servers needed <strong>without</strong> cache = ⌈{fmtNum(dailyRequests)} req/day ÷ 200K req/server⌉ = <span style={{ color: '#ED2738' }}>{roi.serversNeededWithout}</span>
+                  </div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    Servers needed <strong>with</strong> cache = ⌈({fmtNum(roi.dailyMisses)} misses + {fmtNum(roi.dailyHits)} hits÷{roi.throughputMultiplier.toFixed(0)}) ÷ 200K⌉ = <span style={{ color: '#1A81AF' }}>{roi.serversNeededWith}</span>
+                  </div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    <span style={{ color: '#1A81AF' }}>{roi.serversAvoided} servers</span> × $300K/server = <span style={{ color: '#1A81AF' }}>{fmt$(roi.capexAvoidance)}</span> CapEx avoided
+                  </div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    Annual equivalent = {fmt$(roi.capexAvoidance)} ÷ 3 yr lifecycle = <span style={{ color: '#1A81AF' }}>{fmt$(roi.annualCapexAmortised)}/yr</span>
+                  </div>
+                </div>
               </div>
 
               {/* Source 3 — Power */}
@@ -383,6 +475,19 @@ export default function ROICalculator() {
                   <KpiCard value={`${(roi.gpuHoursSavedAnnually / 1000).toFixed(1)}K`} label="GPU-Hours Freed/Year" sublabel="Prefill compute eliminated" color="#f59e0b" />
                   <KpiCard value={`${(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K`} label="kWh Saved/Year" sublabel="At 6.4kW per DGX server" color="#f59e0b" />
                   <KpiCard value={fmt$(roi.powerSavedUsdAnnually)} label="Power Cost Saved/Year" sublabel="@$0.10/kWh data center rate" color="#f59e0b" />
+                </div>
+                {/* Formula callout */}
+                <div className="mt-3 rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                  <div className="font-semibold" style={{ color: '#f59e0b' }}>How we calculate these numbers:</div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    GPU-hours/yr = {roi.gpuHoursSavedPerDay.toFixed(1)} hrs/day × 365 = <span style={{ color: '#f59e0b' }}>{roi.gpuHoursSavedAnnually.toFixed(0)} hrs</span>
+                  </div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    kWh saved = {roi.gpuHoursSavedAnnually.toFixed(0)} hrs × 6.4 kW (DGX power draw) = <span style={{ color: '#f59e0b' }}>{(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K kWh</span>
+                  </div>
+                  <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    Power cost = {(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K kWh × $0.10/kWh = <span style={{ color: '#f59e0b' }}>{fmt$(roi.powerSavedUsdAnnually)}/yr</span>
+                  </div>
                 </div>
               </div>
 
@@ -409,56 +514,6 @@ export default function ROICalculator() {
             </motion.div>
           )}
 
-          {/* GPU hours — shared, always visible */}
-          <div className="card p-5">
-            <button onClick={() => setShowBreakdown(!showBreakdown)} className="w-full flex items-center justify-between text-left">
-              <span className="font-semibold text-sm flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                <Zap className="w-4 h-4" style={{ color: accent }} />
-                GPU Compute Breakdown
-              </span>
-              {showBreakdown ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--text-muted)' }} /> : <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />}
-            </button>
-            <AnimatePresence>
-              {showBreakdown && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <div className="mt-4 space-y-3">
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-red-500 flex items-center gap-1">❌ Without Cache — all tokens every request</span>
-                        <span className="font-mono">{fmtNum(systemTokens + avgNewTokens)} tokens/req</span>
-                      </div>
-                      <div className="h-5 rounded-full overflow-hidden bg-neutral-100">
-                        <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #ED2738, #ff6b7a)', width: '100%' }} initial={{ width: 0 }} animate={{ width: '100%' }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs mb-1" style={{ color: '#00C280' }}>
-                        <span className="flex items-center gap-1">✅ With DDN Infinia — only new tokens on hit</span>
-                        <span className="font-mono">{avgNewTokens} tokens/req</span>
-                      </div>
-                      <div className="h-5 rounded-full overflow-hidden bg-neutral-100">
-                        <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #00C280, #4deba0)', width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} initial={{ width: 0 }} animate={{ width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} />
-                      </div>
-                    </div>
-                    <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-subtle)' }}>
-                      {[
-                        { label: 'Tokens skipped per hit', value: `${fmtNum(systemTokens)} tokens`, c: '#00C280' },
-                        { label: 'GPU seconds saved per hit', value: `${(systemTokens / 3000).toFixed(2)}s`, c: '#76B900' },
-                        { label: 'Cache hits per day', value: fmtNum(roi.dailyHits), c: accent },
-                        { label: 'GPU hours freed per day', value: `${roi.gpuHoursSavedPerDay.toFixed(1)} hrs`, c: '#1A81AF' },
-                        { label: 'GPU hours freed per year', value: `${roi.gpuHoursSavedAnnually.toFixed(0)} hrs`, c: '#1A81AF' },
-                      ].map((row, i) => (
-                        <div key={row.label} className="flex justify-between px-4 py-2.5 text-sm" style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-primary)' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-                          <span className="font-mono font-semibold" style={{ color: row.c }}>{row.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
 
           {/* Scaling insight */}
           <motion.div className="p-5 rounded-2xl" style={{ background: `linear-gradient(135deg, ${accent}12, ${accent}05)`, border: `1px solid ${accent}25` }} layout>
