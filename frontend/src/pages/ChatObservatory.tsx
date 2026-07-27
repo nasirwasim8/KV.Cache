@@ -527,7 +527,7 @@ export default function ChatObservatory() {
             {/* Tech/Business toggle */}
             <button
               onClick={() => setDemoMode(m => m === 'business' ? 'technical' : 'business')}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all whitespace-nowrap"
               style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', background: 'var(--surface-card)' }}
             >
               {demoMode === 'business' ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5 text-[#1A81AF]" />}
@@ -535,7 +535,7 @@ export default function ChatObservatory() {
             </button>
             <button
               onClick={clearSession}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all hover:opacity-80"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all hover:opacity-80 whitespace-nowrap"
               style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', background: 'var(--surface-card)' }}
             >
               <Trash2 className="w-3.5 h-3.5" /> Clear UI
@@ -545,7 +545,7 @@ export default function ChatObservatory() {
               onClick={flushGpuMemory}
               disabled={turns.length === 0}
               title="Persist conversation to Infinia then clear GPU memory — demonstrates session eviction"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
               style={{ borderColor: 'rgba(237,140,0,0.5)', color: '#D97706', background: 'rgba(237,140,0,0.07)' }}
             >
               <span className="text-xs">🔴</span> GPU Memory Flushed
@@ -557,7 +557,7 @@ export default function ChatObservatory() {
                 onClick={restoreFromInfinia}
                 disabled={restoring}
                 title="Reload conversation from DDN Infinia object store"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-50 whitespace-nowrap"
                 style={{ borderColor: 'rgba(0,194,128,0.5)', color: '#00C280', background: 'rgba(0,194,128,0.08)' }}
               >
                 {restoring
@@ -569,7 +569,7 @@ export default function ChatObservatory() {
             <button
               onClick={purgeDemo}
               title="Delete all cached objects from DDN Infinia — next question will be a genuine MISS"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 whitespace-nowrap"
               style={{ borderColor: 'rgba(237,39,56,0.4)', color: '#ED2738', background: 'rgba(237,39,56,0.06)' }}
             >
               <RotateCcw className="w-3.5 h-3.5" /> Reset Demo
@@ -647,7 +647,6 @@ export default function ChatObservatory() {
       <div className="card overflow-hidden">
         {turns.length === 0 ? (
           <div className="p-8 text-center space-y-4">
-            <div className="text-4xl">🗄️</div>
             <div className="font-semibold text-neutral-700">Ask a question to start the demo</div>
             <p className="text-sm text-neutral-500 max-w-md mx-auto">
               First question → MISS (stored in Infinia). Ask <strong>same question again</strong> → HIT (instantly retrieved). The Infinia Object Inspector shows exactly what was stored.
