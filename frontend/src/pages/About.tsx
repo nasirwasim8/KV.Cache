@@ -1,332 +1,241 @@
 import { useState } from 'react'
-import { Database, Zap, ChevronRight, ChevronDown, Users, MemoryStick, Server, ArrowRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import {
+  BookOpen, ChevronRight, CheckCircle, Zap, Database, Server,
+  MemoryStick, Users, Layers, ArrowRight, AlertTriangle, HardDrive,
+  MessageSquare, TrendingDown, Shield
+} from 'lucide-react'
 
-// ─── Step-through multi-turn KV cache walkthrough ────────────────────────────
+// ─── Shared sub-components (mirrors RAG/VSS Details pattern) ──────────────────
 
-const STEPS = [
-  {
-    id: 1,
-    phase: 'Turn 1 — No Cache Yet',
-    emoji: '🔴',
-    color: '#ED2738',
-    audience: 'both',
-    title: 'Full Prefill: Every token processed from scratch',
-    what: [
-      { token: 'System prompt', count: '~700 tokens', highlight: true },
-      { token: 'User question', count: '"What is Infinia?" → 5 tokens', highlight: true },
-    ],
-    gpu: 'GPU processes ALL 705 tokens → generates K,V matrices for each → produces answer',
-    kv_stored: 'KV state (K+V matrices for 705 tokens) → stored in DDN Infinia (S3 PUT)',
-    cost_note: 'Paid for: 705 input tokens × rate + output tokens × rate',
-    analogy: '📚 Like reading the entire textbook before answering one question.',
-  },
-  {
-    id: 2,
-    phase: 'Turn 2 — Cache Hit!',
-    emoji: '🟢',
-    color: '#00C280',
-    audience: 'both',
-    title: 'Only the new question is processed — prefix is FREE',
-    what: [
-      { token: 'System prompt', count: '~700 tokens', highlight: false, cached: true },
-      { token: 'User question', count: '"Explain the pricing" → 4 tokens', highlight: true },
-    ],
-    gpu: 'Infinia returns cached K,V in ~10ms → GPU skips 700-token prefill → only processes 4 new tokens',
-    kv_stored: 'New K,V appended (4 tokens) → Infinia updated with full session state',
-    cost_note: 'Paid for: 4 new input tokens only. 700 cached tokens = FREE (self-hosted) or 90% discount (cloud)',
-    analogy: '📖 Like using a bookmark — you only read the new chapter, not the whole book again.',
-  },
-  {
-    id: 3,
-    phase: 'Turn N — Savings Compound',
-    emoji: '💰',
-    color: '#1A81AF',
-    audience: 'both',
-    title: 'Each subsequent turn is dramatically cheaper',
-    what: [
-      { token: 'Accumulated history', count: 'grows with each turn', highlight: false, cached: true },
-      { token: 'New question only', count: '~5-20 tokens', highlight: true },
-    ],
-    gpu: 'GPU only prefills new tokens. Everything else: 10ms Infinia lookup. TTFT stays consistently fast.',
-    kv_stored: 'Infinia holds the entire growing conversation state — persistent, shareable across GPU nodes',
-    cost_note: 'By turn 10: 98%+ of input tokens are cached. Cost per turn approaches near-zero for input.',
-    analogy: '💡 Like a photographic memory — the more context accumulated, the more you save.',
-  },
-]
-
-function StepCard({ step, active, onClick }: { step: typeof STEPS[0]; active: boolean; onClick: () => void }) {
+function Tag({ children, color }: { children: React.ReactNode; color?: string }) {
   return (
-    <motion.div
-      onClick={onClick}
-      whileHover={{ scale: 1.01 }}
-      className="cursor-pointer rounded-xl border-2 transition-all overflow-hidden"
+    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide"
       style={{
-        borderColor: active ? step.color : 'var(--border-subtle)',
-        background: active ? `${step.color}08` : 'var(--surface-card)',
-      }}
-    >
-      <div className="flex items-center gap-3 p-4">
-        <span className="text-2xl">{step.emoji}</span>
-        <div className="flex-1">
-          <div className="text-xs font-bold uppercase tracking-wider" style={{ color: step.color }}>{step.phase}</div>
-          <div className="text-sm font-semibold text-neutral-800 mt-0.5">{step.title}</div>
-        </div>
-        <ChevronDown className="w-4 h-4 transition-transform" style={{ color: step.color, transform: active ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+        background: color ? `${color}18` : 'var(--surface-secondary)',
+        color: color ?? 'var(--text-muted)',
+        border: `1px solid ${color ? `${color}30` : 'var(--border-subtle)'}`,
+      }}>
+      {children}
+    </span>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"
+      style={{ color: 'var(--text-primary)' }}>
+      {children}
+    </h3>
+  )
+}
+
+function TalkingPoint({ icon, title, body }: { icon: string; title: string; body: string }) {
+  return (
+    <div className="flex gap-3 p-3 rounded-xl border"
+      style={{ background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}>
+      <span className="text-lg shrink-0 mt-0.5">{icon}</span>
+      <div>
+        <p className="text-xs font-semibold mb-0.5" style={{ color: 'var(--text-primary)' }}>{title}</p>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{body}</p>
       </div>
+    </div>
+  )
+}
+
+// ─── Expandable pipeline stage row (VSS-style numbered rows) ──────────────────
+
+function StageRow({ n, icon, label, who, detail, color, last = false }: {
+  n: number; icon: React.ReactNode; label: string; who: string; detail: string
+  color: string; last?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border text-left transition-all"
+        style={{
+          background: open ? `${color}08` : 'var(--surface-secondary)',
+          borderColor: open ? `${color}40` : 'var(--border-subtle)',
+        }}>
+        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 text-white"
+          style={{ background: color }}>{n}</div>
+        <span style={{ color }}>{icon}</span>
+        <span className="font-medium text-sm flex-1" style={{ color: 'var(--text-primary)' }}>{label}</span>
+        <span className="text-[10px] px-2 py-0.5 rounded font-mono hidden md:inline"
+          style={{ background: 'var(--surface-card)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}>
+          {who}
+        </span>
+        <ChevronRight className="w-4 h-4 shrink-0 transition-transform"
+          style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+      </button>
+
+      {!last && !open && (
+        <div className="flex items-center justify-center py-0.5">
+          <ArrowRight className="w-3 h-3 rotate-90" style={{ color: 'var(--border-default)' }} />
+        </div>
+      )}
 
       <AnimatePresence>
-        {active && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-5 space-y-4 border-t" style={{ borderColor: `${step.color}20` }}>
-              {/* Token breakdown */}
-              <div className="mt-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Tokens in this request:</div>
-                <div className="space-y-2">
-                  {step.what.map((w, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div
-                        className="px-3 py-1.5 rounded-lg text-xs font-mono flex-1"
-                        style={w.cached
-                          ? { background: 'rgba(0,194,128,0.08)', color: '#00C280', border: '1px solid rgba(0,194,128,0.2)' }
-                          : w.highlight
-                          ? { background: `${step.color}12`, color: step.color, border: `1px solid ${step.color}30` }
-                          : { background: 'var(--surface-secondary)', color: 'var(--text-muted)' }
-                        }
-                      >
-                        {w.token}
-                        {w.cached && <span className="ml-2 font-bold">← CACHED ✓ (Infinia)</span>}
-                      </div>
-                      <div className="text-xs text-neutral-500 w-40 text-right">{w.count}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* GPU process */}
-              <div className="p-3 rounded-xl" style={{ background: 'rgba(118,185,0,0.06)', border: '1px solid rgba(118,185,0,0.2)' }}>
-                <div className="text-xs font-bold text-neutral-600 mb-1">🖥️ GPU does:</div>
-                <div className="text-xs text-neutral-700">{step.gpu}</div>
-              </div>
-
-              {/* Infinia action */}
-              <div className="p-3 rounded-xl" style={{ background: 'rgba(237,39,56,0.06)', border: '1px solid rgba(237,39,56,0.2)' }}>
-                <div className="text-xs font-bold text-neutral-600 mb-1">🗄️ DDN Infinia:</div>
-                <div className="text-xs text-neutral-700">{step.kv_stored}</div>
-              </div>
-
-              {/* Cost */}
-              <div className="p-3 rounded-xl" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.2)' }}>
-                <div className="text-xs font-bold text-neutral-600 mb-1">💲 Billing:</div>
-                <div className="text-xs text-neutral-700">{step.cost_note}</div>
-              </div>
-
-              {/* Analogy */}
-              <div className="p-3 rounded-xl" style={{ background: 'var(--surface-secondary)' }}>
-                <div className="text-xs text-neutral-600 italic">{step.analogy}</div>
-              </div>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+            <div className="mx-4 mt-2 mb-3 p-3 rounded-xl text-xs leading-relaxed"
+              style={{ background: 'var(--surface-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+              {detail}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
-  )
-}
-
-// ─── KV Cache mechanics diagram ───────────────────────────────────────────────
-
-function KVMechanicsCard() {
-  return (
-    <div className="card p-6 space-y-5">
-      <h3 className="font-bold text-neutral-900 text-base">🔬 What Exactly Gets Cached?</h3>
-
-      {/* The answer */}
-      <div className="p-4 rounded-xl" style={{ background: 'rgba(26,129,175,0.06)', border: '2px solid rgba(26,129,175,0.2)' }}>
-        <div className="font-semibold text-sm text-neutral-800 mb-2">The short answer:</div>
-        <div className="text-sm text-neutral-700">
-          KV Cache stores the <strong>Key (K)</strong> and <strong>Value (V)</strong> attention matrices computed during the
-          {' '}<strong>input (prefill) phase</strong> only. Output tokens are generated one-at-a-time and are <em>not</em> the
-          expensive part — they're sequential by nature. What we save is the expensive <strong>parallel prefill</strong> computation.
-        </div>
-      </div>
-
-      {/* Two-phase visual */}
-      <div>
-        <div className="text-xs font-bold uppercase tracking-wider text-neutral-500 mb-3">The 2 Phases of Every LLM Request:</div>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Prefill */}
-          <div className="rounded-xl overflow-hidden border-2" style={{ borderColor: '#ED2738' }}>
-            <div className="px-4 py-2 text-xs font-bold text-white" style={{ background: '#ED2738' }}>
-              Phase 1: PREFILL (input processing)
-            </div>
-            <div className="p-4 space-y-2 text-xs text-neutral-700">
-              <div>• ALL input tokens processed <strong>simultaneously</strong> (parallelizable)</div>
-              <div>• Each token generates its own <strong>K matrix</strong> and <strong>V matrix</strong></div>
-              <div>• For 700 tokens → 700 K/V pairs computed</div>
-              <div>• This is <strong>GPU-intensive</strong> and expensive at scale</div>
-              <div className="pt-2 font-semibold" style={{ color: '#ED2738' }}>← This is what KV Cache ELIMINATES</div>
-            </div>
-          </div>
-
-          {/* Decode */}
-          <div className="rounded-xl overflow-hidden border-2" style={{ borderColor: '#76B900' }}>
-            <div className="px-4 py-2 text-xs font-bold text-white" style={{ background: '#76B900' }}>
-              Phase 2: DECODE (output generation)
-            </div>
-            <div className="p-4 space-y-2 text-xs text-neutral-700">
-              <div>• Output tokens generated <strong>one at a time</strong> (sequential)</div>
-              <div>• Each new token attends to ALL previous K/V pairs</div>
-              <div>• Cannot be parallelized — inherently autoregressive</div>
-              <div>• Speed limited by GPU memory bandwidth</div>
-              <div className="pt-2 font-semibold" style={{ color: '#76B900' }}>← Same cost with or without KV Cache</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* What's in K and V */}
-      <div>
-        <div className="text-xs font-bold uppercase tracking-wider text-neutral-500 mb-3">Inside the KV Matrices (simplified):</div>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Q (Query)', color: '#807778', desc: 'NOT cached', note: 'Computed fresh for each new token', emoji: '❓' },
-            { label: 'K (Key)', color: '#00C280', desc: 'CACHED in Infinia', note: '"What information does this token contain?"', emoji: '🔑' },
-            { label: 'V (Value)', color: '#00C280', desc: 'CACHED in Infinia', note: '"The actual content/meaning of this token"', emoji: '📦' },
-          ].map(m => (
-            <div key={m.label} className="p-3 rounded-xl border text-center"
-              style={{ borderColor: `${m.color}40`, background: `${m.color}08` }}>
-              <div className="text-xl mb-1">{m.emoji}</div>
-              <div className="text-sm font-bold" style={{ color: m.color }}>{m.label}</div>
-              <div className="text-xs font-semibold mt-1" style={{ color: m.color }}>{m.desc}</div>
-              <div className="text-xs text-neutral-500 mt-1">{m.note}</div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
 
-// ─── GPU Memory vs Infinia comparison ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 1 — KV Cache Mechanics
+// ═══════════════════════════════════════════════════════════════════
 
-function StorageComparisonCard() {
-  const rows = [
-    { metric: 'Capacity', gpu: '~2-8GB (shares VRAM with model weights)', infinia: 'Petabytes — unlimited sessions', winner: 'infinia' },
-    { metric: 'Speed (read)', gpu: '< 1ms (on-chip)', infinia: '10–80ms (network S3 GET)', winner: 'gpu' },
-    { metric: 'Persistence', gpu: '❌ Lost on restart / GPU OOM', infinia: '✅ Persistent forever', winner: 'infinia' },
-    { metric: 'Scale', gpu: 'Single GPU only', infinia: 'Shared across ALL GPU nodes in cluster', winner: 'infinia' },
-    { metric: 'Cost', gpu: 'Competes with model weights for VRAM', infinia: '$0.023/GB/month (object store pricing)', winner: 'infinia' },
-    { metric: 'Concurrent sessions', gpu: 'Dozens (VRAM-limited)', infinia: 'Millions', winner: 'infinia' },
-    { metric: 'Best for', gpu: 'Single active session, real-time streaming', infinia: 'Enterprise scale, multi-user, multi-GPU', winner: 'infinia' },
+function KVMechanicsDetail() {
+  const PHASES = [
+    {
+      n: 1, label: 'PREFILL — Input Processing', who: 'GPU (parallelizable)', color: '#ED2738',
+      icon: <Zap className="w-4 h-4" />,
+      detail: 'ALL input tokens are processed simultaneously in parallel. For a 50,000-token system prompt, the GPU computes Key and Value matrices for all 50,000 tokens at once. This phase is extremely GPU-intensive and is the primary cost driver in inference. This is exactly what KV Cache eliminates on repeat requests.',
+    },
+    {
+      n: 2, label: 'K/V MATRICES STORED → DDN Infinia', who: 'S3 PUT (real object store)', color: '#ED2738',
+      icon: <HardDrive className="w-4 h-4" />,
+      detail: 'After prefill, the computed Key (K) and Value (V) attention matrices are serialised and uploaded to DDN Infinia via a real S3 PUT operation. Latency: 10–80ms depending on payload size. These matrices encode the model\'s full "understanding" of the system prompt. They do NOT include the output — only the input computation.',
+    },
+    {
+      n: 3, label: 'CACHE HIT — K/V Retrieved from Infinia', who: 'S3 GET (~10–80ms)', color: '#00C280',
+      icon: <Database className="w-4 h-4" />,
+      detail: 'On a repeat request (same system prompt), instead of recomputing 50,000 tokens, the backend fetches the stored K/V matrices from Infinia. The GPU receives the cached state and skips directly to processing only the new query tokens. This is a real S3 GET — the latency shown in the demo is measured wall-clock time.',
+    },
+    {
+      n: 4, label: 'DECODE — Output Generation', who: 'GPU (sequential, always runs)', color: '#76B900',
+      icon: <MessageSquare className="w-4 h-4" />,
+      detail: 'Output tokens are generated one at a time, each attending to all previous K/V pairs. This phase is inherently sequential and cannot be parallelised (autoregressive). KV Cache does NOT accelerate decode — it only eliminates the prefill cost. Decode speed is the same with or without caching.',
+    },
   ]
 
   return (
-    <div className="card p-6">
-      <h3 className="font-bold text-neutral-900 text-base mb-4">🆚 GPU Memory Cache vs DDN Infinia Object Store</h3>
-      <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border-subtle)' }}>
-        <table className="w-full text-xs">
-          <thead>
-            <tr style={{ background: 'var(--surface-secondary)' }}>
-              <th className="px-4 py-3 text-left font-semibold text-neutral-600">Feature</th>
-              <th className="px-4 py-3 text-center font-semibold" style={{ color: '#76B900' }}>GPU VRAM Cache</th>
-              <th className="px-4 py-3 text-center font-semibold" style={{ color: '#ED2738' }}>DDN Infinia (Object Store)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={row.metric} style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
-                <td className="px-4 py-3 font-semibold text-neutral-700">{row.metric}</td>
-                <td className="px-4 py-3 text-center text-neutral-600" style={{ background: row.winner === 'gpu' ? 'rgba(118,185,0,0.06)' : undefined }}>
-                  {row.winner === 'gpu' && <span className="text-xs mr-1">⭐</span>}{row.gpu}
-                </td>
-                <td className="px-4 py-3 text-center font-medium" style={{ color: row.winner === 'infinia' ? '#ED2738' : 'var(--text-secondary)', background: row.winner === 'infinia' ? 'rgba(237,39,56,0.04)' : undefined }}>
-                  {row.winner === 'infinia' && <span className="text-xs mr-1">⭐</span>}{row.infinia}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-8">
+      {/* Core principle */}
+      <div className="p-4 rounded-2xl border" style={{ background: 'rgba(237,39,56,0.05)', borderColor: 'rgba(237,39,56,0.2)' }}>
+        <div className="flex items-start gap-3">
+          <Zap className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--ddn-red)' }} />
+          <div>
+            <p className="font-bold text-sm mb-1" style={{ color: 'var(--ddn-red)' }}>
+              Core Principle — Every skipped prefill token is GPU compute you keep
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              An LLM request has two phases: <strong>prefill</strong> (expensive, parallel, cacheable)
+              and <strong>decode</strong> (sequential, always runs). KV Cache targets only the prefill phase.
+              With a 50,000-token system prompt, caching eliminates 99%+ of input compute on every repeat request.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 p-4 rounded-xl" style={{ background: 'rgba(237,39,56,0.06)', border: '1px solid rgba(237,39,56,0.2)' }}>
-        <div className="text-sm font-semibold text-neutral-800">
-          🏆 Bottom line for enterprise AI:
+      {/* What K, V, Q are */}
+      <div>
+        <SectionTitle><Layers className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} /> Inside the Attention Mechanism</SectionTitle>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Q — Query', emoji: '❓', color: '#807778', desc: 'NOT cached', note: 'Computed fresh for each new token. Represents "what am I looking for?" at this position.' },
+            { label: 'K — Key', emoji: '🔑', color: '#00C280', desc: 'CACHED in Infinia', note: '"What information does this token contain?" — computed once per token, stored forever.' },
+            { label: 'V — Value', emoji: '📦', color: '#00C280', desc: 'CACHED in Infinia', note: '"The actual content/meaning of this token" — retrieved via attention weights.' },
+          ].map(m => (
+            <div key={m.label} className="p-3 rounded-xl border text-center"
+              style={{ borderColor: `${m.color}40`, background: `${m.color}08` }}>
+              <div className="text-2xl mb-2">{m.emoji}</div>
+              <div className="text-sm font-bold mb-1" style={{ color: m.color }}>{m.label}</div>
+              <div className="text-xs font-semibold" style={{ color: m.color }}>{m.desc}</div>
+              <div className="text-xs mt-2 leading-snug" style={{ color: 'var(--text-muted)' }}>{m.note}</div>
+            </div>
+          ))}
         </div>
-        <div className="text-xs text-neutral-600 mt-1">
-          GPU VRAM cache is fast but <strong>fragile and finite</strong> — it evicts under memory pressure and dies on restarts.
-          DDN Infinia is <strong>10–80ms slower per lookup</strong>, but provides <strong>unlimited, persistent, shared</strong> KV
-          storage across your entire GPU cluster. At scale (50K+ requests/day), the 70ms read overhead is negligible compared to
-          the 4,000ms+ prefill cost it eliminates.
+      </div>
+
+      {/* 4-stage pipeline */}
+      <div>
+        <SectionTitle><Layers className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} /> 4-Stage Request Lifecycle</SectionTitle>
+        <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Click any stage to see what happens at that exact point.</p>
+        <div className="flex flex-col gap-1">
+          {PHASES.map((p, i) => (
+            <StageRow key={p.n} {...p} last={i === PHASES.length - 1} />
+          ))}
+        </div>
+      </div>
+
+      {/* Talking points */}
+      <div>
+        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <TalkingPoint icon="⚡" title="Only prefill is expensive" body="Output generation always runs sequentially regardless of caching. The entire value of KV Cache is in eliminating the parallel prefill recomputation." />
+          <TalkingPoint icon="🔑" title="K and V are what's stored" body="Not the full model weights, not the output — just the intermediate attention matrices for the input tokens. These are the exact values the GPU would have recomputed." />
+          <TalkingPoint icon="📡" title="Real S3 PUT/GET operations" body="This demo makes real HTTP calls to DDN Infinia. Every latency number shown is measured wall-clock time — not simulated or estimated." />
+          <TalkingPoint icon="📐" title="Size scales with context" body="A 50,000-token system prompt generates roughly 50,000 K/V pairs per attention head. For Llama 3.2 3B with 28 heads × 2 (K+V) × 4 bytes, that's ~11MB per request." />
         </div>
       </div>
     </div>
   )
 }
 
-// ─── ICP section ──────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 2 — Multi-Turn Walkthrough
+// ═══════════════════════════════════════════════════════════════════
 
-const ICPS = [
-  { role: 'MLOps / Infra Engineers', concern: 'GPU utilization & cost per request', benefit: 'Direct proof of fewer GPU cycles per turn', icon: '⚙️' },
-  { role: 'CTOs / VP Engineering', concern: 'Infrastructure budget & scale', benefit: 'Monthly & annual $ savings at real traffic volume', icon: '💼' },
-  { role: 'AI Product Managers', concern: 'Latency & user experience', benefit: 'Sub-100ms TTFT on repeated queries = better UX', icon: '🚀' },
-  { role: 'Finance / Procurement', concern: 'Cloud vs on-prem ROI', benefit: 'Hard numbers: cost per call with/without cache', icon: '📊' },
-  { role: 'AI Platform Engineers', concern: 'vLLM prefix caching at scale', benefit: 'Infinia replaces ephemeral GPU memory with persistent object store', icon: '🔬' },
-]
-
-// ─── Main export ──────────────────────────────────────────────────────────────
-
-export default function About() {
-  const [activeStep, setActiveStep] = useState(0)
+function MultiTurnDetail() {
+  const TURNS = [
+    {
+      n: 1, label: 'Turn 1 — Cache MISS (First Request)', color: '#ED2738',
+      icon: <Database className="w-4 h-4" />, who: 'Full prefill compute',
+      detail: 'GPU processes all tokens from scratch: system prompt (~50K tokens) + user question (~10 tokens). K/V matrices for all 50,010 tokens computed in parallel. Result stored in DDN Infinia via S3 PUT. Cost: 50,010 input tokens billed at full rate.',
+    },
+    {
+      n: 2, label: 'Turn 2 — Cache HIT (Same Question)', color: '#00C280',
+      icon: <Zap className="w-4 h-4" />, who: 'Infinia S3 GET + skip prefill',
+      detail: 'K/V matrices fetched from Infinia (real S3 GET, measured ~10–80ms). GPU skips 50,000-token prefill entirely. Only the 10-token new question is processed. Cost: 10 input tokens only. System prompt tokens = FREE (self-hosted) or ~99% discount (cloud API).',
+    },
+    {
+      n: 3, label: 'Turn N — Savings Compound', color: '#1A81AF',
+      icon: <TrendingDown className="w-4 h-4" />, who: 'Near-zero input cost per turn',
+      detail: 'Each conversation turn adds only the new question tokens. Accumulated history grows in Infinia but is retrieved rather than recomputed. By Turn 10: 98%+ of input tokens are cached. By Turn 50: ~99% of input compute is eliminated. The longer the conversation, the greater the savings.',
+    },
+    {
+      n: 4, label: 'Cross-User Prefix Sharing', color: '#76B900',
+      icon: <Users className="w-4 h-4" />, who: 'Prefix Multiplier pattern',
+      detail: 'If 1,000 users all query the same Contact Center AI (same system prompt), the system prompt K/V is computed ONCE and shared across all users. Each user\'s session only adds their own conversation history. This is the Prefix Multiplier: 1 computation × 1,000 users = 1,000× effective throughput gain.',
+    },
+  ]
 
   return (
     <div className="space-y-8">
-      <div className="section-header">
-        <h2 className="section-title">Architecture & How KV Cache Works</h2>
-        <p className="section-description">
-          A business-friendly explainer of what KV Cache is, what gets stored, and why DDN Infinia changes the economics.
-        </p>
+      {/* Core principle */}
+      <div className="p-4 rounded-2xl border" style={{ background: 'rgba(0,194,128,0.05)', borderColor: 'rgba(0,194,128,0.2)' }}>
+        <div className="flex items-start gap-3">
+          <TrendingDown className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#00C280' }} />
+          <div>
+            <p className="font-bold text-sm mb-1" style={{ color: '#00C280' }}>
+              Core Principle — The first request pays the price, every repeat is nearly free
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              Token cost follows a steep decay curve. Turn 1 is full price. Turn 2 costs only the new question.
+              Turn 50 costs ~1% of Turn 1. The left panel (no cache) is a <strong>leaking bucket</strong> — grows unbounded.
+              The right panel (Infinia) is a <strong>flat line</strong> — always just the new words you typed.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* ── What gets cached ── */}
-      <KVMechanicsCard />
-
-      {/* ── Multi-turn walkthrough ── */}
-      <div className="card p-6">
-        <h3 className="font-bold text-neutral-900 text-base mb-2">🔄 Multi-Turn Chat: What Happens at Each Turn</h3>
-        <p className="text-xs text-neutral-500 mb-4">
-          Click each step to expand the full breakdown — what the GPU does, what Infinia stores, and what you pay.
-        </p>
-        <div className="space-y-3">
-          {STEPS.map((step, i) => (
-            <StepCard
-              key={step.id}
-              step={step}
-              active={activeStep === i}
-              onClick={() => setActiveStep(activeStep === i ? -1 : i)}
-            />
-          ))}
-        </div>
-
-        {/* Savings trajectory */}
-        <div className="mt-5 p-4 rounded-xl" style={{ background: 'var(--surface-secondary)' }}>
-          <div className="text-xs font-bold text-neutral-600 mb-1">💹 Cost per turn over a conversation (illustrative):</div>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm" style={{ background: '#ED2738' }} />
-              <span className="text-xs text-neutral-500">Full cost (MISS)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm" style={{ background: '#00C280' }} />
-              <span className="text-xs text-neutral-500">With Infinia Cache</span>
-            </div>
-          </div>
-          <div className="flex items-end gap-2" style={{ height: '72px' }}>
+      {/* Cost trajectory bars */}
+      <div>
+        <SectionTitle><TrendingDown className="w-4 h-4" style={{ color: '#00C280' }} /> Cost Per Turn (Relative to Turn 1)</SectionTitle>
+        <div className="rounded-xl p-4 border" style={{ background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}>
+          <div className="flex items-end gap-2 mb-2" style={{ height: '72px' }}>
             {[
               { label: 'T1', pct: 100, color: '#ED2738', note: '100%' },
               { label: 'T2', pct: 15,  color: '#FF7600', note: '15%' },
@@ -342,192 +251,518 @@ export default function About() {
               </div>
             ))}
           </div>
-          {/* Turn labels below bars */}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2">
             {['T1','T2','T3','T4','T5','T10','T50'].map(t => (
-              <div key={t} className="flex-1 text-center font-bold text-neutral-500" style={{ fontSize: '10px' }}>{t}</div>
+              <div key={t} className="flex-1 text-center font-bold" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t}</div>
             ))}
           </div>
-          <div className="mt-2 text-xs text-neutral-400 text-center">
+          <div className="mt-2 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
             85% saved at T2 · 92% at T3 · ~99% at T50
           </div>
         </div>
+      </div>
 
-        {/* ── Core Demo Point ── */}
-        <div className="mt-4 rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(0,194,128,0.25)' }}>
-          <div className="px-4 py-2.5 font-bold text-sm" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
-            ⚡ The Core Demo Point — Token Growth Per Turn
-          </div>
-          <div className="p-4">
-            <p className="text-xs text-neutral-500 mb-3">
-              The <strong>left panel (No Cache)</strong> carries all prior conversation history on every turn — its token count grows like a leaking bucket.
-              The <strong>right panel (Infinia)</strong> only ever sends the new question — a flat line regardless of conversation length.
+      {/* 4-turn pipeline */}
+      <div>
+        <SectionTitle><Layers className="w-4 h-4" style={{ color: '#00C280' }} /> Turn-by-Turn Pipeline</SectionTitle>
+        <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Click any turn to see exactly what the GPU does and what you pay.</p>
+        <div className="flex flex-col gap-1">
+          {TURNS.map((t, i) => <StageRow key={t.n} {...t} last={i === TURNS.length - 1} />)}
+        </div>
+      </div>
+
+      {/* Token growth table */}
+      <div>
+        <SectionTitle><Database className="w-4 h-4" style={{ color: '#1A81AF' }} /> The Leaking Bucket vs Flat Line</SectionTitle>
+        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border-subtle)' }}>
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{ background: 'var(--surface-secondary)' }}>
+                <th className="px-3 py-2.5 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Turn</th>
+                <th className="px-3 py-2.5 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Question Asked</th>
+                <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#ED2738' }}>❌ Without Cache</th>
+                <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#00C280' }}>✅ With Infinia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { turn: 'Turn 1', q: '"What is DDN Infinia?"',        left: '50,005 tokens',          right: '5 tokens',   hit: false },
+                { turn: 'Turn 2', q: '"Tell me more about it"',       left: '50,005 + reply + 10',    right: '10 tokens',  hit: false },
+                { turn: 'Turn 3', q: '"What is DDN Infinia?" (again)',left: '50,005 + replies + 5',   right: '⚡ HIT',     hit: true  },
+                { turn: 'Turn N', q: 'Any previously asked question', left: 'Growing unbounded →∞',   right: '⚡ HIT',     hit: true  },
+              ].map((row, i) => (
+                <tr key={i} style={{ background: row.hit ? 'rgba(0,194,128,0.04)' : i % 2 === 0 ? 'transparent' : 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
+                  <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--text-primary)' }}>{row.turn}</td>
+                  <td className="px-3 py-2.5 italic" style={{ color: 'var(--text-secondary)' }}>{row.q}</td>
+                  <td className="px-3 py-2.5 text-center font-mono" style={{ color: '#ED2738' }}>{row.left}</td>
+                  <td className="px-3 py-2.5 text-center font-mono font-bold" style={{ color: row.hit ? '#00C280' : 'var(--text-secondary)' }}>{row.right}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Talking points */}
+      <div>
+        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <TalkingPoint icon="📉" title="The leaking bucket analogy" body="Without caching, every turn sends the entire conversation history to the GPU. Token count grows with every message — so does cost and latency." />
+          <TalkingPoint icon="📏" title="The flat line with Infinia" body="With caching, each turn only sends the new question. Token count stays constant regardless of conversation length." />
+          <TalkingPoint icon="👥" title="Prefix sharing across users" body="1,000 users querying the same Contact Center AI share one system prompt computation. That's 1,000× effective throughput from a single prefill." />
+          <TalkingPoint icon="💰" title="Cloud API billing impact" body="On GPT-4o or Azure A100, every cached token is a direct invoice reduction. At 500K requests/day with a 50K-token prompt, caching saves millions of dollars annually." />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 3 — Session Resume
+// ═══════════════════════════════════════════════════════════════════
+
+function SessionResumeDetail() {
+  const STAGES_WITHOUT = [
+    { n: 1, label: 'User sends Turn 1–3', who: 'GPU HBM', color: '#807778', icon: <MessageSquare className="w-4 h-4" />, detail: 'GPU computes normally. KV state lives in GPU HBM (High-Bandwidth Memory). Everything is fast while the session is active and memory is available.' },
+    { n: 2, label: 'GPU serves 1,000 other users', who: 'Memory pressure event', color: '#ED2738', icon: <AlertTriangle className="w-4 h-4" />, detail: 'The GPU is serving thousands of concurrent sessions. Under memory pressure, the LRU eviction policy removes older KV states to free VRAM for active sessions. Your conversation state is silently deleted from GPU memory.' },
+    { n: 3, label: 'User returns and asks Turn 4', who: 'GPU re-computes everything', color: '#ED2738', icon: <Zap className="w-4 h-4" />, detail: 'Without external storage, the entire conversation history (Turns 1–3 + all system prompts) must be re-processed from scratch. This can be 10,000+ tokens = 3–8 seconds of wasted GPU time. The user experiences a degraded, slow response. This happens silently — the user has no idea why.' },
+  ]
+
+  const STAGES_WITH = [
+    { n: 1, label: 'User sends Turn 1–3', who: 'GPU HBM + Infinia', color: '#807778', icon: <MessageSquare className="w-4 h-4" />, detail: 'Same as without — GPU computes normally. But every KV state is also persisted to DDN Infinia as a background S3 PUT. The user never sees this latency overhead.' },
+    { n: 2, label: 'GPU eviction event', who: 'Safe eviction', color: '#00C280', icon: <Shield className="w-4 h-4" />, detail: 'GPU evicts the session from HBM as before. But before eviction, the full KV state was already safely written to Infinia. The GPU simply notes: "session state is in Infinia" and frees the VRAM.' },
+    { n: 3, label: 'User returns — KV loaded from Infinia', who: 'S3 GET ~50ms', color: '#00C280', icon: <HardDrive className="w-4 h-4" />, detail: 'When the user sends Turn 4, the backend detects the session is not in GPU HBM. It fetches the KV state from Infinia (real S3 GET, ~50ms). The GPU resumes exactly where it left off — no recomputation. Turn 4 only processes the new question.' },
+  ]
+
+  return (
+    <div className="space-y-8">
+      {/* Core principle */}
+      <div className="p-4 rounded-2xl border" style={{ background: 'rgba(26,129,175,0.05)', borderColor: 'rgba(26,129,175,0.2)' }}>
+        <div className="flex items-start gap-3">
+          <Server className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#1A81AF' }} />
+          <div>
+            <p className="font-bold text-sm mb-1" style={{ color: '#1A81AF' }}>
+              Core Principle — GPU memory is volatile. Infinia is permanent.
             </p>
-            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--border-subtle)' }}>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr style={{ background: 'var(--surface-secondary)' }}>
-                    <th className="text-left px-3 py-2 font-semibold text-neutral-600">Turn</th>
-                    <th className="text-left px-3 py-2 font-semibold text-neutral-600">Question Asked</th>
-                    <th className="px-3 py-2 font-semibold text-center" style={{ color: '#ED2738' }}>❌ Left — Tokens Sent</th>
-                    <th className="px-3 py-2 font-semibold text-center" style={{ color: '#00C280' }}>✅ Right — Tokens Sent</th>
-                    <th className="text-center px-3 py-2 font-semibold text-neutral-600">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { turn: 'Turn 1', q: '"What is DDN Infinia?"',        left: '5 tokens',          right: '5 tokens',    result: 'MISS → stored in Infinia', hit: false },
-                    { turn: 'Turn 2', q: '"Tell me more about it"',        left: '5 + reply1 + 10',   right: '10 tokens',   result: 'New Q → MISS → stored',    hit: false },
-                    { turn: 'Turn 3', q: '"What is DDN Infinia?" (again)', left: '5+reply1+10+reply2+5', right: '⚡ 0ms HIT', result: 'Instant from Infinia',     hit: true  },
-                    { turn: 'Turn N', q: 'Any previously asked question',  left: 'Growing unbounded', right: '⚡ 0ms HIT', result: 'Always free after 1st ask', hit: true  },
-                  ].map((row, i) => (
-                    <tr key={i} style={{ background: row.hit ? 'rgba(0,194,128,0.04)' : i % 2 === 0 ? 'transparent' : 'var(--surface-secondary)' }}>
-                      <td className="px-3 py-2 font-semibold text-neutral-700">{row.turn}</td>
-                      <td className="px-3 py-2 text-neutral-600 italic">{row.q}</td>
-                      <td className="px-3 py-2 text-center font-mono" style={{ color: '#ED2738' }}>{row.left}</td>
-                      <td className="px-3 py-2 text-center font-mono font-bold" style={{ color: row.hit ? '#00C280' : 'var(--text-secondary)' }}>{row.right}</td>
-                      <td className="px-3 py-2 text-center" style={{ color: row.hit ? '#00C280' : '#1A81AF' }}>{row.result}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-3 p-3 rounded-lg text-xs font-medium" style={{ background: 'rgba(237,39,56,0.05)', border: '1px solid rgba(237,39,56,0.15)', color: 'var(--text-secondary)' }}>
-              💡 <strong style={{ color: '#ED2738' }}>The left panel is a leaking bucket</strong> — every turn adds more tokens, more GPU time, more cost.
-              {' '}<strong style={{ color: '#00C280' }}>The right panel with Infinia is a flat line</strong> — it only ever pays for the new words you type. Once cached, any question costs near-zero to answer — forever.
-            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              In enterprise AI, a single GPU serves <strong>thousands of concurrent sessions</strong>.
+              Under memory pressure, it silently evicts older sessions. Without external KV storage,
+              users pay the full recomputation cost on every eviction. With Infinia, context survives
+              GPU restarts, scaling events, and failures — resuming in ~50ms instead of 3–8 seconds.
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── GPU Memory Eviction & Session Resume ── */}
-      <div className="mt-6 rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(26,129,175,0.3)' }}>
-        <div className="px-4 py-2.5 font-bold text-sm flex items-center gap-2" style={{ background: 'rgba(26,129,175,0.08)', color: '#1A81AF' }}>
-          🧠 Real-World Scenario — What Happens When the GPU Forgets You?
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { icon: '⏱️', stat: '3–8 sec', label: 'Wasted per return', sub: 'Without Infinia — GPU re-reads all history', color: '#ED2738' },
+          { icon: '⚡', stat: '~50 ms', label: 'Session resume', sub: 'With Infinia — context loaded from object store', color: '#00C280' },
+          { icon: '♾️', stat: '∞ Users', label: 'Concurrent sessions', sub: "Each user's context lives in Infinia, not GPU RAM", color: '#1A81AF' },
+        ].map(item => (
+          <div key={item.label} className="text-center p-3 rounded-xl"
+            style={{ background: `${item.color}0c`, border: `1px solid ${item.color}25` }}>
+            <div className="text-2xl mb-1">{item.icon}</div>
+            <div className="font-mono font-black text-lg" style={{ color: item.color }}>{item.stat}</div>
+            <div className="font-semibold mt-0.5" style={{ color: 'var(--text-primary)', fontSize: '11px' }}>{item.label}</div>
+            <div className="mt-1" style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{item.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Two pipelines side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide mb-2 px-1" style={{ color: '#ED2738' }}>
+            ❌ Without External KV Cache
+          </div>
+          <div className="flex flex-col gap-1">
+            {STAGES_WITHOUT.map((s, i) => <StageRow key={s.n} {...s} last={i === STAGES_WITHOUT.length - 1} />)}
+          </div>
         </div>
-        <div className="p-5 space-y-5">
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            In enterprise AI, a GPU serves <strong>thousands of users simultaneously</strong>. When memory gets full,
-            it evicts older conversations to make room for new ones. Without external storage, your conversation is{' '}
-            <strong>gone</strong> — the GPU re-reads your entire chat history from scratch when you return.
-            With <strong>DDN Infinia</strong>, the conversation state is safely stored and reloaded in milliseconds.
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide mb-2 px-1" style={{ color: '#00C280' }}>
+            ✅ With DDN Infinia
+          </div>
+          <div className="flex flex-col gap-1">
+            {STAGES_WITH.map((s, i) => <StageRow key={s.n} {...s} last={i === STAGES_WITH.length - 1} />)}
+          </div>
+        </div>
+      </div>
+
+      {/* Analogy */}
+      <div className="p-4 rounded-xl" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.2)' }}>
+        <div className="text-xs font-bold mb-1" style={{ color: '#1A81AF' }}>💡 Plain-English Analogy</div>
+        <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          Think of the GPU like a <strong>busy doctor's short-term memory</strong>. After seeing 50 patients, the
+          doctor can't recall patient #1's earlier visit. Without Infinia, that patient re-tells their full history
+          from scratch. <strong>With Infinia, the notes are stored externally</strong> — retrieved in seconds so the
+          conversation picks up exactly where it left off.
+        </div>
+      </div>
+
+      {/* Talking points */}
+      <div>
+        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <TalkingPoint icon="🧠" title="GPU HBM is the bottleneck" body="High-Bandwidth Memory on an H100 is ~80GB — shared between model weights, KV cache, and activations. In multi-user serving, KV cache competes with model weights for the same VRAM pool." />
+          <TalkingPoint icon="🔄" title="Eviction is silent and constant" body="Under typical production load, KV eviction happens continuously. Users don't see an error — they just get a slow response as the GPU recomputes from scratch." />
+          <TalkingPoint icon="🛡️" title="Infinia survives infrastructure events" body="GPU restart, OOM kill, node failure, auto-scaling — in any event, the KV state in Infinia survives. The next GPU to serve the user picks up the same state." />
+          <TalkingPoint icon="🏢" title="This is the enterprise differentiator" body="Single-GPU demos never show this failure mode. In production with thousands of concurrent users, KV eviction is not a corner case — it's the default state." />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 4 — GPU vs Infinia Storage
+// ═══════════════════════════════════════════════════════════════════
+
+function StorageComparisonDetail() {
+  const ROWS = [
+    { metric: 'Capacity', gpu: '~2–8 GB (shares VRAM with model weights)', infinia: 'Petabytes — unlimited sessions', winner: 'infinia' },
+    { metric: 'Speed (read)', gpu: '< 1ms (on-chip HBM)', infinia: '10–80ms (network S3 GET)', winner: 'gpu' },
+    { metric: 'Persistence', gpu: '❌ Lost on restart / GPU OOM', infinia: '✅ Persistent — survives any event', winner: 'infinia' },
+    { metric: 'Multi-node sharing', gpu: 'Single GPU only', infinia: 'Shared across ALL GPU nodes in cluster', winner: 'infinia' },
+    { metric: 'Cost', gpu: 'Competes with model weights for VRAM', infinia: '$0.023/GB/month (object store pricing)', winner: 'infinia' },
+    { metric: 'Concurrent sessions', gpu: 'Dozens (VRAM-limited)', infinia: 'Millions', winner: 'infinia' },
+    { metric: 'Eviction policy', gpu: 'LRU — silent, uncontrolled', infinia: 'No eviction — explicit lifecycle', winner: 'infinia' },
+    { metric: 'Best for', gpu: 'Single active session, real-time streaming', infinia: 'Enterprise scale, multi-user, multi-GPU', winner: 'infinia' },
+  ]
+
+  return (
+    <div className="space-y-8">
+      {/* Core principle */}
+      <div className="p-4 rounded-2xl border" style={{ background: 'rgba(118,185,0,0.05)', borderColor: 'rgba(118,185,0,0.2)' }}>
+        <div className="flex items-start gap-3">
+          <HardDrive className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#76B900' }} />
+          <div>
+            <p className="font-bold text-sm mb-1" style={{ color: '#76B900' }}>
+              Core Principle — Speed on-chip. Scale in Infinia.
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              GPU HBM is fast but <strong>finite and volatile</strong>. DDN Infinia is 10–80ms slower per lookup,
+              but provides <strong>unlimited, persistent, shared</strong> KV storage across your entire GPU cluster.
+              At scale (50K+ requests/day), the 70ms read overhead is negligible compared to the
+              4,000ms+ prefill cost it eliminates.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Comparison table */}
+      <div>
+        <SectionTitle><Server className="w-4 h-4" style={{ color: '#1A81AF' }} /> Side-by-Side Comparison</SectionTitle>
+        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border-subtle)' }}>
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{ background: 'var(--surface-secondary)' }}>
+                <th className="px-4 py-3 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Feature</th>
+                <th className="px-4 py-3 text-center font-semibold" style={{ color: '#76B900' }}>GPU VRAM Cache</th>
+                <th className="px-4 py-3 text-center font-semibold" style={{ color: '#ED2738' }}>DDN Infinia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ROWS.map((row, i) => (
+                <tr key={row.metric} style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
+                  <td className="px-4 py-3 font-semibold" style={{ color: 'var(--text-primary)' }}>{row.metric}</td>
+                  <td className="px-4 py-3 text-center" style={{ color: row.winner === 'gpu' ? '#76B900' : 'var(--text-secondary)', background: row.winner === 'gpu' ? 'rgba(118,185,0,0.06)' : undefined }}>
+                    {row.winner === 'gpu' && <span className="mr-1">⭐</span>}{row.gpu}
+                  </td>
+                  <td className="px-4 py-3 text-center font-medium" style={{ color: row.winner === 'infinia' ? '#ED2738' : 'var(--text-secondary)', background: row.winner === 'infinia' ? 'rgba(237,39,56,0.04)' : undefined }}>
+                    {row.winner === 'infinia' && <span className="mr-1">⭐</span>}{row.infinia}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 p-4 rounded-xl" style={{ background: 'rgba(237,39,56,0.05)', border: '1px solid rgba(237,39,56,0.15)' }}>
+          <div className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>🏆 Bottom line for enterprise AI:</div>
+          <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            The 70ms Infinia read overhead is paid <strong>once per session resume</strong>. The alternative
+            — GPU recomputing 50,000 tokens — takes <strong>4,000–8,000ms</strong>. Infinia is 100× faster
+            than the failure mode it prevents.
+          </div>
+        </div>
+      </div>
+
+      {/* Talking points */}
+      <div>
+        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <TalkingPoint icon="⚡" title="70ms vs 4,000ms" body="The Infinia read overhead is 70ms. The prefill cost it avoids is 4,000–8,000ms. The tradeoff is 57× in your favour on every cache hit." />
+          <TalkingPoint icon="🔗" title="Cross-GPU sharing is the key" body="GPU VRAM can't be shared between nodes. Infinia is a shared object store — any GPU in the cluster can serve any user's session without recomputation." />
+          <TalkingPoint icon="💾" title="Storage cost is negligible" body="An 11MB KV state stored for 24 hours costs ~$0.000007. GPU VRAM costs $2.80/hour to run — and it can only hold dozens of sessions simultaneously." />
+          <TalkingPoint icon="📈" title="Scales with your fleet" body="As you add GPU nodes, each one gains instant access to all cached sessions in Infinia. No warm-up, no replication, no coordination overhead." />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 5 — Who Benefits (ICP)
+// ═══════════════════════════════════════════════════════════════════
+
+function ICPDetail() {
+  const ICPS = [
+    {
+      n: 1, label: 'MLOps / Infra Engineers', who: 'GPU utilization & cost per request', color: '#1A81AF',
+      icon: <Server className="w-4 h-4" />,
+      detail: 'MLOps engineers care about GPU efficiency metrics: tokens/second, utilization%, cost/request. The demo shows concrete reduction in tokens processed per request and the before/after TTFT numbers. KV Cache directly reduces GPU cycles per turn — a metric they already track.',
+    },
+    {
+      n: 2, label: 'CTOs / VP Engineering', who: 'Infrastructure budget & scale', color: '#ED2738',
+      icon: <TrendingDown className="w-4 h-4" />,
+      detail: 'C-level executives need CapEx and OpEx numbers. The ROI Calculator translates token savings into DGX servers avoided ($300K each), power savings (kWh/year), and throughput multipliers (92× more users from same hardware). These are CFO-level conversations.',
+    },
+    {
+      n: 3, label: 'AI Product Managers', who: 'User experience & latency', color: '#00C280',
+      icon: <Zap className="w-4 h-4" />,
+      detail: 'Product managers measure TTFT (time-to-first-token) as a core UX metric. Sub-100ms TTFT on repeated queries feels instant to users. The Chat Observatory shows this in real-time — same question, 10× faster response on the second ask.',
+    },
+    {
+      n: 4, label: 'AI Platform Engineers', who: 'vLLM prefix caching at enterprise scale', color: '#76B900',
+      icon: <Database className="w-4 h-4" />,
+      detail: 'Platform engineers building on vLLM or TensorRT-LLM already know about prefix caching. The DDN story is: "Infinia replaces ephemeral GPU HBM with a persistent, shared object store that survives scaling events and serves your entire GPU fleet." This is a direct architectural upgrade to what they\'re already building.',
+    },
+    {
+      n: 5, label: 'Finance / Procurement', who: 'Cloud vs on-prem ROI', color: '#f59e0b',
+      icon: <Users className="w-4 h-4" />,
+      detail: 'Finance needs hard numbers with verifiable assumptions. The ROI Calculator shows the exact formula behind every KPI: servers avoided = ⌈requests/200K⌉ before caching minus after caching. Each assumption (DGX price, power draw, electricity rate) is visible and adjustable.',
+    },
+  ]
+
+  return (
+    <div className="space-y-8">
+      {/* Core principle */}
+      <div className="p-4 rounded-2xl border" style={{ background: 'rgba(26,129,175,0.05)', borderColor: 'rgba(26,129,175,0.2)' }}>
+        <div className="flex items-start gap-3">
+          <Users className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#1A81AF' }} />
+          <div>
+            <p className="font-bold text-sm mb-1" style={{ color: '#1A81AF' }}>
+              Core Principle — Every persona sees a different ROI, all from the same demo
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              The same Chat Observatory demo lands differently depending on who is watching.
+              Lead with the metric that resonates with each audience — then use the ROI Calculator
+              to translate it into their language. The technology is the same; the story changes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ICP pipeline (clickable) */}
+      <div>
+        <SectionTitle><Users className="w-4 h-4" style={{ color: '#1A81AF' }} /> Who Benefits Most — Ideal Customer Profiles</SectionTitle>
+        <div className="flex flex-col gap-1">
+          {ICPS.map((icp, i) => <StageRow key={icp.n} {...icp} last={i === ICPS.length - 1} />)}
+        </div>
+      </div>
+
+      {/* Demo route by persona */}
+      <div>
+        <SectionTitle><ArrowRight className="w-4 h-4" style={{ color: '#76B900' }} /> Recommended Demo Route by Audience</SectionTitle>
+        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border-subtle)' }}>
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{ background: 'var(--surface-secondary)' }}>
+                <th className="px-3 py-2.5 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Audience</th>
+                <th className="px-3 py-2.5 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Lead With</th>
+                <th className="px-3 py-2.5 text-left font-semibold" style={{ color: 'var(--text-secondary)' }}>Close With</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { audience: 'MLOps / Infra', lead: 'Token count comparison (Chat Observatory)', close: 'GPU-hours freed/year (ROI Calculator)', color: '#1A81AF' },
+                { audience: 'CTO / VP Eng', lead: 'Throughput multiplier (92×)', close: 'CapEx avoided ($300K per DGX)', color: '#ED2738' },
+                { audience: 'AI Product', lead: 'TTFT difference on HIT vs MISS', close: 'Session Resume — GPU flush & restore', color: '#00C280' },
+                { audience: 'Platform Eng', lead: 'Session Resume flow (technical)', close: 'Prefix Multiplier (shared system prompt)', color: '#76B900' },
+                { audience: 'Finance', lead: 'ROI Calculator — Contact Center preset', close: 'Combined Annual Value formula', color: '#f59e0b' },
+              ].map((row, i) => (
+                <tr key={row.audience} style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
+                  <td className="px-3 py-2.5 font-semibold" style={{ color: row.color }}>{row.audience}</td>
+                  <td className="px-3 py-2.5" style={{ color: 'var(--text-secondary)' }}>{row.lead}</td>
+                  <td className="px-3 py-2.5" style={{ color: 'var(--text-secondary)' }}>{row.close}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Talking points */}
+      <div>
+        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Universal Talking Points</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <TalkingPoint icon="🎯" title="Lead with useful tokens/second" body="Not tokens/second — useful tokens/second. How much of your GPU's compute is generating new value vs re-reading context it already knows? That ratio is determined by your data architecture." />
+          <TalkingPoint icon="📊" title="Everything in this demo is live" body="Real S3 GET/PUT to DDN Infinia. Real Ollama inference. Real latency measurement. Every number on screen is measured — not simulated, not estimated." />
+          <TalkingPoint icon="🔢" title="The ROI Calculator is adjustable" body="Every assumption is visible and slider-controlled. Let the customer set their own numbers — the formula is transparent. This builds trust faster than a fixed slide." />
+          <TalkingPoint icon="🏢" title="Contact Center AI is the most relatable" body="50,000-token policy manual, 500K queries/day, 85% hit rate — every enterprise audience understands call center operations. Start here before moving to legal or healthcare." />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONCEPTS registry + Main Page
+// ═══════════════════════════════════════════════════════════════════
+
+const CONCEPTS = [
+  {
+    id: 'mechanics',
+    icon: <Zap className="w-5 h-5" />,
+    label: 'KV Cache Mechanics',
+    subtitle: 'Architecture',
+    tag: 'Architecture',
+    tagColor: 'var(--ddn-red)',
+    summary: 'What K/V matrices are, what gets cached, and the 4-stage request lifecycle',
+    ready: true,
+  },
+  {
+    id: 'multiturn',
+    icon: <TrendingDown className="w-5 h-5" />,
+    label: 'Multi-Turn Walkthrough',
+    subtitle: 'How It Works',
+    tag: 'How It Works',
+    tagColor: '#00C280',
+    summary: 'Turn-by-turn breakdown — MISS, HIT, and compound savings over time',
+    ready: true,
+  },
+  {
+    id: 'session',
+    icon: <Server className="w-5 h-5" />,
+    label: 'Session Resume',
+    subtitle: 'Enterprise Scenario',
+    tag: 'Enterprise',
+    tagColor: '#1A81AF',
+    summary: 'GPU memory eviction, Infinia persistence, and the 50ms resume advantage',
+    ready: true,
+  },
+  {
+    id: 'storage',
+    icon: <HardDrive className="w-5 h-5" />,
+    label: 'GPU vs Infinia Storage',
+    subtitle: 'Infrastructure',
+    tag: 'Infrastructure',
+    tagColor: '#76B900',
+    summary: 'Speed, capacity, persistence, and cost — side-by-side comparison',
+    ready: true,
+  },
+  {
+    id: 'icp',
+    icon: <Users className="w-5 h-5" />,
+    label: 'Who Benefits (ICP)',
+    subtitle: 'Business Value',
+    tag: 'Business',
+    tagColor: '#f59e0b',
+    summary: 'Recommended demo routes and talking points by audience persona',
+    ready: true,
+  },
+]
+
+function renderSection(id: string) {
+  switch (id) {
+    case 'mechanics': return <KVMechanicsDetail />
+    case 'multiturn': return <MultiTurnDetail />
+    case 'session':   return <SessionResumeDetail />
+    case 'storage':   return <StorageComparisonDetail />
+    case 'icp':       return <ICPDetail />
+    default:          return null
+  }
+}
+
+export default function About() {
+  const [active, setActive] = useState('mechanics')
+  const concept = CONCEPTS.find(c => c.id === active)!
+
+  return (
+    <div className="flex gap-0 -m-6 md:-m-8" style={{ minHeight: '600px' }}>
+
+      {/* ── Left navigator ─────────────────────────────────────────────── */}
+      <div className="w-52 shrink-0 border-r py-4 flex flex-col gap-1"
+        style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+
+        <div className="px-4 mb-3">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} />
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+              Details
+            </span>
+          </div>
+          <p className="text-[10px] mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            Architecture reference &amp; talking points
           </p>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(237,39,56,0.25)' }}>
-              <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider" style={{ background: 'rgba(237,39,56,0.07)', color: '#ED2738' }}>
-                Without External KV Cache
-              </div>
-              <div className="p-4 space-y-2">
-                {([
-                  { turn: 'Turn 1', label: 'User asks Q1', detail: 'GPU computes → KV state stored in HBM', icon: '💬', bad: false, hl: false },
-                  { turn: 'Turn 2', label: 'User asks Q2', detail: 'GPU has KV state → responds fast', icon: '💬', bad: false, hl: false },
-                  { turn: 'Turn 3', label: 'User asks Q3', detail: 'GPU has KV state → responds fast', icon: '💬', bad: false, hl: false },
-                  { turn: '⚠️ Event', label: 'GPU serves 1,000 other users', detail: "Memory pressure — User's KV state EVICTED from HBM", icon: '🔥', bad: false, hl: true },
-                  { turn: 'Turn 4', label: 'User asks Q4', detail: 'GPU must re-read ALL of Turns 1–3 → 10,000+ tokens re-processed → 3–8 sec wasted → slow, expensive, bad UX', icon: '❌', bad: true, hl: false },
-                ] as const).map((row, i) => (
-                  <div key={i} className="flex items-start gap-3 text-xs p-2 rounded-lg"
-                    style={{ background: row.bad ? 'rgba(237,39,56,0.06)' : row.hl ? 'rgba(237,39,56,0.04)' : 'transparent', border: row.bad ? '1px solid rgba(237,39,56,0.2)' : '1px solid transparent' }}>
-                    <span className="text-base flex-shrink-0 mt-0.5">{row.icon}</span>
-                    <div>
-                      <span className="font-bold" style={{ color: row.bad || row.hl ? '#ED2738' : 'var(--text-primary)' }}>{row.turn}:{' '}</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-                      <div className="mt-0.5" style={{ color: row.bad ? '#ED2738' : 'var(--text-muted)', fontSize: '10px' }}>{row.detail}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {CONCEPTS.map(c => (
+          <button key={c.id} onClick={() => setActive(c.id)}
+            className="w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors"
+            style={{
+              background: active === c.id ? 'var(--surface-card)' : 'transparent',
+              borderLeft: active === c.id ? `3px solid ${c.tagColor}` : '3px solid transparent',
+            }}>
+            <span className="shrink-0 mt-0.5" style={{ color: active === c.id ? c.tagColor : 'var(--text-muted)' }}>
+              {c.icon}
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium leading-tight"
+                style={{ color: active === c.id ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                {c.label}
+              </p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.subtitle}</p>
             </div>
+            {active === c.id && (
+              <CheckCircle className="w-3 h-3 shrink-0 ml-auto mt-1" style={{ color: c.tagColor }} />
+            )}
+          </button>
+        ))}
 
-            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(0,194,128,0.25)' }}>
-              <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider" style={{ background: 'rgba(0,194,128,0.07)', color: '#00C280' }}>
-                With DDN Infinia (External KV Cache)
-              </div>
-              <div className="p-4 space-y-2">
-                {([
-                  { turn: 'Turn 1–3', label: 'Same as left panel', detail: 'GPU computing normally, KV state in HBM', icon: '💬', good: false, hl: false },
-                  { turn: '⚡ Event', label: 'Memory pressure hits', detail: 'KV state written to DDN Infinia → evicted safely from HBM', icon: '💾', good: false, hl: true },
-                  { turn: 'Turn 4', label: 'User returns and asks Q4', detail: 'GPU loads KV state FROM Infinia (∼50ms) → only Q4 processed → conversation continues instantly', icon: '✅', good: true, hl: false },
-                  { turn: '∞ Any Turn', label: 'User can always resume', detail: 'Context lives in Infinia — survives GPU restarts, scaling events, failures', icon: '🛡️', good: false, hl: false },
-                ] as const).map((row, i) => (
-                  <div key={i} className="flex items-start gap-3 text-xs p-2 rounded-lg"
-                    style={{ background: row.good ? 'rgba(0,194,128,0.07)' : row.hl ? 'rgba(0,194,128,0.04)' : 'transparent', border: row.good ? '1px solid rgba(0,194,128,0.2)' : '1px solid transparent' }}>
-                    <span className="text-base flex-shrink-0 mt-0.5">{row.icon}</span>
-                    <div>
-                      <span className="font-bold" style={{ color: row.good || row.hl ? '#00C280' : 'var(--text-primary)' }}>{row.turn}:{' '}</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-                      <div className="mt-0.5" style={{ color: row.good ? '#00C280' : 'var(--text-muted)', fontSize: '10px' }}>{row.detail}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl p-4" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.2)' }}>
-            <div className="text-xs font-bold mb-2" style={{ color: '#1A81AF' }}>💡 Plain-English Analogy</div>
-            <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              Think of the GPU like a <strong>busy doctor’s short-term memory</strong>. After seeing 50 patients, the
-              doctor can’t recall patient #1’s earlier visit. Without Infinia, that patient re-tells their full history
-              from scratch. <strong>With Infinia, the notes are stored externally</strong> — retrieved in seconds so the
-              conversation picks up exactly where it left off. <strong>No repeated context. No wasted time.</strong>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 text-xs">
-            {([
-              { icon: '⏱️', stat: '3–8 sec', label: 'Wasted per user return', sub: 'Without Infinia — GPU re-reads full history', color: '#ED2738' },
-              { icon: '⚡', stat: '∼50 ms', label: 'Session resume time', sub: 'With Infinia — context loaded from object store', color: '#00C280' },
-              { icon: '♾️', stat: '∞ Users', label: 'Concurrent sessions', sub: "Each user's context lives in Infinia, not GPU RAM", color: '#1A81AF' },
-            ] as const).map(item => (
-              <div key={item.label} className="text-center p-3 rounded-xl" style={{ background: `${item.color}0c`, border: `1px solid ${item.color}25` }}>
-                <div className="text-xl mb-1">{item.icon}</div>
-                <div className="font-mono font-black text-lg" style={{ color: item.color }}>{item.stat}</div>
-                <div className="font-semibold mt-0.5" style={{ color: 'var(--text-primary)', fontSize: '11px' }}>{item.label}</div>
-                <div className="mt-1" style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{item.sub}</div>
-              </div>
-            ))}
+        {/* Port reference at bottom */}
+        <div className="mt-auto px-4 pt-4">
+          <div className="p-2.5 rounded-lg border-dashed border text-[10px] leading-relaxed space-y-1"
+            style={{ borderColor: 'var(--border-default)', color: 'var(--text-muted)' }}>
+            <div className="font-semibold" style={{ color: 'var(--ddn-red)' }}>KV Cache Observatory</div>
+            <div>FE: :5176 · BE: :8002</div>
+            <div>Infinia bucket: ddn-kv-cache-01</div>
           </div>
         </div>
       </div>
 
-      {/* ── GPU vs Infinia table ── */}
-      <StorageComparisonCard />
+      {/* ── Right content area ─────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <AnimatePresence mode="wait">
+          <motion.div key={active}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.2 }}
+            className="p-6 md:p-8">
 
-      {/* ── ICP ── */}
-      <div className="card p-6">
-        <h3 className="font-bold text-neutral-900 text-base mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-ddn-red" /> Who Benefits Most (ICP)
-        </h3>
-        <div className="space-y-3">
-          {ICPS.map(icp => (
-            <div key={icp.role} className="flex items-start gap-4 p-4 rounded-xl" style={{ background: 'var(--surface-secondary)' }}>
-              <span className="text-2xl">{icp.icon}</span>
+            {/* Section header */}
+            <div className="flex items-start gap-3 mb-8">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: `${concept.tagColor}18`, color: concept.tagColor }}>
+                {concept.icon}
+              </div>
               <div className="flex-1">
-                <div className="font-semibold text-sm text-neutral-900">{icp.role}</div>
-                <div className="text-xs text-neutral-500 mt-0.5">Cares about: {icp.concern}</div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                    {concept.label}
+                  </h2>
+                  <Tag color={concept.tagColor}>{concept.tag}</Tag>
+                </div>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{concept.summary}</p>
               </div>
-              <div className="text-xs text-right font-medium" style={{ color: 'var(--status-success)', maxWidth: '220px' }}>{icp.benefit}</div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* ── Port isolation ── */}
-      <div className="card p-5" style={{ borderLeft: '3px solid #FF7600' }}>
-        <h4 className="font-semibold text-sm mb-2" style={{ color: '#FF7600' }}>⚠️ Demo Port Isolation — Other Apps Untouched</h4>
-        <div className="grid grid-cols-3 gap-3 text-xs">
-          {[
-            { app: 'DDN RAG Demo v2', fe: '5174', be: '8000', color: '#807778' },
-            { app: 'DDN Semantic Search', fe: '5175', be: '8001', color: '#807778' },
-            { app: 'KV Cache Observatory ← YOU ARE HERE', fe: '5176', be: '8002', color: '#ED2738' },
-          ].map(a => (
-            <div key={a.app} className="p-3 rounded-lg" style={{ background: 'var(--surface-secondary)', border: `1px solid ${a.color}30` }}>
-              <div className="font-semibold mb-1" style={{ color: a.color, fontSize: '11px' }}>{a.app}</div>
-              <div style={{ color: 'var(--text-muted)' }}>FE: :{a.fe} · BE: :{a.be}</div>
-            </div>
-          ))}
-        </div>
+            {renderSection(active)}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )
