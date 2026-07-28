@@ -30,15 +30,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TalkingPoint({ icon, title, body }: { icon: string; title: string; body: string }) {
+function TalkingPoint({ icon: _icon, title, body }: { icon: string; title: string; body: string }) {
   return (
-    <div className="flex gap-3 p-3 rounded-xl border"
+    <div className="p-3 rounded-xl border"
       style={{ background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}>
-      <span className="text-lg shrink-0 mt-0.5">{icon}</span>
-      <div>
-        <p className="text-xs font-semibold mb-0.5" style={{ color: 'var(--text-primary)' }}>{title}</p>
-        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{body}</p>
-      </div>
+      <p className="text-xs font-semibold mb-0.5" style={{ color: 'var(--text-primary)' }}>{title}</p>
+      <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{body}</p>
     </div>
   )
 }
