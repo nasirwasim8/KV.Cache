@@ -58,21 +58,27 @@ class OllamaClient:
             return {"available": False, "error": str(e), "model_ready": False}
         return {"available": False, "model_ready": False}
 
-    def generate(self, prompt: str, context: Optional[list] = None) -> GenerateResult:
+    def generate(self, prompt: str, context: Optional[list] = None, num_ctx: Optional[int] = None) -> GenerateResult:
         """
         Generate a response using Ollama.
         
         If context (KV state) is provided, Ollama reuses it — real KV cache!
         This is the key mechanism: fewer tokens processed when context is reused.
+        num_ctx: override Ollama's default context window (8192). Set to 32768 or higher
+                 for large enterprise system prompts that would otherwise be truncated.
         """
+        options: dict = {
+            "temperature": 0.1,
+            "num_predict": 256,
+        }
+        if num_ctx is not None:
+            options["num_ctx"] = num_ctx
+
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": True,
-            "options": {
-                "temperature": 0.1,
-                "num_predict": 256,
-            }
+            "options": options,
         }
         if context:
             payload["context"] = context  # Real KV state from Infinia!
