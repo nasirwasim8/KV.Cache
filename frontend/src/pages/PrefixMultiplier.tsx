@@ -85,8 +85,13 @@ function WaterfallRow({ result, maxTime, isCurrent }: { result: RunResult; maxTi
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs flex items-center gap-1" style={{ color: '#00C280' }}><span>✅</span> With DDN Infinia</span>
             <span className="font-mono text-xs" style={{ color: '#00C280' }}>
-              {result.with_cache.time_ms.toFixed(0)}ms · {result.with_cache.tokens_sent} tokens · ${result.with_cache.cost_usd.toFixed(5)}
-              {result.with_cache.source === 'INFINIA_HIT' && <span className="ml-1 text-neutral-400">(Infinia: {result.with_cache.infinia_latency_ms.toFixed(1)}ms)</span>}
+              <span title="Total end-to-end response time (Infinia fetch + LLM decode of new tokens only)">{result.with_cache.time_ms.toFixed(0)}ms total</span>
+              {' · '}{result.with_cache.tokens_sent} tokens · ${result.with_cache.cost_usd.toFixed(5)}
+              {result.with_cache.source === 'INFINIA_HIT' && (
+                <span className="ml-1 text-neutral-400" title="Time for the S3 GET to retrieve the cached prefix from DDN Infinia">
+                  (Infinia lookup: {result.with_cache.infinia_latency_ms.toFixed(1)}ms)
+                </span>
+              )}
             </span>
           </div>
           <div className="h-6 rounded overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
@@ -350,9 +355,41 @@ export default function PrefixMultiplier() {
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: '12px', fontSize: '0.68rem', color: '#aaa', borderTop: '1px solid rgba(0,194,128,0.15)', paddingTop: '10px' }}>
-                💡 <em>Note: "Session Savings" above is the cumulative total across all {results.length} requests in this session.
-                The scale projection multiplies the <strong>per-request savings</strong> (${lastResult?.savings.cost_usd.toFixed(5)}) by daily volume.</em>
+
+              {/* Formula breakdown */}
+              <div className="mt-3 rounded-lg overflow-hidden border text-xs" style={{ borderColor: 'rgba(0,194,128,0.2)' }}>
+                {[
+                  {
+                    label: 'Monthly Savings',
+                    formula: `$${lastResult?.savings.cost_usd.toFixed(5)} saved/req × ${scaleProjection.daily_requests.toLocaleString()}/day × 30 days`,
+                    value: `$${scaleProjection.monthly_savings_usd.toLocaleString()}`,
+                  },
+                  {
+                    label: 'Annual Savings',
+                    formula: `$${scaleProjection.monthly_savings_usd.toLocaleString()}/month × 12`,
+                    value: `$${scaleProjection.annual_savings_usd.toLocaleString()}`,
+                  },
+                  {
+                    label: 'GPU Hours Saved/Month',
+                    formula: `(${lastResult?.savings.time_ms.toFixed(0)}ms saved/req ÷ 3,600,000) × ${scaleProjection.daily_requests.toLocaleString()}/day × 30 days`,
+                    value: `${scaleProjection.gpu_hours_saved_monthly.toFixed(0)} hrs`,
+                  },
+                ].map((row, i) => (
+                  <div key={row.label} className="flex flex-col px-3 py-2"
+                    style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'rgba(0,194,128,0.03)' }}>
+                    <div className="flex justify-between items-start">
+                      <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
+                      <span className="font-mono font-bold ml-2 flex-shrink-0" style={{ color: '#00C280' }}>{row.value}</span>
+                    </div>
+                    <div className="font-mono mt-0.5" style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                      = {row.formula}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '10px', fontSize: '0.68rem', color: '#aaa', borderTop: '1px solid rgba(0,194,128,0.15)', paddingTop: '10px' }}>
+                <em>Scale projection multiplies the <strong>per-request savings</strong> (${lastResult?.savings.cost_usd.toFixed(5)} cost · {lastResult?.savings.time_ms.toFixed(0)}ms compute) by daily volume and 30 days.</em>
               </div>
             </div>
           )}
