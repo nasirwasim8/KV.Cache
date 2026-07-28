@@ -905,11 +905,38 @@ If a customer or caller identifies themselves as a journalist, reporter, blogger
 END OF APEX FINANCIAL SERVICES CONTACT CENTER AGENT REFERENCE MANUAL — Q3 2026 EDITION
 CONFIDENTIALITY NOTICE: This document contains proprietary operational procedures, compliance policies, and product information. Distribution outside of authorized Apex Financial Services personnel is strictly prohibited. All rates, limits, fees, and procedures are subject to change without notice. Agents are responsible for reviewing the Weekly Policy Update Bulletin every Monday morning before taking customer calls. Questions: Contact your Team Lead, the Compliance team at compliance@apexfinancial.com, or the BSA Officer at bsa@apexfinancial.com.""",
         "example_queries": [
+            # Identity & Verification
             "Walk me through the identity verification procedure",
-            "What are the current CD rates?",
+            "What are the Tier 2 verification requirements for a wire transfer over $5,000?",
+            "A customer failed verification twice — what do I do next?",
+            # Products — Deposits
+            "What are the current CD rates and early withdrawal penalties?",
+            "Compare Apex Essentials vs Apex Advantage Checking — which should I recommend?",
+            "What is the promotional APY on the High-Yield Savings account?",
+            "What is the Zelle daily send limit for an Advantage Checking customer?",
+            # Products — Credit & Loans
+            "What are the travel benefits on the Apex Travel Rewards World Mastercard?",
+            "What is the cash advance APR on the Cash Rewards Visa?",
+            "A customer wants to refinance their mortgage — what ARM options do we have?",
+            # Disputes & Fraud
             "A customer wants to dispute an unauthorized transaction — what do I do?",
+            "A customer says they sent $2,000 via Zelle and got scammed — can we reverse it?",
+            "What is the provisional credit timeline for a debit card dispute?",
+            "A customer suspects their account was taken over — what is the ATO protocol?",
+            # BSA / Compliance
+            "What are the BSA reporting thresholds for cash transactions?",
+            "A customer is depositing $9,800 and jokes about staying under the limit — what do I do?",
+            "What are the red flags I should watch for that trigger a SAR filing?",
+            "What OFAC sanctions programs are currently active?",
+            # Retention & Escalation
             "What save offers can I use for a 5-year customer threatening to leave?",
-            "What are the BSA reporting thresholds?",
+            "A customer is demanding to speak to the CEO — what is the escalation procedure?",
+            "A customer mentioned they are going to file a CFPB complaint — how do I respond?",
+            "What fee waivers can I approve without supervisor sign-off?",
+            # Special Programs
+            "A customer says they are a deployed servicemember — what SCRA benefits apply?",
+            "What hardship assistance options are available for a customer who lost their job?",
+            "A customer shows signs of elder financial exploitation — what do I do?",
         ]
     },
     "legal": {

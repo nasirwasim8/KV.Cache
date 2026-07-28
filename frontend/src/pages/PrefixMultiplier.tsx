@@ -113,6 +113,8 @@ export default function PrefixMultiplier() {
   const [scenarios, setScenarios] = useState<Record<string, ScenarioMeta>>({})
   const [activeScenario, setActiveScenario] = useState<string>('contact_center')
   const [seeded, setSeeded] = useState<Record<string, boolean>>({})
+  const [shuffledQueries, setShuffledQueries] = useState<string[]>([])
+  const CHIPS_SHOWN = 5
   const [seedInfo, setSeedInfo] = useState<Record<string, any>>({})
   const [seeding, setSeeding] = useState(false)
   const [running, setRunning] = useState(false)
@@ -138,9 +140,30 @@ export default function PrefixMultiplier() {
     } finally { setSeeding(false) }
   }
 
+  // Fisher-Yates shuffle
+  const shuffle = (arr: string[]) => {
+    const a = [...arr]
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
+  }
+
+  // Re-shuffle whenever the active scenario or its data changes
+  useEffect(() => {
+    const sc = scenarios[activeScenario]
+    if (sc) setShuffledQueries(shuffle(sc.example_queries))
+  }, [activeScenario, scenarios])
+
+  const reshuffle = () => {
+    const sc = scenarios[activeScenario]
+    if (sc) setShuffledQueries(shuffle(sc.example_queries))
+  }
+
   const handleRun = async () => {
     if (!scenario) return
-    const query = customQuery.trim() || scenario.example_queries[results.length % scenario.example_queries.length]
+    const query = customQuery.trim() || shuffledQueries[results.length % Math.max(1, shuffledQueries.length)]
     setRunning(true)
     try {
       const r = await kvApi.runPrefix(activeScenario, query, results.length + 1)
@@ -262,19 +285,38 @@ export default function PrefixMultiplier() {
           {/* Custom query input */}
           <div className="flex gap-3 mb-4">
             <input value={customQuery} onChange={e => setCustomQuery(e.target.value)}
-              placeholder={`Custom query (or leave blank for auto: "${scenario.example_queries[0]}")`}
+              placeholder={`Custom query (or leave blank for auto: "${shuffledQueries[0] ?? '…'}")`}
               className="input-field flex-1 text-sm" style={{ padding: '8px 12px' }} />
           </div>
 
-          {/* Example queries */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {scenario.example_queries.map(q => (
-              <button key={q} onClick={() => setCustomQuery(q)}
-                className="text-xs px-3 py-1 rounded-full border hover:border-[#ED2738] hover:text-[#ED2738] transition-all"
-                style={{ borderColor: 'var(--border-default)', color: 'var(--text-muted)', background: 'var(--surface-card)' }}>
-                {q}
+          {/* Example query chips */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                Quick questions — click to load
+              </span>
+              <button
+                onClick={reshuffle}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all hover:border-[#ED2738] hover:text-[#ED2738]"
+                style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-muted)', background: 'var(--surface-card)' }}
+                title="Randomise questions"
+              >
+                <RefreshCw className="w-3 h-3" /> Shuffle
               </button>
-            ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {shuffledQueries.slice(0, CHIPS_SHOWN).map(q => (
+                <button key={q} onClick={() => setCustomQuery(q)}
+                  className="text-xs px-3 py-1.5 rounded-full border transition-all hover:border-[#ED2738] hover:text-[#ED2738]"
+                  style={{
+                    borderColor: customQuery === q ? '#ED2738' : 'var(--border-default)',
+                    color: customQuery === q ? '#ED2738' : 'var(--text-muted)',
+                    background: customQuery === q ? 'rgba(237,39,56,0.05)' : 'var(--surface-card)',
+                  }}>
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Waterfall Results */}
