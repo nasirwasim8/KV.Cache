@@ -20,13 +20,13 @@ export const PRICING_TIERS: Record<PricingTier, {
   note: string
 }> = {
   self_hosted_h100: {
-    label: 'Self-hosted H100 (Llama)',
+    label: 'Self-hosted H100 — Llama (open source)',
     short: 'H100',
     color: '#00C280',
     input_per_1m: 0.70,
     output_per_1m: 2.80,
     cache_discount: 0.0,  // 100% FREE — skipped entirely
-    note: 'Cached tokens bypass GPU entirely. Zero recompute cost.',
+    note: 'Llama is free. These rates reflect H100 GPU compute cost amortized at ~$3/hr. Cached tokens skip the GPU entirely — zero compute cost.',
   },
   cloud_openai: {
     label: 'Cloud API — GPT-4o rates',

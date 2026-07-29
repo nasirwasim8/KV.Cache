@@ -357,6 +357,7 @@ export default function ChatObservatory() {
   const [loading, setLoading] = useState(false)
   const [demoMode, setDemoMode] = useState<'business' | 'technical'>('business')
   const [pricingTier, setPricingTier] = useState<PricingTier>('self_hosted_h100')
+  const [showCostMath, setShowCostMath] = useState(false)
   const [sessionId] = useState(() => `sess_${Date.now()}`)
   const [cumulativeSavings, setCumulativeSavings] = useState(0)
   const [totalHits, setTotalHits] = useState(0)
@@ -578,13 +579,87 @@ export default function ChatObservatory() {
         </div>
 
         {/* Pricing info pill */}
-        <div className="mt-3 flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--surface-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-          <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: PRICING_TIERS[pricingTier].color }} />
-          <span>
-            <strong style={{ color: PRICING_TIERS[pricingTier].color }}>{PRICING_TIERS[pricingTier].label}</strong>
-            {' '}— Billed <strong>${PRICING_TIERS[pricingTier].input_per_1m}/1M</strong> input + <strong>${PRICING_TIERS[pricingTier].output_per_1m}/1M</strong> output.
-            {' '}{PRICING_TIERS[pricingTier].note}
-          </span>
+        <div className="mt-3 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
+          {/* Main pill row */}
+          <div className="flex items-center gap-2 text-xs px-3 py-2" style={{ background: 'var(--surface-secondary)', color: 'var(--text-secondary)' }}>
+            <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: PRICING_TIERS[pricingTier].color }} />
+            <span className="flex-1">
+              <strong style={{ color: PRICING_TIERS[pricingTier].color }}>{PRICING_TIERS[pricingTier].label}</strong>
+              {pricingTier === 'self_hosted_h100'
+                ? <>{' '}— H100 compute cost: <strong>$0.70/1M</strong> input · <strong>$2.80/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
+                : <>{' '}— <strong>${PRICING_TIERS[pricingTier].input_per_1m}/1M</strong> input + <strong>${PRICING_TIERS[pricingTier].output_per_1m}/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
+              }
+            </span>
+            {pricingTier === 'self_hosted_h100' && (
+              <button
+                onClick={() => setShowCostMath(m => !m)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono transition-all"
+                style={{
+                  background: showCostMath ? 'rgba(0,194,128,0.15)' : 'rgba(0,194,128,0.06)',
+                  color: '#00C280',
+                  border: '1px solid rgba(0,194,128,0.3)',
+                }}
+                title="Show how these rates are derived from H100 hardware cost"
+              >
+                {showCostMath ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                {showCostMath ? 'Hide math' : 'How?'}
+              </button>
+            )}
+          </div>
+
+          {/* Expandable math breakdown — self-hosted H100 only */}
+          <AnimatePresence>
+            {showCostMath && pricingTier === 'self_hosted_h100' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div className="px-4 py-3 font-mono text-xs space-y-2"
+                  style={{ background: 'rgba(0,194,128,0.04)', borderTop: '1px solid rgba(0,194,128,0.15)', color: 'var(--text-secondary)' }}>
+
+                  <div className="text-xs font-semibold mb-2 font-sans" style={{ color: '#00C280', letterSpacing: '0.05em' }}>
+                    HOW THESE RATES ARE DERIVED — H100 HARDWARE COST ONLY (LLAMA IS FREE)
+                  </div>
+
+                  {/* Assumptions */}
+                  <div className="grid grid-cols-3 gap-x-6 gap-y-1 mb-3">
+                    {[
+                      ['H100 market rate', '~$3.00 / hr', 'cloud spot or on-prem amortized'],
+                      ['Input processing', '~1,500 tokens/s', 'Llama 3.x prefill on H100'],
+                      ['Output generation', '~400 tokens/s', 'autoregressive decode — slower'],
+                    ].map(([k, v, sub]) => (
+                      <div key={k}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{k}</div>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Input math */}
+                  <div className="rounded p-2" style={{ background: 'rgba(0,194,128,0.07)' }}>
+                    <div style={{ color: '#00C280', fontWeight: 700, marginBottom: '4px' }}>INPUT COST</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>1,000,000 tokens ÷ 1,500 tok/s = 667 seconds = 0.185 H100-hours</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>0.185 × $3.00 = $0.56 ≈ <strong style={{ color: '#00C280' }}>$0.70 / 1M</strong> <span style={{ color: 'var(--text-muted)' }}>(+overhead & thermal margin)</span></div>
+                  </div>
+
+                  {/* Output math */}
+                  <div className="rounded p-2" style={{ background: 'rgba(0,194,128,0.07)' }}>
+                    <div style={{ color: '#00C280', fontWeight: 700, marginBottom: '4px' }}>OUTPUT COST</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>1,000,000 tokens ÷ 400 tok/s = 2,500 seconds = 0.69 H100-hours</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>0.69 × $3.00 = $2.08 ≈ <strong style={{ color: '#00C280' }}>$2.80 / 1M</strong> <span style={{ color: 'var(--text-muted)' }}>(+overhead & thermal margin)</span></div>
+                  </div>
+
+                  <div className="text-xs font-sans pt-1" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(0,194,128,0.1)', paddingTop: '6px' }}>
+                    ✅ With DDN Infinia KV cache, cached input tokens skip prefill entirely — <strong style={{ color: '#00C280' }}>zero GPU time, zero cost</strong>. You only pay for new question tokens and the output.
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
