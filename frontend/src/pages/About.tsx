@@ -112,7 +112,7 @@ function KVMechanicsDetail() {
     },
     {
       n: 4, label: 'DECODE — Output Generation', who: 'GPU (sequential, always runs)', color: '#76B900',
-      icon: <MessageSquare className="w-4 h-4" />,
+      icon: <BookOpen className="w-4 h-4" />,
       detail: 'Output tokens are generated one at a time, each attending to all previous K/V pairs. This phase is inherently sequential and cannot be parallelised (autoregressive). KV Cache does NOT accelerate decode — it only eliminates the prefill cost. Decode speed is the same with or without caching.',
     },
   ]
@@ -320,13 +320,13 @@ function MultiTurnDetail() {
 
 function SessionResumeDetail() {
   const STAGES_WITHOUT = [
-    { n: 1, label: 'User sends Turn 1–3', who: 'GPU HBM', color: '#807778', icon: <MessageSquare className="w-4 h-4" />, detail: 'GPU computes normally. KV state lives in GPU HBM (High-Bandwidth Memory). Everything is fast while the session is active and memory is available.' },
+    { n: 1, label: 'User sends Turn 1–3', who: 'GPU HBM', color: '#807778', icon: <ArrowRight className="w-4 h-4" />, detail: 'GPU computes normally. KV state lives in GPU HBM (High-Bandwidth Memory). Everything is fast while the session is active and memory is available.' },
     { n: 2, label: 'GPU serves 1,000 other users', who: 'Memory pressure event', color: '#ED2738', icon: <AlertTriangle className="w-4 h-4" />, detail: 'The GPU is serving thousands of concurrent sessions. Under memory pressure, the LRU eviction policy removes older KV states to free VRAM for active sessions. Your conversation state is silently deleted from GPU memory.' },
     { n: 3, label: 'User returns and asks Turn 4', who: 'GPU re-computes everything', color: '#ED2738', icon: <Zap className="w-4 h-4" />, detail: 'Without external storage, the entire conversation history (Turns 1–3 + all system prompts) must be re-processed from scratch. This can be 10,000+ tokens = 3–8 seconds of wasted GPU time. The user experiences a degraded, slow response. This happens silently — the user has no idea why.' },
   ]
 
   const STAGES_WITH = [
-    { n: 1, label: 'User sends Turn 1–3', who: 'GPU HBM + Infinia', color: '#807778', icon: <MessageSquare className="w-4 h-4" />, detail: 'Same as without — GPU computes normally. But every KV state is also persisted to DDN Infinia as a background S3 PUT. The user never sees this latency overhead.' },
+    { n: 1, label: 'User sends Turn 1–3', who: 'GPU HBM + Infinia', color: '#807778', icon: <ArrowRight className="w-4 h-4" />, detail: 'Same as without — GPU computes normally. But every KV state is also persisted to DDN Infinia as a background S3 PUT. The user never sees this latency overhead.' },
     { n: 2, label: 'GPU eviction event', who: 'Safe eviction', color: '#00C280', icon: <Shield className="w-4 h-4" />, detail: 'GPU evicts the session from HBM as before. But before eviction, the full KV state was already safely written to Infinia. The GPU simply notes: "session state is in Infinia" and frees the VRAM.' },
     { n: 3, label: 'User returns — KV loaded from Infinia', who: 'S3 GET ~50ms', color: '#00C280', icon: <HardDrive className="w-4 h-4" />, detail: 'When the user sends Turn 4, the backend detects the session is not in GPU HBM. It fetches the KV state from Infinia (real S3 GET, ~50ms). The GPU resumes exactly where it left off — no recomputation. Turn 4 only processes the new question.' },
   ]
