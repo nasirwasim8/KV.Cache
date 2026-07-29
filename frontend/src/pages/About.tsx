@@ -388,17 +388,6 @@ function SessionResumeDetail() {
         </div>
       </div>
 
-      {/* Analogy */}
-      <div className="p-4 rounded-xl" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.2)' }}>
-        <div className="text-xs font-bold mb-1" style={{ color: '#1A81AF' }}>💡 Plain-English Analogy</div>
-        <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-          Think of the GPU like a <strong>busy doctor's short-term memory</strong>. After seeing 50 patients, the
-          doctor can't recall patient #1's earlier visit. Without Infinia, that patient re-tells their full history
-          from scratch. <strong>With Infinia, the notes are stored externally</strong> — retrieved in seconds so the
-          conversation picks up exactly where it left off.
-        </div>
-      </div>
-
       {/* Talking points */}
       <div>
         <SectionTitle><Shield className="w-4 h-4" style={{ color: '#00C280' }} /> Executive Highlights</SectionTitle>
