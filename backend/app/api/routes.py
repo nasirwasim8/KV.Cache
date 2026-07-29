@@ -2313,10 +2313,11 @@ async def chat_send(req: ChatRequest):
         history_text += f"\nUser: {turn['user']}\nAssistant: {turn['assistant']}\n"
     full_prompt = history_text.strip() + (f"\nUser: {req.message}" if history_text else req.message)
 
-    # ── KEY FIX: Cache key = message ONLY (not history)
-    # This means: ask "What is Infinia?" on turn 1 → MISS → stored
-    #             ask "What is Infinia?" on turn 2 → HIT → served from Infinia instantly
-    # This reflects real enterprise KV cache: same query = same cache hit for ALL users
+    # ── Cache key = normalized message (not history, not exact string)
+    # Normalization strips question words, punctuation, casing — so:
+    #   "What is the cost benefit of prefix caching?" == "cost benefit of prefix caching"
+    # This reflects real enterprise KV cache: semantically same query = same cache hit
+    normalized_query = kv_cache.normalize_query(req.message)
     cache_key = kv_cache.compute_key([], req.message)
 
     # ── Check Infinia Cache FIRST (right panel) ──────────────────────────
@@ -2464,7 +2465,8 @@ async def chat_send(req: ChatRequest):
         },
         "session_stats": {
             "turns": len(session["history"]),
-        }
+        },
+        "normalized_query": normalized_query,   # what the cache key was actually matched on
     }
 
 

@@ -52,6 +52,7 @@ interface Turn {
   response: string
   timestamp: number
   cacheHit: boolean
+  normalizedQuery?: string
   left: PanelMetrics
   right: PanelMetrics
   savings: { cost_usd: number; pct: number; speedup_x: number; tokens_saved: number }
@@ -251,8 +252,18 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
         style={{ borderColor: 'var(--border-subtle)' }}
       >
         {/* User message */}
-        <div className="flex justify-end p-3">
+        <div className="flex justify-end p-3 flex-col items-end gap-1">
           <div className="chat-bubble-user">{turn.userMessage}</div>
+          {/* Normalized query pill — only shown when normalization changed the string */}
+          {turn.cacheHit && turn.normalizedQuery &&
+           turn.normalizedQuery.toLowerCase() !== turn.userMessage.toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim() && (
+            <div className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(0,194,128,0.1)', color: '#00C280', border: '1px solid rgba(0,194,128,0.25)', fontSize: '10px' }}
+              title="Query was normalized before cache lookup — minor phrasing differences resolve to the same key">
+              <Zap className="w-2.5 h-2.5" />
+              matched as: &ldquo;{turn.normalizedQuery}&rdquo;
+            </div>
+          )}
         </div>
 
         {/* Side-by-side panels */}
@@ -385,6 +396,7 @@ export default function ChatObservatory() {
       const turn: Turn = {
         id: `t${Date.now()}`, userMessage: msg, response: result.response,
         timestamp: Date.now(), cacheHit: result.cache_hit,
+        normalizedQuery: (result as any).normalized_query,
         left: result.left, right: result.right, savings: result.savings,
         pricing: result.pricing,
         infinia_object: (result as any).infinia_object,

@@ -4,6 +4,7 @@ Stores and retrieves KV cache entries (conversation context) from DDN Infinia Ob
 This is the REAL thing: actual S3 GET/PUT to Infinia, with real latency measured.
 """
 import json
+import re
 import time
 import hashlib
 import logging
@@ -52,9 +53,49 @@ class InfiniaKVCacheManager:
         self._client = None
 
     @staticmethod
+    def normalize_query(query: str) -> str:
+        """
+        Normalize a query before hashing so minor variations produce the same cache key.
+
+        Handles:
+          - Leading question words:  "What is X" → "X"
+          - Punctuation:             "X?" → "X"
+          - Extra whitespace / case: "  X  " → "x"
+          - Common filler prefixes:  "please explain X", "can you tell me about X"
+
+        Examples that ALL resolve to the same key:
+          "What is the cost benefit of prefix caching?"
+          "what is cost benefit of prefix caching"
+          "cost benefit of prefix caching"
+          "cost benefit of prefix caching?"
+        """
+        q = query.strip().lower()
+        # Strip leading question / filler phrases (order matters — longest first)
+        filler_patterns = [
+            r'^(please\s+)?(can\s+you\s+)?(explain|describe|tell\s+me\s+(about|how|why|what))\s+',
+            r'^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are)\s+',
+            r'^(how\s+do(?:es)?|how\s+can|how\s+would)\s+',
+            r'^(why\s+is|why\s+does|why\s+would)\s+',
+            r'^(is\s+there|are\s+there|does\s+it|do\s+they)\s+',
+            r'^(please|kindly)\s+',
+        ]
+        for pat in filler_patterns:
+            q = re.sub(pat, '', q)
+        # Remove all punctuation
+        q = re.sub(r'[^\w\s]', '', q)
+        # Collapse multiple whitespace
+        q = re.sub(r'\s+', ' ', q).strip()
+        return q
+
+    @staticmethod
     def compute_key(messages: list, query: str) -> str:
-        """SHA-256 hash of conversation context + query."""
-        content = json.dumps(messages, sort_keys=True) + "|||" + query
+        """
+        SHA-256 hash of normalized query.
+        Normalization ensures minor phrasing variations (punctuation, leading question
+        words, capitalisation) hit the same cache entry.
+        """
+        normalized = InfiniaKVCacheManager.normalize_query(query)
+        content = json.dumps(messages, sort_keys=True) + "|||" + normalized
         return hashlib.sha256(content.encode()).hexdigest()[:24]
 
     @staticmethod
