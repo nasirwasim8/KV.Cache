@@ -59,15 +59,16 @@ class InfiniaKVCacheManager:
 
         Handles:
           - Leading question words:  "What is X" → "X"
+          - Leading articles:        "the difference" → "difference"
           - Punctuation:             "X?" → "X"
           - Extra whitespace / case: "  X  " → "x"
           - Common filler prefixes:  "please explain X", "can you tell me about X"
 
         Examples that ALL resolve to the same key:
+          "Explain the difference between prefill and decode in LLM inference"
+          "Difference between prefill and decode in LLM inference"
           "What is the cost benefit of prefix caching?"
-          "what is cost benefit of prefix caching"
           "cost benefit of prefix caching"
-          "cost benefit of prefix caching?"
         """
         q = query.strip().lower()
         # Strip leading question / filler phrases (order matters — longest first)
@@ -81,6 +82,9 @@ class InfiniaKVCacheManager:
         ]
         for pat in filler_patterns:
             q = re.sub(pat, '', q)
+        # Strip leading articles left behind after filler removal
+        # e.g. "explain the difference" → strip "explain " → "the difference" → strip "the " → "difference"
+        q = re.sub(r'^(the|a|an)\s+', '', q)
         # Remove all punctuation
         q = re.sub(r'[^\w\s]', '', q)
         # Collapse multiple whitespace
