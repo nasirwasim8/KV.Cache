@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, ChevronRight, CheckCircle, Zap, Database, Server,
   MemoryStick, Users, Layers, ArrowRight, AlertTriangle, HardDrive,
-  MessageSquare, TrendingDown, Shield
+  TrendingDown, Shield
 } from 'lucide-react'
 
 // ─── Shared sub-components (mirrors RAG/VSS Details pattern) ──────────────────
@@ -169,7 +169,7 @@ function KVMechanicsDetail() {
 
       {/* Talking points */}
       <div>
-        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <SectionTitle><Zap className="w-4 h-4" style={{ color: '#00C280' }} /> Why This Matters</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <TalkingPoint icon="⚡" title="Only prefill is expensive" body="Output generation always runs sequentially regardless of caching. The entire value of KV Cache is in eliminating the parallel prefill recomputation." />
           <TalkingPoint icon="🔑" title="K and V are what's stored" body="Not the full model weights, not the output — just the intermediate attention matrices for the input tokens. These are the exact values the GPU would have recomputed." />
@@ -302,7 +302,7 @@ function MultiTurnDetail() {
 
       {/* Talking points */}
       <div>
-        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <SectionTitle><CheckCircle className="w-4 h-4" style={{ color: '#00C280' }} /> Key Insights</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <TalkingPoint icon="📉" title="The leaking bucket analogy" body="Without caching, every turn sends the entire conversation history to the GPU. Token count grows with every message — so does cost and latency." />
           <TalkingPoint icon="📏" title="The flat line with Infinia" body="With caching, each turn only sends the new question. Token count stays constant regardless of conversation length." />
@@ -401,7 +401,7 @@ function SessionResumeDetail() {
 
       {/* Talking points */}
       <div>
-        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <SectionTitle><Shield className="w-4 h-4" style={{ color: '#00C280' }} /> Executive Highlights</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <TalkingPoint icon="🧠" title="GPU HBM is the bottleneck" body="High-Bandwidth Memory on an H100 is ~80GB — shared between model weights, KV cache, and activations. In multi-user serving, KV cache competes with model weights for the same VRAM pool." />
           <TalkingPoint icon="🔄" title="Eviction is silent and constant" body="Under typical production load, KV eviction happens continuously. Users don't see an error — they just get a slow response as the GPU recomputes from scratch." />
@@ -488,7 +488,7 @@ function StorageComparisonDetail() {
 
       {/* Talking points */}
       <div>
-        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Talking Points</SectionTitle>
+        <SectionTitle><Database className="w-4 h-4" style={{ color: '#00C280' }} /> The Business Case</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <TalkingPoint icon="⚡" title="70ms vs 4,000ms" body="The Infinia read overhead is 70ms. The prefill cost it avoids is 4,000–8,000ms. The tradeoff is 57× in your favour on every cache hit." />
           <TalkingPoint icon="🔗" title="Cross-GPU sharing is the key" body="GPU VRAM can't be shared between nodes. Infinia is a shared object store — any GPU in the cluster can serve any user's session without recomputation." />
@@ -593,7 +593,7 @@ function ICPDetail() {
 
       {/* Talking points */}
       <div>
-        <SectionTitle><MessageSquare className="w-4 h-4" style={{ color: '#00C280' }} /> Universal Talking Points</SectionTitle>
+        <SectionTitle><ArrowRight className="w-4 h-4" style={{ color: '#00C280' }} /> Core Messaging</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <TalkingPoint icon="🎯" title="Lead with useful tokens/second" body="Not tokens/second — useful tokens/second. How much of your GPU's compute is generating new value vs re-reading context it already knows? That ratio is determined by your data architecture." />
           <TalkingPoint icon="📊" title="Everything in this demo is live" body="Real S3 GET/PUT to DDN Infinia. Real Ollama inference. Real latency measurement. Every number on screen is measured — not simulated, not estimated." />
