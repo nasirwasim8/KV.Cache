@@ -497,13 +497,37 @@ export default function ChatObservatory() {
   const hitRate = turns.length > 0 ? Math.round((totalHits / turns.length) * 100) : 0
   const totalTokensSaved = turns.reduce((a, t) => a + (t.savings?.tokens_saved || 0), 0)
 
-  const DEMO_QUESTIONS = [
+  // ── Question bank — 15 questions, 5 shown at a time (shuffled) ────────────
+  const ALL_DEMO_QUESTIONS = [
     'What is DDN Infinia?',
     'Explain KV cache in LLMs',
     'How does Infinia compare to storing KV cache in RAM?',
     'What is the cost benefit of prefix caching?',
     'Summarize the key benefits for enterprise AI',
+    'How does GPU memory eviction affect AI inference?',
+    'What happens when KV cache is stored on NVMe vs object storage?',
+    'Explain the difference between prefill and decode in LLM inference',
+    'Why does token count matter for GPU compute cost?',
+    'How does DDN Infinia handle concurrent AI sessions?',
+    'What is time-to-first-token and why does it matter?',
+    'How does prefix caching reduce inference cost at scale?',
+    'What is the latency overhead of retrieving KV cache from Infinia?',
+    'How does caching help with multi-tenant AI deployments?',
+    'What makes DDN Infinia better than Redis for KV cache storage?',
   ]
+
+  const shuffle = (arr: string[]) => {
+    const a = [...arr]
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
+  }
+
+  const [shuffledQuestions, setShuffledQuestions] = useState<string[]>(() => shuffle(ALL_DEMO_QUESTIONS).slice(0, 5))
+
+  const reshuffleQuestions = () => setShuffledQuestions(shuffle(ALL_DEMO_QUESTIONS).slice(0, 5))
 
   return (
     <div className="space-y-6">
@@ -738,15 +762,22 @@ export default function ChatObservatory() {
             <p className="text-sm text-neutral-500 max-w-md mx-auto">
               First question → MISS (stored in Infinia). Ask <strong>same question again</strong> → HIT (instantly retrieved). The Infinia Object Inspector shows exactly what was stored.
             </p>
-            <div className="flex flex-wrap gap-2 justify-center mt-4">
-              {DEMO_QUESTIONS.map(q => (
+            <div className="flex flex-wrap gap-2 justify-center mt-2">
+              {shuffledQuestions.map(q => (
                 <button key={q} onClick={() => setInput(q)}
-                  className="px-3 py-1.5 rounded-full text-xs border font-medium hover:border-ddn-red hover:text-ddn-red transition-colors"
+                  className="px-3 py-1.5 rounded-full text-xs border font-medium transition-all hover:border-ddn-red hover:text-ddn-red"
                   style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>
                   {q}
                 </button>
               ))}
             </div>
+            <button
+              onClick={reshuffleQuestions}
+              className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:opacity-80"
+              style={{ background: 'rgba(237,39,56,0.07)', color: '#ED2738', border: '1px solid rgba(237,39,56,0.25)' }}
+            >
+              <RotateCcw className="w-3 h-3" /> Shuffle questions
+            </button>
           </div>
         ) : (
           turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} />)
