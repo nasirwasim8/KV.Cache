@@ -73,8 +73,8 @@ class InfiniaKVCacheManager:
         q = query.strip().lower()
         # Strip leading question / filler phrases (order matters — longest first)
         filler_patterns = [
-            r'^(please\s+)?(can\s+you\s+)?(explain|describe|tell\s+me\s+(about|how|why|what))\s+',
-            r'^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are)\s+',
+            r'^(please\s+)?(can\s+you\s+)?(explain|describe|summarize|summarise|tell\s+me\s+(about|how|why|what))\s+',
+            r'^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are|what\s+makes|what\s+happens\s+when|what\s+happens)\s+',
             r'^(how\s+do(?:es)?|how\s+can|how\s+would)\s+',
             r'^(why\s+is|why\s+does|why\s+would)\s+',
             r'^(is\s+there|are\s+there|does\s+it|do\s+they)\s+',
@@ -85,7 +85,10 @@ class InfiniaKVCacheManager:
         # Strip leading articles left behind after filler removal
         # e.g. "explain the difference" → strip "explain " → "the difference" → strip "the " → "difference"
         q = re.sub(r'^(the|a|an)\s+', '', q)
-        # Remove all punctuation
+        # Replace hyphens with spaces so compound words match their spaced equivalents
+        # e.g. "time-to-first-token" == "time to first token", "multi-tenant" == "multi tenant"
+        q = q.replace('-', ' ')
+        # Remove all remaining punctuation
         q = re.sub(r'[^\w\s]', '', q)
         # Collapse multiple whitespace
         q = re.sub(r'\s+', ' ', q).strip()
