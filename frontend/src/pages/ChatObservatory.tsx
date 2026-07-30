@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react'
-import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash, RotateCcw, TrendingUp } from 'lucide-react'
+import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash, RotateCcw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { kvApi, ChatResponse, PanelMetrics, PricingTier, PRICING_TIERS } from '../services/api'
@@ -248,14 +248,9 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
   const newTokens     = turn.right?.tokens_sent ?? 0
   const savedTokens   = turn.savings?.tokens_saved ?? 0
   const cachedPct     = totalTokens > 0 ? Math.round((savedTokens / totalTokens) * 100) : 0
-  const savingPerReq  = turn.savings?.cost_usd ?? 0
   const speedup       = turn.savings?.speedup_x ?? 1
   // Auto-callout: TTFT improvement is modest (<2x) but token savings are large (>80%)
   const ttftNotStory  = isHit && speedup < 2 && cachedPct > 80
-
-  // At-scale projections from actual per-request savings
-  const proj = (reqs: number, days: number) =>
-    savingPerReq > 0 ? `$${(savingPerReq * reqs * days).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'
 
   return (
     <TurnErrorBoundary>
@@ -410,7 +405,7 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                   transition={{ duration: 0.22 }}
                   style={{ overflow: 'hidden' }}
                 >
-                  <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div className="px-4 pb-4 pt-1">
 
                     {/* ── Idea 2: Auto-callout explanation (full) ── */}
                     {ttftNotStory && (
@@ -426,100 +421,6 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                         </div>
                       </div>
                     )}
-
-                    {/* ── Idea 3: At-Scale Projection with real-world scenario ── */}
-                    {(() => {
-                      // Vivid real-world scenarios — cycles across turns so each hit tells a different story
-                      const scenarios = [
-                        {
-                          icon: '📞',
-                          industry: 'Contact Center AI',
-                          color: '#ED2738',
-                          bg: 'rgba(237,39,56,0.05)',
-                          border: 'rgba(237,39,56,0.15)',
-                          scene: '500 agents. Monday morning shift. Every agent asks the AI the same opening question before their first call — current promotions, refund policy, escalation rules.',
-                          punchline: 'Without Infinia: that question recomputes 500 times. With Infinia: computed once, cached, served to all 500 agents in milliseconds.',
-                          anchor: '500 agents × 500 queries/day = 250,000 req/day',
-                        },
-                        {
-                          icon: '⚖️',
-                          industry: 'Legal Document AI',
-                          color: '#1A81AF',
-                          bg: 'rgba(26,129,175,0.05)',
-                          border: 'rgba(26,129,175,0.15)',
-                          scene: '80 paralegals at a law firm. Same 400-page merger agreement. Each paralegal queries the AI multiple times per day — clause interpretation, liability exposure, precedent lookup.',
-                          punchline: 'Without Infinia: every paralegal\'s query re-reads the entire 400 pages. With Infinia: the document is ingested once and shared across the entire team, all day.',
-                          anchor: '80 paralegals × 125 queries/day = 10,000 req/day',
-                        },
-                        {
-                          icon: '🏥',
-                          industry: 'Clinical Decision AI',
-                          color: '#00C280',
-                          bg: 'rgba(0,194,128,0.05)',
-                          border: 'rgba(0,194,128,0.15)',
-                          scene: '200 nurses. Same clinical protocol. Before every patient round, staff query the AI for drug interaction checks, dosage thresholds, and allergy contraindications.',
-                          punchline: 'Without Infinia: the entire clinical knowledge base is re-read for every nurse, every shift. With Infinia: one computation, shared hospital-wide.',
-                          anchor: '200 nurses × 5 shifts/day × 1,000 hospitals = 1M+ req/day',
-                        },
-                        {
-                          icon: '🏦',
-                          industry: 'Financial Analyst AI',
-                          color: '#f59e0b',
-                          bg: 'rgba(245,158,11,0.05)',
-                          border: 'rgba(245,158,11,0.15)',
-                          scene: '150 analysts. Same earnings report. Each analyst queries the AI throughout the trading day — risk exposure, regulatory flags, peer comparisons — all against the same 200-page document.',
-                          punchline: 'Without Infinia: $0.014 per query × 150 analysts × 100 queries/day = $210 per day, per report. With Infinia: pay once, serve all.',
-                          anchor: '150 analysts × 100 queries/day = 15,000 req/day',
-                        },
-                      ]
-                      const s = scenarios[idx % scenarios.length]
-                      return (
-                        <div className="rounded-xl p-3" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
-                          {/* Header */}
-                          <div className="flex items-center gap-1.5 mb-3">
-                            <TrendingUp className="w-3.5 h-3.5" style={{ color: '#00C280' }} />
-                            <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>At Scale — Savings From This Query Pattern</span>
-                          </div>
-
-                          {/* Real-world scenario block */}
-                          <div className="rounded-lg p-3 mb-3" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                              <span className="text-sm">{s.icon}</span>
-                              <span className="text-xs font-bold" style={{ color: s.color }}>{s.industry}</span>
-                            </div>
-                            <p className="text-xs leading-relaxed mb-2" style={{ color: 'var(--text-secondary)' }}>
-                              {s.scene}
-                            </p>
-                            <p className="text-xs leading-relaxed font-medium" style={{ color: 'var(--text-primary)' }}>
-                              {s.punchline}
-                            </p>
-                            <div className="mt-2 text-xs opacity-60" style={{ color: s.color }}>
-                              ↳ {s.anchor}
-                            </div>
-                          </div>
-
-                          {/* Scale rows */}
-                          <div className="space-y-2">
-                            {[
-                              { label: '1,000 req / day',    daily: proj(1_000, 1),   monthly: proj(1_000, 30)   },
-                              { label: '10,000 req / day',   daily: proj(10_000, 1),  monthly: proj(10_000, 30)  },
-                              { label: '250,000 req / day',  daily: proj(250_000, 1), monthly: proj(250_000, 30) },
-                            ].map(row => (
-                              <div key={row.label} className="flex items-center justify-between text-xs">
-                                <span style={{ color: 'var(--text-muted)' }}>{row.label}</span>
-                                <div className="flex gap-3">
-                                  <span style={{ color: 'var(--text-secondary)' }}>{row.daily}<span className="opacity-50">/day</span></span>
-                                  <span className="font-semibold" style={{ color: '#00C280' }}>{row.monthly}<span className="opacity-60 font-normal">/mo</span></span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-2 pt-2 text-xs" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
-                            Based on ${n(savingPerReq, 6)} saved per request · current pricing tier
-                          </div>
-                        </div>
-                      )
-                    })()}
 
                     {/* ── Idea 6: Token Breakdown Table ── */}
                     <div className="rounded-xl p-3" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
