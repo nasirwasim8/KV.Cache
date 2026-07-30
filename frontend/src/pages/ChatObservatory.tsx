@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react'
-import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash, RotateCcw } from 'lucide-react'
+import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Download, ChevronDown, ChevronUp, DollarSign, Hash, RotateCcw, TrendingUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { kvApi, ChatResponse, PanelMetrics, PricingTier, PRICING_TIERS } from '../services/api'
@@ -241,6 +241,21 @@ function PanelHeader({ title, subtitle, isCache, source, latency }: {
 function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
   const isHit  = turn.right?.source === 'INFINIA_CACHE'
   const isMiss = turn.right?.source === 'FIRST_MISS_STORED'
+  const [expanded, setExpanded] = useState(false)
+
+  // Derived values for business insights (only meaningful on cache hit)
+  const totalTokens   = turn.left?.tokens_sent ?? 0
+  const newTokens     = turn.right?.tokens_sent ?? 0
+  const savedTokens   = turn.savings?.tokens_saved ?? 0
+  const cachedPct     = totalTokens > 0 ? Math.round((savedTokens / totalTokens) * 100) : 0
+  const savingPerReq  = turn.savings?.cost_usd ?? 0
+  const speedup       = turn.savings?.speedup_x ?? 1
+  // Auto-callout: TTFT improvement is modest (<2x) but token savings are large (>80%)
+  const ttftNotStory  = isHit && speedup < 2 && cachedPct > 80
+
+  // At-scale projections from actual per-request savings
+  const proj = (reqs: number, days: number) =>
+    savingPerReq > 0 ? `$${(savingPerReq * reqs * days).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'
 
   return (
     <TurnErrorBoundary>
@@ -254,12 +269,11 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
         {/* User message */}
         <div className="flex justify-end p-3 flex-col items-end gap-1">
           <div className="chat-bubble-user">{turn.userMessage}</div>
-          {/* Normalized query pill — only shown when normalization changed the string */}
           {turn.cacheHit && turn.normalizedQuery &&
            turn.normalizedQuery.toLowerCase() !== turn.userMessage.toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim() && (
-            <div className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full"
               style={{ background: 'rgba(0,194,128,0.1)', color: '#00C280', border: '1px solid rgba(0,194,128,0.25)', fontSize: '10px' }}
-              title="Query was normalized before cache lookup — minor phrasing differences resolve to the same key">
+              title="Query was normalized before cache lookup">
               <Zap className="w-2.5 h-2.5" />
               matched as: &ldquo;{turn.normalizedQuery}&rdquo;
             </div>
@@ -296,17 +310,13 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
             <PanelHeader
               title="DDN Infinia Cache"
               subtitle={isHit ? 'Served from Infinia Object Store' : isMiss ? 'First compute → stored in Infinia' : 'KV state from object store'}
-              isCache={true}
-              source={turn.right?.source}
-              latency={turn.right?.infinia_latency_ms}
+              isCache={true} source={turn.right?.source} latency={turn.right?.infinia_latency_ms}
             />
             <div className="p-3">
               <div className="chat-bubble-ai text-xs leading-relaxed mb-3">{turn.response}</div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
-                  <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
-                    {n(turn.right?.ttft_ms)}ms
-                  </div>
+                  <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>{n(turn.right?.ttft_ms)}ms</div>
                   <div className="metric-label" style={{ fontSize: '9px' }}>TTFT</div>
                 </div>
                 <div className="metric-card p-2" style={isHit ? { background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.2)' } : {}}>
@@ -322,22 +332,6 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                   <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
                 </div>
               </div>
-
-              {/* Cache HIT summary bar */}
-              {isHit && (
-                <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs font-semibold" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
-                  <Database className="w-3 h-3 flex-shrink-0" />
-                  {n(turn.right?.infinia_latency_ms)}ms S3 GET
-                  <span className="mx-1 opacity-40">·</span>
-                  {turn.savings?.speedup_x ?? '—'}× faster
-                  <span className="mx-1 opacity-40">·</span>
-                  {n(turn.savings?.pct)}% cheaper
-                  <span className="mx-1 opacity-40">·</span>
-                  {turn.savings?.tokens_saved ?? 0} tokens saved
-                </div>
-              )}
-
-              {/* First MISS hint */}
               {isMiss && (
                 <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs" style={{ background: 'rgba(26,129,175,0.08)', color: '#1A81AF' }}>
                   <Database className="w-3 h-3 flex-shrink-0" />
@@ -347,14 +341,164 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                   )}
                 </div>
               )}
-
-              {/* Infinia Object Inspector */}
-              {turn.infinia_object && (
-                <InfiniaObjectCard obj={turn.infinia_object} />
-              )}
+              {turn.infinia_object && <InfiniaObjectCard obj={turn.infinia_object} />}
             </div>
           </div>
         </div>
+
+        {/* ── BUSINESS INSIGHTS BAR (cache hit only) ─────────────────────────── */}
+        {isHit && (
+          <div style={{ background: 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
+
+            {/* ── COMPACT ROW — always visible ── */}
+            <div className="px-4 py-2 flex items-center gap-3 flex-wrap">
+
+              {/* Token ratio bar */}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--text-muted)', fontSize: '10px' }}>GPU LOAD</span>
+                <div className="flex-1 h-3 rounded-full overflow-hidden flex" style={{ background: 'rgba(237,39,56,0.12)', minWidth: '80px' }}
+                  title={`${cachedPct}% of tokens bypassed GPU — only ${newTokens} new tokens processed`}>
+                  {/* Cached portion — green */}
+                  <div className="h-full transition-all duration-700 rounded-l-full"
+                    style={{ width: `${cachedPct}%`, background: 'linear-gradient(90deg, #00C280, #00a86b)' }} />
+                  {/* New tokens — red */}
+                  <div className="h-full"
+                    style={{ width: `${100 - cachedPct}%`, background: 'rgba(237,39,56,0.5)' }} />
+                </div>
+                <span className="text-xs font-bold whitespace-nowrap" style={{ color: '#00C280' }}>{cachedPct}% skipped</span>
+              </div>
+
+              {/* Key stat pills */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                  style={{ background: 'rgba(0,194,128,0.1)', color: '#00C280', border: '1px solid rgba(0,194,128,0.2)' }}>
+                  {savedTokens.toLocaleString()} tokens freed
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                  style={{ background: 'rgba(0,194,128,0.1)', color: '#00C280', border: '1px solid rgba(0,194,128,0.2)' }}>
+                  {n(turn.savings?.pct)}% cheaper
+                </span>
+                {/* Auto-callout: TTFT not the story */}
+                {ttftNotStory && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+                    style={{ background: 'rgba(245,158,11,0.1)', color: '#D97706', border: '1px solid rgba(245,158,11,0.25)' }}
+                    title="TTFT is similar here — token count and cost are the real savings story at scale">
+                    <Info className="w-3 h-3" /> TTFT ≠ full story
+                  </span>
+                )}
+              </div>
+
+              {/* Expand toggle */}
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="flex items-center gap-1 text-xs font-semibold flex-shrink-0 transition-all hover:opacity-80"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <TrendingUp className="w-3 h-3" />
+                {expanded ? 'Hide' : 'Details'}
+                {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </div>
+
+            {/* ── EXPANDED DETAILS ── */}
+            <AnimatePresence>
+              {expanded && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.22 }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+
+                    {/* ── Idea 2: Auto-callout explanation (full) ── */}
+                    {ttftNotStory && (
+                      <div className="md:col-span-2 rounded-xl p-3 flex items-start gap-3"
+                        style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#D97706' }} />
+                        <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                          <strong style={{ color: '#D97706' }}>TTFT looks similar — but that's not the metric that matters here.</strong>
+                          {' '}The GPU processed <strong>{newTokens.toLocaleString()} tokens</strong> on the right vs{' '}
+                          <strong>{totalTokens.toLocaleString()} tokens</strong> on the left.
+                          {' '}TTFT reflects output generation speed, which is identical either way.
+                          {' '}The business value is in <strong>what the GPU never had to compute</strong>: {savedTokens.toLocaleString()} tokens = {n(turn.savings?.pct)}% of the GPU's input work — eliminated entirely.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Idea 3: At-Scale Projection ── */}
+                    <div className="rounded-xl p-3" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <TrendingUp className="w-3.5 h-3.5" style={{ color: '#00C280' }} />
+                        <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>At Scale — Savings From This Query Pattern</span>
+                      </div>
+                      <div className="space-y-2">
+                        {[
+                          { label: '1,000 req / day',    daily: proj(1_000, 1),   monthly: proj(1_000, 30)   },
+                          { label: '10,000 req / day',   daily: proj(10_000, 1),  monthly: proj(10_000, 30)  },
+                          { label: '250,000 req / day',  daily: proj(250_000, 1), monthly: proj(250_000, 30) },
+                        ].map(row => (
+                          <div key={row.label} className="flex items-center justify-between text-xs">
+                            <span style={{ color: 'var(--text-muted)' }}>{row.label}</span>
+                            <div className="flex gap-3">
+                              <span style={{ color: 'var(--text-secondary)' }}>{row.daily}<span className="opacity-50">/day</span></span>
+                              <span className="font-semibold" style={{ color: '#00C280' }}>{row.monthly}<span className="opacity-60 font-normal">/mo</span></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 pt-2 text-xs" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
+                        Based on ${n(savingPerReq, 6)} saved per request · current pricing tier
+                      </div>
+                    </div>
+
+                    {/* ── Idea 6: Token Breakdown Table ── */}
+                    <div className="rounded-xl p-3" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <Database className="w-3.5 h-3.5" style={{ color: '#1A81AF' }} />
+                        <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>What the GPU Actually Saw</span>
+                      </div>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr style={{ color: 'var(--text-muted)' }}>
+                            <th className="text-left pb-1.5 font-medium">Component</th>
+                            <th className="text-right pb-1.5 font-medium" style={{ color: '#ED2738' }}>Without Infinia</th>
+                            <th className="text-right pb-1.5 font-medium" style={{ color: '#00C280' }}>With Infinia</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
+                          <tr>
+                            <td className="py-1.5" style={{ color: 'var(--text-secondary)' }}>System prompt + history</td>
+                            <td className="text-right py-1.5 font-mono font-semibold" style={{ color: '#ED2738' }}>{savedTokens.toLocaleString()} tok</td>
+                            <td className="text-right py-1.5 font-semibold" style={{ color: '#00C280' }}>⚡ 0 (skipped)</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1.5" style={{ color: 'var(--text-secondary)' }}>New question</td>
+                            <td className="text-right py-1.5 font-mono" style={{ color: 'var(--text-primary)' }}>{newTokens.toLocaleString()} tok</td>
+                            <td className="text-right py-1.5 font-mono" style={{ color: 'var(--text-primary)' }}>{newTokens.toLocaleString()} tok</td>
+                          </tr>
+                          <tr className="font-semibold">
+                            <td className="pt-2" style={{ color: 'var(--text-primary)' }}>GPU Input Total</td>
+                            <td className="text-right pt-2 font-mono" style={{ color: '#ED2738' }}>{totalTokens.toLocaleString()} tok</td>
+                            <td className="text-right pt-2 font-mono" style={{ color: '#00C280' }}>{newTokens.toLocaleString()} tok</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1" style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Cost</td>
+                            <td className="text-right py-1 font-mono" style={{ color: '#ED2738', fontSize: '10px' }}>${n(turn.left?.cost_usd, 5)}</td>
+                            <td className="text-right py-1 font-mono" style={{ color: '#00C280', fontSize: '10px' }}>${n(turn.right?.cost_usd, 7)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
       </motion.div>
     </TurnErrorBoundary>
   )
