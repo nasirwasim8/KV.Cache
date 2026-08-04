@@ -10,7 +10,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
-    health_router, config_router, chat_router, prefix_router, cache_router
+    health_router, config_router, chat_router, prefix_router, cache_router,
+    gpu_direct_router
 )
 
 app = FastAPI(
@@ -29,10 +30,11 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
-app.include_router(config_router, prefix="/api")
-app.include_router(chat_router,   prefix="/api")
-app.include_router(prefix_router, prefix="/api")
-app.include_router(cache_router,  prefix="/api")
+app.include_router(config_router,      prefix="/api")
+app.include_router(chat_router,        prefix="/api")
+app.include_router(prefix_router,      prefix="/api")
+app.include_router(cache_router,       prefix="/api")
+app.include_router(gpu_direct_router,  prefix="/api")
 
 
 @app.get("/")

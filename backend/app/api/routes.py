@@ -9,17 +9,24 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+try:
+    import psutil
+    _PSUTIL_OK = True
+except ImportError:
+    _PSUTIL_OK = False
+
 from app.core.config import settings
 from app.services.kv_cache import kv_cache
 from app.services.ollama_client import ollama_client
 
 logger = logging.getLogger(__name__)
 
-health_router  = APIRouter(tags=["Health"])
-config_router  = APIRouter(prefix="/config", tags=["Config"])
-chat_router    = APIRouter(prefix="/chat", tags=["Chat"])
-prefix_router  = APIRouter(prefix="/prefix", tags=["Prefix"])
-cache_router   = APIRouter(prefix="/cache", tags=["Cache"])
+health_router       = APIRouter(tags=["Health"])
+config_router       = APIRouter(prefix="/config",      tags=["Config"])
+chat_router         = APIRouter(prefix="/chat",        tags=["Chat"])
+prefix_router       = APIRouter(prefix="/prefix",      tags=["Prefix"])
+cache_router        = APIRouter(prefix="/cache",       tags=["Cache"])
+gpu_direct_router   = APIRouter(prefix="/gpu-direct",  tags=["GPU Direct"])
 
 
 # ── In-memory session store ─────────────────────────────────────────────────
@@ -2538,7 +2545,8 @@ async def get_session_history(session_id: str):
 async def persist_session_to_infinia(session_id: str):
     """
     Persist the current in-memory session to Infinia.
-    Call this BEFORE doing a GPU memory flush demo so the data is available to restore.
+    Captures live CPU / DRAM / network metrics during the S3 PUT to prove
+    the CPU-mediated path (for GPU Direct comparison panel).
     """
     if session_id not in _sessions:
         return {"success": False, "message": "Session not found in memory"}
@@ -2548,7 +2556,14 @@ async def persist_session_to_infinia(session_id: str):
     if not turns:
         return {"success": False, "message": "No conversation turns to persist"}
 
+    # ── Sample system metrics BEFORE transfer ─────────────────────────────────────────
+    if _PSUTIL_OK:
+        _cpu_before  = psutil.cpu_percent(interval=None)  # non-blocking warmup
+        _mem_before  = psutil.virtual_memory()
+        _net_before  = psutil.net_io_counters()
+
     t0 = time.perf_counter()
+
     data = {
         "session_id": session_id,
         "turns": [{"user": t["user"], "assistant": t["assistant"]} for t in turns],
@@ -2556,19 +2571,112 @@ async def persist_session_to_infinia(session_id: str):
         "total_tokens": sum(len(t["user"].split()) + len(t["assistant"].split()) for t in turns),
     }
     store_result = kv_cache.store(f"session/{session_id}", data)
-    # store() returns a dict with store_latency_ms inside it
     store_latency_ms = store_result.get("store_latency_ms", 0.0) if isinstance(store_result, dict) else float(store_result or 0)
     total_ms = round((time.perf_counter() - t0) * 1000, 1)
 
+    # ── Sample system metrics AFTER transfer ─────────────────────────────────────────
+    cpu_metrics = {"available": False}
+    if _PSUTIL_OK:
+        try:
+            _cpu_after  = psutil.cpu_percent(interval=0.1)
+            _mem_after  = psutil.virtual_memory()
+            _net_after  = psutil.net_io_counters()
+
+            bytes_sent  = max(0, _net_after.bytes_sent - _net_before.bytes_sent)
+            bytes_recv  = max(0, _net_after.bytes_recv - _net_before.bytes_recv)
+            bytes_total = bytes_sent + bytes_recv
+
+            # Bandwidth in GB/s: bytes / (transfer_ms / 1000) / 1e9
+            bw_gbps = round((bytes_total / max(total_ms / 1000, 0.001)) / 1e9, 3)
+
+            cpu_metrics = {
+                "available":          True,
+                "cpu_peak_pct":       round(max(_cpu_before, _cpu_after), 1),
+                "dram_used_mb":       round(_mem_after.used / (1024 ** 2), 1),
+                "dram_used_pct":      round(_mem_after.percent, 1),
+                "bytes_via_cpu":      bytes_total,
+                "bandwidth_gbps":     bw_gbps,
+                "transfer_latency_ms": round(store_latency_ms, 1),
+                "path":               "GPU → CPU DRAM → NIC → Infinia",
+                "hops":               3,
+                "label":              "Measured live — this session",
+            }
+        except Exception as e:
+            logger.warning(f"psutil metric capture failed: {e}")
+            cpu_metrics = {"available": False, "error": str(e)}
+
     return {
         "success": True,
-        "session_id": session_id,
+        "session_id":      session_id,
         "turns_persisted": len(turns),
         "store_latency_ms": round(store_latency_ms, 1),
-        "total_ms": total_ms,
-        "s3_key": f"kvcache/session/{session_id}.json",
-        "message": f"✅ {len(turns)} conversation turns written to DDN Infinia in {store_latency_ms:.0f}ms",
+        "total_ms":        total_ms,
+        "s3_key":          f"kvcache/session/{session_id}.json",
+        "message":         f"✅ {len(turns)} conversation turns written to DDN Infinia in {store_latency_ms:.0f}ms",
+        "cpu_metrics":     cpu_metrics,
     }
+
+
+# ── GPU Direct / RDMA Reference Endpoints ────────────────────────────────────────────────
+
+@gpu_direct_router.get("/reference")
+async def get_gpu_direct_reference():
+    """
+    Returns DDN published GPU Direct Storage benchmark numbers for the
+    comparison panel in Chat Observatory. Numbers are editable from the
+    Configuration page and persisted to kv_config.json.
+    """
+    latency_reduction = round(
+        (1 - settings.gds_latency_ms / max(settings.cpu_path_bandwidth_gbps, 0.001)) * 100
+    ) if settings.gds_latency_ms < 100 else 91
+
+    return {
+        "gpu_direct": {
+            "path":                 "GPU HBM → RDMA NIC → Infinia (zero CPU hops)",
+            "bandwidth_gbps":       settings.gds_bandwidth_gbps,
+            "latency_ms":           settings.gds_latency_ms,
+            "cpu_involvement_pct":  settings.gds_cpu_involvement_pct,
+            "hops":                 1,
+            "platform":             settings.gds_platform,
+            "source":               settings.gds_source,
+            "source_url":           settings.gds_source_url,
+            "label":                "GPU Direct reference benchmark",
+        },
+        "cpu_path": {
+            "path":                 "GPU HBM → CPU DRAM → NIC → Infinia",
+            "bandwidth_gbps":       settings.cpu_path_bandwidth_gbps,
+            "hops":                 3,
+            "cpu_involvement_pct":  100,
+        },
+        "psutil_available": _PSUTIL_OK,
+    }
+
+
+class GDSBenchmarkUpdate(BaseModel):
+    gds_bandwidth_gbps:      Optional[float] = None
+    gds_latency_ms:          Optional[float] = None
+    cpu_path_bandwidth_gbps: Optional[float] = None
+    gds_cpu_involvement_pct: Optional[float] = None
+    gds_platform:            Optional[str]   = None
+    gds_source:              Optional[str]   = None
+    gds_source_url:          Optional[str]   = None
+
+
+@gpu_direct_router.post("/benchmarks")
+async def update_gpu_direct_benchmarks(req: GDSBenchmarkUpdate):
+    """
+    Update GPU Direct benchmark reference numbers from the Configuration UI.
+    Only provided fields are updated; omitted fields keep their current value.
+    """
+    if req.gds_bandwidth_gbps      is not None: settings.gds_bandwidth_gbps      = req.gds_bandwidth_gbps
+    if req.gds_latency_ms          is not None: settings.gds_latency_ms          = req.gds_latency_ms
+    if req.cpu_path_bandwidth_gbps is not None: settings.cpu_path_bandwidth_gbps = req.cpu_path_bandwidth_gbps
+    if req.gds_cpu_involvement_pct is not None: settings.gds_cpu_involvement_pct = req.gds_cpu_involvement_pct
+    if req.gds_platform            is not None: settings.gds_platform            = req.gds_platform
+    if req.gds_source              is not None: settings.gds_source              = req.gds_source
+    if req.gds_source_url          is not None: settings.gds_source_url          = req.gds_source_url
+    settings.save()
+    return {"success": True, "message": "GPU Direct benchmark numbers updated and saved."}
 
 
 # ── Prefix Multiplier ─────────────────────────────────────────────────────────

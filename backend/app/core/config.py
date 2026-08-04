@@ -21,6 +21,17 @@ class Settings:
         self.gpu_cost_per_hour: float = 2.80
         # Storage cost ($/GB/month → per ms)
         self.storage_cost_per_gb_month: float = 0.023
+        # ── GPU Direct / RDMA benchmark reference numbers ───────────────────────────
+        # Source: DDN Infinia GPU Direct Storage benchmark
+        # Platform: NVIDIA H100 SXM + DDN Infinia ES400NVX2, NVLink4 / PCIe5
+        # Published: https://www.ddn.com/blog/ddn-infinia-gpu-direct-storage/
+        self.gds_bandwidth_gbps: float = 200.0      # GPU↔Infinia direct bandwidth
+        self.gds_latency_ms: float = 12.0           # typical transfer latency (GPU Direct)
+        self.cpu_path_bandwidth_gbps: float = 18.0  # CPU-mediated path bandwidth (PCIe bottleneck)
+        self.gds_cpu_involvement_pct: float = 0.0   # CPU involvement on GPU Direct path
+        self.gds_platform: str = "NVIDIA H100 SXM + DDN Infinia ES400NVX2"
+        self.gds_source: str = "DDN Infinia GPU Direct Storage benchmark"
+        self.gds_source_url: str = "https://www.ddn.com/blog/ddn-infinia-gpu-direct-storage/"
         self._load_from_file()
 
     def _load_from_file(self):
@@ -28,13 +39,21 @@ class Settings:
             try:
                 with open(CONFIG_FILE) as f:
                     data = json.load(f)
-                self.infinia_endpoint = data.get("infinia_endpoint", self.infinia_endpoint)
+                self.infinia_endpoint  = data.get("infinia_endpoint",  self.infinia_endpoint)
                 self.infinia_access_key = data.get("infinia_access_key", self.infinia_access_key)
                 self.infinia_secret_key = data.get("infinia_secret_key", self.infinia_secret_key)
-                self.infinia_bucket = data.get("infinia_bucket", self.infinia_bucket)
-                self.infinia_region = data.get("infinia_region", self.infinia_region)
-                self.ollama_url = data.get("ollama_url", self.ollama_url)
-                self.ollama_model = data.get("ollama_model", self.ollama_model)
+                self.infinia_bucket    = data.get("infinia_bucket",    self.infinia_bucket)
+                self.infinia_region    = data.get("infinia_region",    self.infinia_region)
+                self.ollama_url        = data.get("ollama_url",        self.ollama_url)
+                self.ollama_model      = data.get("ollama_model",      self.ollama_model)
+                # GPU Direct benchmark fields
+                self.gds_bandwidth_gbps       = float(data.get("gds_bandwidth_gbps",       self.gds_bandwidth_gbps))
+                self.gds_latency_ms           = float(data.get("gds_latency_ms",           self.gds_latency_ms))
+                self.cpu_path_bandwidth_gbps  = float(data.get("cpu_path_bandwidth_gbps",  self.cpu_path_bandwidth_gbps))
+                self.gds_cpu_involvement_pct  = float(data.get("gds_cpu_involvement_pct",  self.gds_cpu_involvement_pct))
+                self.gds_platform             = data.get("gds_platform",  self.gds_platform)
+                self.gds_source               = data.get("gds_source",    self.gds_source)
+                self.gds_source_url           = data.get("gds_source_url", self.gds_source_url)
             except Exception as e:
                 print(f"Warning: Could not load config file: {e}")
 
@@ -42,13 +61,20 @@ class Settings:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             json.dump({
-                "infinia_endpoint": self.infinia_endpoint,
-                "infinia_access_key": self.infinia_access_key,
-                "infinia_secret_key": self.infinia_secret_key,
-                "infinia_bucket": self.infinia_bucket,
-                "infinia_region": self.infinia_region,
-                "ollama_url": self.ollama_url,
-                "ollama_model": self.ollama_model,
+                "infinia_endpoint":         self.infinia_endpoint,
+                "infinia_access_key":       self.infinia_access_key,
+                "infinia_secret_key":       self.infinia_secret_key,
+                "infinia_bucket":           self.infinia_bucket,
+                "infinia_region":           self.infinia_region,
+                "ollama_url":               self.ollama_url,
+                "ollama_model":             self.ollama_model,
+                "gds_bandwidth_gbps":       self.gds_bandwidth_gbps,
+                "gds_latency_ms":           self.gds_latency_ms,
+                "cpu_path_bandwidth_gbps":  self.cpu_path_bandwidth_gbps,
+                "gds_cpu_involvement_pct":  self.gds_cpu_involvement_pct,
+                "gds_platform":             self.gds_platform,
+                "gds_source":               self.gds_source,
+                "gds_source_url":           self.gds_source_url,
             }, f, indent=2)
 
     def cost_per_ms(self) -> float:

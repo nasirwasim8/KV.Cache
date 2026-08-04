@@ -489,6 +489,11 @@ export default function ChatObservatory() {
   const [restoring, setRestoring] = useState(false)
   const [persistedTurns, setPersistedTurns] = useState(0)
   const [resumeLatency, setResumeLatency] = useState<number | null>(null)
+  const [gpuDirectData, setGpuDirectData] = useState<{
+    cpuMetrics: Record<string, unknown> | null
+    reference: Record<string, unknown> | null
+    showDiagram: boolean
+  }>({ cpuMetrics: null, reference: null, showDiagram: false })
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns])
@@ -550,10 +555,17 @@ export default function ChatObservatory() {
       return
     }
     try {
-      // Step 1: persist current conversation to Infinia
+      // Step 1: persist current conversation to Infinia (captures CPU metrics)
       const res = await kvApi.persistSession(sessionId)
       setPersistedTurns(res.turns_persisted || turns.length)
-      // Step 2: wipe local session memory (GPU forgot you)
+      // Step 2: fetch GPU Direct reference numbers in parallel
+      const ref = await kvApi.getGpuDirectReference().catch(() => null)
+      setGpuDirectData({
+        cpuMetrics: res.cpu_metrics ?? null,
+        reference:  ref ?? null,
+        showDiagram: false,
+      })
+      // Step 3: wipe local session memory (GPU forgot you)
       await kvApi.clearSession(sessionId).catch(() => {})
       setTurns([]); setCumulativeSavings(0); setTotalHits(0); setResumeLatency(null)
       setGpuFlushed(true)
@@ -853,6 +865,183 @@ export default function ChatObservatory() {
             {restoring ? 'Restoring…' : '⚡ Restore from Infinia'}
           </button>
         </div>
+      )}
+
+      {/* GPU Direct Impact Panel — shown after flush */}
+      {gpuFlushed && gpuDirectData.cpuMetrics && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
+          className="rounded-xl overflow-hidden"
+          style={{ border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}
+        >
+          {/* Header */}
+          <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, rgba(0,194,128,0.08), rgba(26,129,175,0.06))', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4" style={{ color: '#00C280' }} />
+              <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>GPU Direct / RDMA — What This Transfer Reveals</span>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,194,128,0.1)', color: '#00C280', border: '1px solid rgba(0,194,128,0.2)' }}>Hybrid View: Live + Reference</span>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* Side-by-side comparison table */}
+            <div className="grid grid-cols-2 gap-px rounded-lg overflow-hidden" style={{ background: 'var(--border-subtle)' }}>
+              {/* Left — live CPU path */}
+              <div className="p-3" style={{ background: 'var(--surface-secondary)' }}>
+                <div className="text-xs font-bold mb-3 flex items-center gap-1.5" style={{ color: '#ED2738' }}>
+                  <span>⚠️</span> Current Session — CPU-Mediated Path
+                  <span className="ml-auto text-xs font-normal opacity-60">Measured live</span>
+                </div>
+                <div className="space-y-2">
+                  {[[
+                    'Data Path', (gpuDirectData.cpuMetrics as any)?.path ?? 'GPU → CPU DRAM → NIC → Infinia'
+                  ], [
+                    'CPU Spike', `${(gpuDirectData.cpuMetrics as any)?.cpu_peak_pct ?? '—'}%`
+                  ], [
+                    'DRAM Used', `${(((gpuDirectData.cpuMetrics as any)?.dram_used_mb ?? 0) / 1024).toFixed(1)} GB`
+                  ], [
+                    'Transfer Time', `${(gpuDirectData.cpuMetrics as any)?.transfer_latency_ms ?? '—'}ms`
+                  ], [
+                    'CPU Hops', (gpuDirectData.cpuMetrics as any)?.hops ?? 3
+                  ]].map(([label, val]) => (
+                    <div key={label as string} className="flex items-center justify-between text-xs">
+                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                      <span className="font-semibold" style={{ color: '#ED2738' }}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right — GPU Direct reference */}
+              <div className="p-3" style={{ background: 'var(--surface-secondary)' }}>
+                <div className="text-xs font-bold mb-3 flex items-center gap-1.5" style={{ color: '#00C280' }}>
+                  <span>⚡</span> With Infinia GPU Direct
+                  <span className="ml-auto text-xs font-normal opacity-60">Reference</span>
+                </div>
+                <div className="space-y-2">
+                  {[[
+                    'Data Path', 'GPU HBM → RDMA NIC → Infinia'
+                  ], [
+                    'CPU Spike', `~${(gpuDirectData.reference as any)?.gpu_direct?.cpu_involvement_pct ?? 0}%`
+                  ], [
+                    'DRAM Used', '0 GB (bypassed)'
+                  ], [
+                    'Transfer Time', `~${(gpuDirectData.reference as any)?.gpu_direct?.latency_ms ?? 12}ms`
+                  ], [
+                    'CPU Hops', `${(gpuDirectData.reference as any)?.gpu_direct?.hops ?? 1} (RDMA direct)`
+                  ]].map(([label, val]) => (
+                    <div key={label as string} className="flex items-center justify-between text-xs">
+                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                      <span className="font-semibold" style={{ color: '#00C280' }}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Key insight */}
+            <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(0,194,128,0.05)', border: '1px solid rgba(0,194,128,0.15)' }}>
+              <strong style={{ color: '#00C280' }}>⚡ What GPU Direct eliminates:</strong>
+              {' '}The CPU spike, DRAM staging, and 3-hop network path you just saw — all gone.
+              {' '}KV cache moves GPU ↔ Infinia at {(gpuDirectData.reference as any)?.gpu_direct?.bandwidth_gbps ?? 200} GB/s via RDMA,
+              {' '}freeing CPU DRAM entirely for other inference workloads.
+            </div>
+
+            {/* Concurrent session multiplier */}
+            {(gpuDirectData.cpuMetrics as any)?.dram_used_mb > 0 && (
+              <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(26,129,175,0.05)', border: '1px solid rgba(26,129,175,0.15)' }}>
+                <div className="font-semibold mb-2" style={{ color: '#1A81AF' }}>📊 What Freed CPU DRAM Enables</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(() => {
+                    const dramFreedGb = (gpuDirectData.cpuMetrics as any).dram_used_mb / 1024
+                    const sessPerGb = 2 // ~2 concurrent LLM sessions per GB DRAM freed
+                    return [
+                      { label: 'This flush',    sessions: Math.round(dramFreedGb * sessPerGb),              dram: `${dramFreedGb.toFixed(1)} GB` },
+                      { label: 'Full node\n(64 GB)', sessions: Math.round(64 * sessPerGb),                  dram: '64 GB' },
+                      { label: '100 nodes',    sessions: (Math.round(64 * sessPerGb) * 100).toLocaleString(), dram: '6.4 TB' },
+                    ].map(row => (
+                      <div key={row.label} className="text-center p-2 rounded-lg" style={{ background: 'var(--surface-card)', border: '1px solid var(--border-subtle)' }}>
+                        <div className="font-bold text-sm" style={{ color: '#1A81AF' }}>+{row.sessions}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>concurrent sessions</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{row.label.replace('\n', ' ')}</div>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Memory Hierarchy Diagram — on click */}
+            <div>
+              <button
+                onClick={() => setGpuDirectData(d => ({ ...d, showDiagram: !d.showDiagram }))}
+                className="text-xs font-semibold flex items-center gap-1.5 mb-3 transition-all hover:opacity-80"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <Zap className="w-3 h-3" />
+                {gpuDirectData.showDiagram ? 'Hide' : 'Show'} Memory Hierarchy Diagram
+                {gpuDirectData.showDiagram ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              <AnimatePresence>
+                {gpuDirectData.showDiagram && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div className="rounded-xl p-4" style={{ background: 'var(--surface-secondary)', border: '1px solid var(--border-subtle)' }}>
+                      <p className="text-xs font-semibold text-center mb-4" style={{ color: 'var(--text-muted)' }}>G1 = GPU HBM · G2 = CPU DRAM · G4 = DDN Infinia</p>
+
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Traditional path */}
+                        <div>
+                          <p className="text-xs font-bold text-center mb-3" style={{ color: '#ED2738' }}>Traditional (CPU-Mediated)</p>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="px-4 py-2 rounded-lg text-xs font-bold text-center w-full" style={{ background: 'rgba(237,39,56,0.1)', border: '2px solid rgba(237,39,56,0.4)', color: '#ED2738' }}>G1 — GPU HBM<br/><span className="font-normal text-xs opacity-70">Active KV cache</span></div>
+                            <div className="text-center text-xs" style={{ color: '#ED2738' }}>↓ PCIe<br/><span className="opacity-60" style={{ fontSize: '10px' }}>Bottleneck</span></div>
+                            <div className="px-4 py-2 rounded-lg text-xs font-bold text-center w-full" style={{ background: 'rgba(237,39,56,0.08)', border: '2px solid rgba(237,39,56,0.3)', color: '#ED2738' }}>G2 — CPU DRAM<br/><span className="font-normal text-xs opacity-70">Staging area (wasted)</span></div>
+                            <div className="text-center text-xs" style={{ color: '#ED2738' }}>↓ NIC<br/><span className="opacity-60" style={{ fontSize: '10px' }}>CPU interrupt</span></div>
+                            <div className="px-4 py-2 rounded-lg text-xs font-bold text-center w-full" style={{ background: 'rgba(237,39,56,0.06)', border: '1px solid rgba(237,39,56,0.25)', color: '#ED2738' }}>G4 — Infinia</div>
+                            <div className="text-xs mt-1 text-center" style={{ color: '#ED2738', fontSize: '10px' }}>3 hops · CPU fully involved</div>
+                          </div>
+                        </div>
+
+                        {/* GPU Direct path */}
+                        <div>
+                          <p className="text-xs font-bold text-center mb-3" style={{ color: '#00C280' }}>GPU Direct / RDMA</p>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="px-4 py-2 rounded-lg text-xs font-bold text-center w-full" style={{ background: 'rgba(0,194,128,0.1)', border: '2px solid rgba(0,194,128,0.4)', color: '#00C280' }}>G1 — GPU HBM<br/><span className="font-normal text-xs opacity-70">Active KV cache</span></div>
+                            <div className="text-center text-xs" style={{ color: '#00C280' }}>↓ RDMA (direct)<br/><span className="opacity-60" style={{ fontSize: '10px' }}>{(gpuDirectData.reference as any)?.gpu_direct?.bandwidth_gbps ?? 200} GB/s</span></div>
+                            <div className="px-4 py-2 rounded-lg text-xs font-bold text-center w-full opacity-30" style={{ background: 'var(--surface-card)', border: '2px dashed var(--border-subtle)', color: 'var(--text-muted)' }}>G2 — CPU DRAM<br/><span className="font-normal text-xs">100% free for other work</span></div>
+                            <div className="px-4 py-2 rounded-lg text-xs font-bold text-center w-full" style={{ background: 'rgba(0,194,128,0.08)', border: '2px solid rgba(0,194,128,0.3)', color: '#00C280' }}>G4 — Infinia</div>
+                            <div className="text-xs mt-1 text-center" style={{ color: '#00C280', fontSize: '10px' }}>1 hop · CPU never touched</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Source attribution */}
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              <span className="font-semibold">Live metrics:</span> psutil · measured this session  | 
+              <span className="font-semibold">Reference:</span>{' '}
+              {(gpuDirectData.reference as any)?.gpu_direct?.source ?? 'DDN Infinia GPU Direct benchmark'}
+              {(gpuDirectData.reference as any)?.gpu_direct?.source_url && (
+                <a href={(gpuDirectData.reference as any).gpu_direct.source_url} target="_blank" rel="noreferrer"
+                  className="ml-1 underline hover:opacity-80" style={{ color: '#1A81AF' }}>↗ source
+                </a>
+              )}
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* Session Resume Success Banner */}

@@ -118,4 +118,9 @@ export const kvApi = {
 
   getCacheStats: () => api.get('/cache/stats').then(r => r.data),
   purgeInfiniaCache: () => api.delete('/cache/purge-infinia').then(r => r.data),
+
+  // GPU Direct / RDMA reference endpoints
+  getGpuDirectReference: () => api.get('/gpu-direct/reference').then(r => r.data),
+  updateGpuDirectBenchmarks: (data: Record<string, unknown>) =>
+    api.post('/gpu-direct/benchmarks', data).then(r => r.data),
 }
