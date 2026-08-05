@@ -482,7 +482,7 @@ export default function ChatObservatory() {
   const [demoMode, setDemoMode] = useState<'business' | 'technical'>('business')
   const [pricingTier, setPricingTier] = useState<PricingTier>('self_hosted_h100')
   const [showCostMath, setShowCostMath] = useState(false)
-  const [sessionId] = useState(() => `sess_${Date.now()}`)
+  const [sessionId, setSessionId] = useState(() => `sess_${Date.now()}`)
   const [cumulativeSavings, setCumulativeSavings] = useState(0)
   const [totalHits, setTotalHits] = useState(0)
   const [gpuFlushed, setGpuFlushed] = useState(false)
@@ -604,7 +604,23 @@ export default function ChatObservatory() {
     }
   }
 
-  // Purge ALL objects from Infinia — makes next question a genuine MISS
+  // New Session — wipes context entirely so generic questions start clean
+  const newSession = async () => {
+    try {
+      await kvApi.clearSession(sessionId).catch(() => {})
+    } finally {
+      setSessionId(`sess_${Date.now()}`)
+      setTurns([])
+      setCumulativeSavings(0)
+      setTotalHits(0)
+      setGpuFlushed(false)
+      setPersistedTurns(0)
+      setResumeLatency(null)
+      setGpuDirectData({ cpuMetrics: null, reference: null, showDiagram: false })
+      toast.success('New session started — clean context, no KV carry-over', { icon: '🆕', duration: 3000 })
+    }
+  }
+
   const purgeDemo = async () => {
     const confirmed = window.confirm(
       'Reset Demo Cache?\n\nThis will DELETE all cached objects from DDN Infinia.\nThe next question will be a genuine MISS (stored fresh).\n\nThis is useful to demonstrate the MISS → STORE → HIT flow from scratch.'
@@ -701,6 +717,16 @@ export default function ChatObservatory() {
               style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)', background: 'var(--surface-card)' }}
             >
               <Trash2 className="w-3.5 h-3.5" /> Clear UI
+            </button>
+
+            {/* New Session button */}
+            <button
+              onClick={newSession}
+              title="Clear all session context — next question starts with a clean slate (no KV carry-over)"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 whitespace-nowrap"
+              style={{ borderColor: 'rgba(26,129,175,0.45)', color: '#1A81AF', background: 'rgba(26,129,175,0.07)' }}
+            >
+              <span className="text-xs">🆕</span> New Session
             </button>
             {/* GPU Memory Flush button */}
             <button
