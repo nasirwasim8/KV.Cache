@@ -495,8 +495,15 @@ export default function ChatObservatory() {
     showDiagram: boolean
   }>({ cpuMetrics: null, reference: null, showDiagram: false })
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns])
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 350)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || loading) return
@@ -1136,6 +1143,31 @@ export default function ChatObservatory() {
           </button>
         </div>
       </div>
+
+      {/* Floating scroll-to-top button — appears after scrolling past the toolbar */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 8 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            title="Scroll to top — access toolbar buttons"
+            className="fixed z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold hover:opacity-90"
+            style={{
+              bottom: '88px',
+              right: '24px',
+              background: '#00C280',
+              color: '#fff',
+              boxShadow: '0 4px 20px rgba(0,194,128,0.35)',
+            }}
+          >
+            <ChevronUp className="w-4 h-4" />
+            Back to top
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
