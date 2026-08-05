@@ -65,9 +65,13 @@ class InfiniaKVCacheManager:
           - Common filler prefixes:  "please explain X", "can you tell me about X"
           - Compound words:          "worldcup" == "world cup", "llms" == "llm"
           - Hyphens:                 "time-to-first-token" == "time to first token"
-          - Number words:            "2022worldcup" tokens separated correctly
+          - Acronyms:                "TTFT" == "time to first token", "RAG" == "retrieval augmented generation"
+          - Trailing qualifiers:     "why does it matter in inference?" == "why does it matter?"
 
         Examples that ALL resolve to the same key:
+          "What is time-to-first-token and why does it matter?"
+          "what is TTFT and why does it matter?"
+          "what is TTFT and why does it matter in inference?"
           "Explain the difference between prefill and decode in LLM inference"
           "Difference between prefill and decode in LLM inference"
           "What is the cost benefit of prefix caching?"
@@ -77,34 +81,54 @@ class InfiniaKVCacheManager:
         """
         q = query.strip().lower()
 
-        # ── 1. Expand known compound / run-together words FIRST ──────────────
-        # These are words users commonly write as one word but mean two words.
-        # Keyed longest-first so "worldcup" matches before any sub-string.
-        _COMPOUNDS = {
-            'worldcup':       'world cup',
-            'footballcup':    'football cup',
-            'superbowl':      'super bowl',
-            'chatgpt':        'chat gpt',
-            'llms':           'llm',          # plural normalisation
-            'gpus':           'gpu',
-            'cpus':           'cpu',
-            'kvcache':        'kv cache',
-            'kv-cache':       'kv cache',
-            'datacenter':     'data center',
-            'datacentre':     'data center',
-            'metadata':       'meta data',
-            'blockchain':     'block chain',
-            'cryptocurrency': 'crypto currency',
-            'cryptocurrency': 'crypto currency',
-            'machinelearning':'machine learning',
-            'deeplearning':   'deep learning',
-            'neuralnetwork':  'neural network',
+        # ── 1. Expand acronyms FIRST (before anything else) ──────────────────
+        # Maps the acronym to its canonical long form so both spell-outs and
+        # abbreviations hash to the same key.
+        _ACRONYMS = {
+            'ttft':  'time to first token',
+            'tpot':  'time per output token',
+            'tbt':   'time between tokens',
+            'rag':   'retrieval augmented generation',
+            'rlhf':  'reinforcement learning from human feedback',
+            'sft':   'supervised fine tuning',
+            'moe':   'mixture of experts',
+            'mha':   'multi head attention',
+            'gqa':   'grouped query attention',
+            'kv':    'kv',          # keep as-is — "kv cache" is meaningful
+            'llm':   'llm',         # keep as-is — already normalised target
+            'gpu':   'gpu',
+            'cpu':   'cpu',
+            'vram':  'vram',
+            'dram':  'dram',
+            'hbm':   'hbm',
         }
-        # Apply compound expansions (word-boundary aware)
+        for acronym, expanded in _ACRONYMS.items():
+            q = re.sub(r'\b' + re.escape(acronym) + r'\b', expanded, q)
+
+        # ── 2. Expand known compound / run-together words ─────────────────────
+        _COMPOUNDS = {
+            'worldcup':            'world cup',
+            'footballcup':         'football cup',
+            'superbowl':           'super bowl',
+            'chatgpt':             'chat gpt',
+            'timetofirsttoken':    'time to first token',
+            'llms':                'llm',
+            'gpus':                'gpu',
+            'cpus':                'cpu',
+            'kvcache':             'kv cache',
+            'kv-cache':            'kv cache',
+            'datacenter':          'data center',
+            'datacentre':          'data center',
+            'metadata':            'meta data',
+            'blockchain':          'block chain',
+            'machinelearning':     'machine learning',
+            'deeplearning':        'deep learning',
+            'neuralnetwork':       'neural network',
+        }
         for compound, expanded in _COMPOUNDS.items():
             q = re.sub(r'\b' + re.escape(compound) + r'\b', expanded, q)
 
-        # ── 2. Strip leading question / filler phrases ────────────────────────
+        # ── 3. Strip leading question / filler phrases ────────────────────────
         filler_patterns = [
             r'^(please\s+)?(can\s+you\s+)?(explain|describe|summarize|summarise|tell\s+me\s+(about|how|why|what))\s+',
             r'^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are|what\s+makes|what\s+happens\s+when|what\s+happens)\s+',
@@ -118,19 +142,26 @@ class InfiniaKVCacheManager:
         for pat in filler_patterns:
             q = re.sub(pat, '', q)
 
-        # ── 3. Strip leading articles left behind after filler removal ────────
+        # ── 4. Strip leading articles left behind after filler removal ─────────
         q = re.sub(r'^(the|a|an)\s+', '', q)
 
-        # ── 4. Replace hyphens with spaces ────────────────────────────────────
+        # ── 5. Replace hyphens with spaces ─────────────────────────────────────
         q = q.replace('-', ' ')
 
-        # ── 5. Remove all remaining punctuation ──────────────────────────────
+        # ── 6. Remove all remaining punctuation ───────────────────────────────
         q = re.sub(r'[^\w\s]', '', q)
 
-        # ── 6. Collapse whitespace ────────────────────────────────────────────
+        # ── 7. Strip common trailing context qualifiers ────────────────────────
+        # "why does it matter in inference?" == "why does it matter?"
+        # "how does it work in production?" == "how does it work?"
+        _TRAILING = r'\s+(in\s+(llm\s+|large\s+language\s+model\s+|ai\s+|ml\s+|deep\s+learning\s+|production\s+|enterprise\s+)?inference|in\s+(ai|ml|production|enterprise|llm|practice)|for\s+(llm|ai|ml|inference|enterprise))$'
+        q = re.sub(_TRAILING, '', q)
+
+        # ── 8. Collapse whitespace ─────────────────────────────────────────────
         q = re.sub(r'\s+', ' ', q).strip()
 
         return q
+
 
     @staticmethod
     def compute_key(messages: list, query: str) -> str:
