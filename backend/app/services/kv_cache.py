@@ -63,35 +63,73 @@ class InfiniaKVCacheManager:
           - Punctuation:             "X?" → "X"
           - Extra whitespace / case: "  X  " → "x"
           - Common filler prefixes:  "please explain X", "can you tell me about X"
+          - Compound words:          "worldcup" == "world cup", "llms" == "llm"
+          - Hyphens:                 "time-to-first-token" == "time to first token"
+          - Number words:            "2022worldcup" tokens separated correctly
 
         Examples that ALL resolve to the same key:
           "Explain the difference between prefill and decode in LLM inference"
           "Difference between prefill and decode in LLM inference"
           "What is the cost benefit of prefix caching?"
           "cost benefit of prefix caching"
+          "who are the top 4 teams in 2022 worldcup?"
+          "who are the top 4 teams in 2022 world cup"
         """
         q = query.strip().lower()
-        # Strip leading question / filler phrases (order matters — longest first)
+
+        # ── 1. Expand known compound / run-together words FIRST ──────────────
+        # These are words users commonly write as one word but mean two words.
+        # Keyed longest-first so "worldcup" matches before any sub-string.
+        _COMPOUNDS = {
+            'worldcup':       'world cup',
+            'footballcup':    'football cup',
+            'superbowl':      'super bowl',
+            'chatgpt':        'chat gpt',
+            'llms':           'llm',          # plural normalisation
+            'gpus':           'gpu',
+            'cpus':           'cpu',
+            'kvcache':        'kv cache',
+            'kv-cache':       'kv cache',
+            'datacenter':     'data center',
+            'datacentre':     'data center',
+            'metadata':       'meta data',
+            'blockchain':     'block chain',
+            'cryptocurrency': 'crypto currency',
+            'cryptocurrency': 'crypto currency',
+            'machinelearning':'machine learning',
+            'deeplearning':   'deep learning',
+            'neuralnetwork':  'neural network',
+        }
+        # Apply compound expansions (word-boundary aware)
+        for compound, expanded in _COMPOUNDS.items():
+            q = re.sub(r'\b' + re.escape(compound) + r'\b', expanded, q)
+
+        # ── 2. Strip leading question / filler phrases ────────────────────────
         filler_patterns = [
             r'^(please\s+)?(can\s+you\s+)?(explain|describe|summarize|summarise|tell\s+me\s+(about|how|why|what))\s+',
             r'^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are|what\s+makes|what\s+happens\s+when|what\s+happens)\s+',
+            r'^(who\s+won|who\s+are|who\s+were|who\s+is|who\s+was)\s+',
             r'^(how\s+do(?:es)?|how\s+can|how\s+would)\s+',
             r'^(why\s+is|why\s+does|why\s+would)\s+',
             r'^(is\s+there|are\s+there|does\s+it|do\s+they)\s+',
             r'^(please|kindly)\s+',
+            r'^(tell\s+me|give\s+me|show\s+me)\s+(about\s+)?',
         ]
         for pat in filler_patterns:
             q = re.sub(pat, '', q)
-        # Strip leading articles left behind after filler removal
-        # e.g. "explain the difference" → strip "explain " → "the difference" → strip "the " → "difference"
+
+        # ── 3. Strip leading articles left behind after filler removal ────────
         q = re.sub(r'^(the|a|an)\s+', '', q)
-        # Replace hyphens with spaces so compound words match their spaced equivalents
-        # e.g. "time-to-first-token" == "time to first token", "multi-tenant" == "multi tenant"
+
+        # ── 4. Replace hyphens with spaces ────────────────────────────────────
         q = q.replace('-', ' ')
-        # Remove all remaining punctuation
+
+        # ── 5. Remove all remaining punctuation ──────────────────────────────
         q = re.sub(r'[^\w\s]', '', q)
-        # Collapse multiple whitespace
+
+        # ── 6. Collapse whitespace ────────────────────────────────────────────
         q = re.sub(r'\s+', ' ', q).strip()
+
         return q
 
     @staticmethod
