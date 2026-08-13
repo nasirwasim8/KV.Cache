@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, ChevronRight, CheckCircle, Zap, Database, Server,
   MemoryStick, Users, Layers, ArrowRight, AlertTriangle, HardDrive,
-  TrendingDown, Shield
+  TrendingDown, Shield, Eye, EyeOff, GitBranch, Lock, Hash, Activity
 } from 'lucide-react'
 
 // ─── Shared sub-components (mirrors RAG/VSS Details pattern) ──────────────────
@@ -598,7 +598,285 @@ function ICPDetail() {
 // CONCEPTS registry + Main Page
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 0 — Chat Observatory Architecture
+// ═══════════════════════════════════════════════════════════════════
+
+function ChatObservatoryArchitectureDetail() {
+  const [technical, setTechnical] = useState(false)
+
+  return (
+    <div className="space-y-6">
+
+      {/* Toggle */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {technical ? 'Showing technical internals' : 'Showing high-level flow'}
+        </p>
+        <button
+          onClick={() => setTechnical(t => !t)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border"
+          style={{
+            background: technical ? 'rgba(0,194,128,0.12)' : 'var(--surface-secondary)',
+            borderColor: technical ? 'rgba(0,194,128,0.4)' : 'var(--border-subtle)',
+            color: technical ? '#00C280' : 'var(--text-secondary)',
+          }}
+        >
+          {technical ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          {technical ? 'Technical View ON' : 'Turn On Technical View'}
+        </button>
+      </div>
+
+      <AnimatePresence mode="wait">
+        {!technical ? (
+          <motion.div key="simple" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+
+            {/* ── Simple Architecture Diagram ── */}
+            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+
+              {/* Header */}
+              <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
+                <Layers className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} />
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>Chat Observatory — System Flow</span>
+                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(237,39,56,0.1)', color: 'var(--ddn-red)' }}>High-Level</span>
+              </div>
+
+              <div className="p-6 space-y-4">
+
+                {/* User input row */}
+                <div className="flex justify-center">
+                  <div className="px-5 py-2.5 rounded-xl border-2 text-sm font-semibold text-center" style={{ borderColor: '#6366f1', color: '#6366f1', background: 'rgba(99,102,241,0.08)', minWidth: 220 }}>
+                    👤 User Question
+                  </div>
+                </div>
+
+                <div className="flex justify-center"><ArrowRight className="w-4 h-4 rotate-90" style={{ color: 'var(--border-default)' }} /></div>
+
+                {/* Split into two panels */}
+                <div className="grid grid-cols-2 gap-4">
+
+                  {/* Left — No Cache */}
+                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: '#ED2738' }}>
+                    <div className="px-3 py-2 text-xs font-bold text-center" style={{ background: '#ED273815', color: '#ED2738' }}>❌ WITHOUT KV CACHE</div>
+                    <div className="p-3 space-y-2">
+                      {[
+                        { label: 'Full context sent', sub: 'System prompt + history + new Q' },
+                        { label: 'GPU recomputes all', sub: 'Every token, every turn' },
+                        { label: 'Response generated', sub: 'Decode phase runs' },
+                      ].map((item, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: '#ED2738' }}>{i + 1}</div>
+                          <div>
+                            <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{item.label}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{item.sub}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-3 py-2 text-center text-[10px] font-bold" style={{ background: '#ED273818', color: '#ED2738' }}>TTFT: 200–400ms · Full cost</div>
+                  </div>
+
+                  {/* Right — With Infinia */}
+                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: '#00C280' }}>
+                    <div className="px-3 py-2 text-xs font-bold text-center" style={{ background: '#00C28015', color: '#00C280' }}>✅ WITH DDN INFINIA</div>
+                    <div className="p-3 space-y-2">
+                      {[
+                        { label: 'Check Infinia first', sub: 'S3 GET — 7–80ms lookup' },
+                        { label: 'Cache HIT → skip prefill', sub: 'Only new tokens to GPU' },
+                        { label: 'Response generated', sub: 'Decode phase runs same' },
+                      ].map((item, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: '#00C280' }}>{i + 1}</div>
+                          <div>
+                            <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{item.label}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{item.sub}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-3 py-2 text-center text-[10px] font-bold" style={{ background: '#00C28018', color: '#00C280' }}>TTFT: 7–80ms · 94% cost reduction</div>
+                  </div>
+                </div>
+
+                {/* DDN Infinia box */}
+                <div className="flex justify-center"><ArrowRight className="w-4 h-4 rotate-90" style={{ color: '#00C280' }} /></div>
+                <div className="rounded-xl border-2 px-4 py-3 text-center" style={{ borderColor: '#00C280', background: 'rgba(0,194,128,0.06)' }}>
+                  <p className="text-sm font-bold" style={{ color: '#00C280' }}>🗄️ DDN Infinia Object Store</p>
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>KV cache entries stored as JSON objects · Bucket: ddn-kv-cache-01 · Real S3 API</p>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Key insight callout */}
+            <div className="p-4 rounded-xl border" style={{ background: 'rgba(0,194,128,0.05)', borderColor: 'rgba(0,194,128,0.25)' }}>
+              <p className="text-xs font-bold mb-1" style={{ color: '#00C280' }}>💡 What makes this a fair comparison</p>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                Both chatbots query the same Ollama model on the same hardware. The only difference is the KV cache lookup on the right side.
+                All latency numbers are real wall-clock measurements — not simulated.
+              </p>
+            </div>
+
+          </motion.div>
+        ) : (
+
+          <motion.div key="technical" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }} className="space-y-4">
+
+            {/* ── Technical Architecture Diagram ── */}
+            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'rgba(0,194,128,0.3)', background: 'var(--surface-secondary)' }}>
+              <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'rgba(0,194,128,0.2)', background: 'rgba(0,194,128,0.06)' }}>
+                <Activity className="w-4 h-4" style={{ color: '#00C280' }} />
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00C280' }}>Under the Hood — Request Lifecycle</span>
+                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(0,194,128,0.15)', color: '#00C280' }}>Technical</span>
+              </div>
+
+              <div className="p-5 space-y-3">
+
+                {/* Step 1 — Frontend */}
+                <TechStep
+                  n={1} color="#6366f1" label="React Frontend (Vite · :5176)"
+                  tag="TypeScript"
+                  detail="User types a question. ChatObservatory.tsx fires two concurrent fetch() calls — one to /api/chat/no-cache and one to /api/chat/infinia. Both resolve independently and update their respective panels."
+                />
+
+                <TechArrow />
+
+                {/* Step 2 — Normalization */}
+                <TechStep
+                  n={2} color="#f59e0b" label="Query Normalization (kv_cache.py)"
+                  tag="normalize_query()"
+                  detail="Before any cache lookup, the raw query is normalized: lowercased → acronyms expanded (TTFT → 'time to first token') → compound words split → hyphens → spaces → filler prefixes stripped → trailing qualifiers removed → punctuation dropped → whitespace collapsed. This ensures 'TTFT in inference?' and 'time-to-first-token and why does it matter' hash to the same cache key."
+                />
+
+                <TechArrow />
+
+                {/* Step 3 — Cache Key */}
+                <TechStep
+                  n={3} color="#8b5cf6" label="Cache Key Generation"
+                  tag="SHA-256"
+                  detail="compute_key() takes the normalized query string and hashes it with SHA-256. Only the first 24 hex characters are used as the object key. The S3 object path is: kvcache/{hash24}.json — stored in bucket ddn-kv-cache-01. The hash is deterministic: same normalized query always produces the same key."
+                />
+
+                <div className="grid grid-cols-2 gap-3 py-1">
+
+                  {/* Miss path */}
+                  <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'rgba(237,39,56,0.3)', background: 'rgba(237,39,56,0.04)' }}>
+                    <p className="text-[10px] font-bold uppercase" style={{ color: '#ED2738' }}>CACHE MISS PATH</p>
+                    <TechMiniStep color="#ED2738" label="S3 GET → 404 NoSuchKey" detail="Infinia returns 404. Latency measured but entry not found." />
+                    <TechMiniStep color="#ED2738" label="Ollama API called" detail="POST to /api/chat with full messages[] array including system prompt and all history." />
+                    <TechMiniStep color="#ED2738" label="S3 PUT → store response" detail="Response + metadata serialised to JSON and uploaded: kvcache/{hash}.json. Write latency measured and returned to UI." />
+                  </div>
+
+                  {/* Hit path */}
+                  <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'rgba(0,194,128,0.3)', background: 'rgba(0,194,128,0.04)' }}>
+                    <p className="text-[10px] font-bold uppercase" style={{ color: '#00C280' }}>CACHE HIT PATH</p>
+                    <TechMiniStep color="#00C280" label="S3 GET → 200 OK" detail="Infinia returns the cached JSON. Real S3 GET latency is measured wall-clock." />
+                    <TechMiniStep color="#00C280" label="Ollama skipped entirely" detail="No LLM call made. The cached response.text is returned directly." />
+                    <TechMiniStep color="#00C280" label="Token delta computed" detail="new_tokens = len(query_tokens). saved_tokens = total_tokens - new_tokens. GPU load % = saved/total × 100." />
+                  </div>
+                </div>
+
+                <TechArrow />
+
+                {/* Step 5 — Metrics */}
+                <TechStep
+                  n={5} color="#00C280" label="Response + Metrics returned to UI"
+                  tag="PanelMetrics"
+                  detail="The API response includes: ttft_ms (wall-clock from request start to first byte), tokens_sent (full context length), new_tokens (query only), cost_usd (tokens × $0.0000028/token), cache_hit (bool), latency_ms (S3 GET time), store_latency_ms (S3 PUT time), object_key, object_size_bytes. CPU/DRAM metrics sampled via psutil at request time."
+                />
+
+              </div>
+            </div>
+
+            {/* Data model */}
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
+              <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
+                <Hash className="w-3.5 h-3.5" style={{ color: '#8b5cf6' }} />
+                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>Cached Object Schema (JSON)</span>
+              </div>
+              <pre className="p-4 text-[10px] leading-relaxed overflow-x-auto" style={{ color: '#00C280', background: 'var(--surface-secondary)', fontFamily: 'monospace' }}>{`{
+  "query":        "prefill vs decode in large language models",   // normalized
+  "response":     "In LLM inference, prefill processes...",        // model output
+  "model":        "llama3.2:3b",
+  "tokens_used":  355,
+  "timestamp":    "2026-08-13T10:24:00Z",
+  "ttft_ms":      223,
+  "cost_usd":     0.000994
+}`}</pre>
+            </div>
+
+            {/* Key numbers */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Cache key length', value: '24 hex chars', color: '#8b5cf6', icon: <Lock className="w-4 h-4" /> },
+                { label: 'Lookup protocol', value: 'Real S3 GET', color: '#00C280', icon: <Database className="w-4 h-4" /> },
+                { label: 'Miss detection', value: 'HTTP 404', color: '#ED2738', icon: <GitBranch className="w-4 h-4" /> },
+              ].map((m, i) => (
+                <div key={i} className="p-3 rounded-xl border text-center" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+                  <div className="flex justify-center mb-1.5" style={{ color: m.color }}>{m.icon}</div>
+                  <p className="text-sm font-bold" style={{ color: m.color }}>{m.value}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{m.label}</p>
+                </div>
+              ))}
+            </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function TechStep({ n, color, label, tag, detail }: { n: number; color: string; label: string; tag: string; detail: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <button onClick={() => setOpen(o => !o)} className="w-full text-left rounded-xl border px-4 py-3 transition-all"
+      style={{ borderColor: open ? `${color}50` : 'var(--border-subtle)', background: open ? `${color}08` : 'var(--surface-card)' }}>
+      <div className="flex items-center gap-3">
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 text-white" style={{ background: color }}>{n}</div>
+        <span className="text-xs font-semibold flex-1" style={{ color: 'var(--text-primary)' }}>{label}</span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono hidden md:inline" style={{ background: `${color}18`, color, border: `1px solid ${color}30` }}>{tag}</span>
+        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'none' }} />
+      </div>
+      {open && (
+        <p className="mt-2 ml-9 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{detail}</p>
+      )}
+    </button>
+  )
+}
+
+function TechMiniStep({ color, label, detail }: { color: string; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ background: color }} />
+      <div>
+        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
+        <p className="text-[9px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+function TechArrow() {
+  return (
+    <div className="flex justify-center py-0.5">
+      <ArrowRight className="w-3.5 h-3.5 rotate-90" style={{ color: 'var(--border-default)' }} />
+    </div>
+  )
+}
+
+
 const CONCEPTS = [
+  {
+    id: 'observatory',
+    icon: <Layers className="w-5 h-5" />,
+    label: 'Chat Observatory Architecture',
+    subtitle: 'How It Works',
+    tag: 'System Design',
+    tagColor: '#6366f1',
+    summary: 'Side-by-side chatbot internals — request flow, cache key generation, S3 operations, and metrics',
+    ready: true,
+  },
   {
     id: 'mechanics',
     icon: <Zap className="w-5 h-5" />,
@@ -653,6 +931,7 @@ const CONCEPTS = [
 
 function renderSection(id: string) {
   switch (id) {
+    case 'observatory': return <ChatObservatoryArchitectureDetail />
     case 'mechanics': return <KVMechanicsDetail />
     case 'multiturn': return <MultiTurnDetail />
     case 'session':   return <SessionResumeDetail />
