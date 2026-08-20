@@ -358,11 +358,11 @@ export default function AIperfBenchmark() {
 
             {/* Info line */}
             <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {vllmStatus === 'running'   && '✅ Llama 3.1 8B ready on :11000'}
-              {vllmStatus === 'starting'  && '⏳ Loading model… ~60s'}
-              {vllmStatus === 'stopping'  && '⏳ Freeing GPU VRAM…'}
+              {vllmStatus === 'running'   && '✅ Llama 3.1 8B ready on :11000  ·  RAG & VSS paused'}
+              {vllmStatus === 'starting'  && '⏳ Freeing GPU from RAG/VSS → loading model… (~90s)'}
+              {vllmStatus === 'stopping'  && '⏳ Stopping vLLM · restoring RAG & VSS…'}
               {vllmStatus === 'stopped'   && '⚠️ Start vLLM before running benchmark'}
-              {vllmStatus === 'error'     && '❌ Failed to start — check logs'}
+              {vllmStatus === 'error'     && '❌ Failed — expand logs below for root cause'}
             </div>
 
             {/* Toggle button */}
