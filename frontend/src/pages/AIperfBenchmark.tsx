@@ -160,6 +160,8 @@ export default function AIperfBenchmark() {
   const [requestsCompleted, setRequestsCompleted] = useState(0)
   const [vllmStatus, setVllmStatus] = useState<'stopped'|'starting'|'running'|'stopping'|'error'>('stopped')
   const [vllmLoading, setVllmLoading] = useState(false)
+  const [vllmLogs, setVllmLogs] = useState<string[]>([])
+  const [showVllmLogs, setShowVllmLogs] = useState(false)
 
   // Poll vLLM status every 3s
   useEffect(() => {
@@ -169,6 +171,7 @@ export default function AIperfBenchmark() {
         if (r.ok) {
           const d = await r.json()
           setVllmStatus(d.status)
+          if (d.recent_logs?.length) setVllmLogs(d.recent_logs)
         }
       } catch { /* backend may be starting */ }
     }
@@ -387,7 +390,36 @@ export default function AIperfBenchmark() {
                 ⚠️ Stop vLLM after benchmarking to restore Ollama GPU performance
               </div>
             )}
-          </div>
+
+            {/* Log viewer toggle — always visible when there are logs */}
+            {vllmLogs.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowVllmLogs(v => !v)}
+                  className="flex items-center gap-1.5 text-xs transition-all duration-150"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <ChevronDown className="w-3 h-3" style={{ transform: showVllmLogs ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                  {showVllmLogs ? 'Hide' : 'View'} startup logs ({vllmLogs.length} lines)
+                </button>
+                {showVllmLogs && (
+                  <div className="mt-2 rounded-lg overflow-y-auto p-2 space-y-0.5"
+                    style={{ background: '#0D0C0C', maxHeight: 180, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                    {vllmLogs.map((line, i) => (
+                      <div key={i} style={{
+                        color: line.toLowerCase().includes('error') ? '#ED2738'
+                             : line.toLowerCase().includes('warn') ? '#FF7600'
+                             : line.includes('INFO') ? '#8BBCC9'
+                             : 'rgba(245,246,248,0.75)',
+                        lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all'
+                      }}>{line || '\u00a0'}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>{/* end vLLM Server card */}
 
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>PRESETS</h3>

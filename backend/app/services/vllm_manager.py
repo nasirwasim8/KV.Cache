@@ -16,12 +16,15 @@ _vllm_process = None
 _vllm_status = "stopped"   # stopped | starting | running | stopping | error
 _vllm_log_lines: list[str] = []
 
-VLLM_PORT = 11000
+VLLM_PORT     = 11000
 VLLM_HEALTH_URL = f"http://localhost:{VLLM_PORT}/health"
-MODEL_PATH = os.path.expanduser("~/models/Llama-3.1-8B-Instruct")
+
+# Absolute paths — never rely on PATH from PM2 environment
+DYNAMO_PYTHON = os.path.expanduser("~/dynamo-env/bin/python3")
+MODEL_PATH    = os.path.expanduser("~/models/Llama-3.1-8B-Instruct")
 
 VLLM_CMD = [
-    "python", "-m", "vllm.entrypoints.openai.api_server",
+    DYNAMO_PYTHON, "-m", "vllm.entrypoints.openai.api_server",
     "--model", MODEL_PATH,
     "--served-model-name", "meta-llama/Llama-3.1-8B-Instruct",
     "--enable-prefix-caching",
@@ -34,11 +37,13 @@ VLLM_CMD = [
 
 def _build_env() -> dict:
     env = os.environ.copy()
-    env["VLLM_USE_V1"] = "0"
+    env["VLLM_USE_V1"] = "0"          # Required for WSL2 (no CUDA UVA)
     dynamo_bin = os.path.expanduser("~/dynamo-env/bin")
-    if os.path.exists(dynamo_bin):
-        env["PATH"] = f"{dynamo_bin}:{env.get('PATH', '')}"
-        env["VIRTUAL_ENV"] = os.path.expanduser("~/dynamo-env")
+    env["PATH"] = f"{dynamo_bin}:{env.get('PATH', '')}"
+    env["VIRTUAL_ENV"] = os.path.expanduser("~/dynamo-env")
+    # Unset PYTHONPATH/PYTHONHOME that might leak from project venv
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
     return env
 
 
@@ -47,14 +52,22 @@ async def start_vllm() -> dict:
     if _vllm_status in ("starting", "running"):
         return {"status": _vllm_status, "message": "vLLM is already running"}
 
+    # Reset error state on retry
+    _vllm_log_lines = []
+
     # Quick health check — maybe it's already up from a previous session
     if await _is_healthy():
         _vllm_status = "running"
         return {"status": "running", "message": "vLLM was already reachable"}
 
+    # Verify python binary exists before trying
+    if not os.path.exists(DYNAMO_PYTHON):
+        _vllm_status = "error"
+        return {"status": "error", "message": f"Python not found at {DYNAMO_PYTHON}"}
+
     _vllm_status = "starting"
-    _vllm_log_lines = []
-    logger.info(f"Starting vLLM: {' '.join(VLLM_CMD)}")
+    logger.info(f"Starting vLLM with {DYNAMO_PYTHON}")
+    logger.info(f"Command: {' '.join(VLLM_CMD)}")
 
     try:
         _vllm_process = await asyncio.create_subprocess_exec(
