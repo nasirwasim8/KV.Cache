@@ -38,7 +38,7 @@ exec python3 -m vllm.entrypoints.openai.api_server \\
   --enforce-eager \\
   --port {VLLM_PORT} \\
   --max-model-len 16384 \\
-  --gpu-memory-utilization 0.98
+  --gpu-memory-utilization 0.92
 """
     with open(LAUNCH_SCRIPT, "w") as f:
         f.write(script)
