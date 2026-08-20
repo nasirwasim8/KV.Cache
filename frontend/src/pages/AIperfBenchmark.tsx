@@ -326,7 +326,7 @@ export default function AIperfBenchmark() {
         {/* ── Config Panel ──────────────────────────────────────────────────── */}
         <div className="space-y-4">
 
-          {/* vLLM Server toggle */}
+          {/* vLLM Server status monitor (start manually via terminal) */}
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -335,87 +335,74 @@ export default function AIperfBenchmark() {
               {/* Status badge */}
               <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full"
                 style={{
-                  background: vllmStatus === 'running'  ? 'rgba(118,185,0,0.15)'
-                            : vllmStatus === 'starting' ? 'rgba(255,118,0,0.15)'
-                            : vllmStatus === 'error'    ? 'rgba(237,39,56,0.15)'
-                            : 'var(--surface-secondary)',
-                  color: vllmStatus === 'running'  ? '#76B900'
-                       : vllmStatus === 'starting' ? '#FF7600'
-                       : vllmStatus === 'error'    ? '#ED2738'
-                       : 'var(--text-muted)',
+                  background: vllmStatus === 'running' ? 'rgba(118,185,0,0.15)' : 'var(--surface-secondary)',
+                  color:      vllmStatus === 'running' ? '#76B900' : 'var(--text-muted)',
                 }}>
                 <span className="w-1.5 h-1.5 rounded-full inline-block"
                   style={{
-                    background: vllmStatus === 'running'  ? '#76B900'
-                              : vllmStatus === 'starting' || vllmStatus === 'stopping' ? '#FF7600'
-                              : vllmStatus === 'error'    ? '#ED2738'
-                              : 'var(--text-muted)',
-                    animation: (vllmStatus === 'starting' || vllmStatus === 'stopping') ? 'pulse 1s ease-in-out infinite' : 'none',
+                    background: vllmStatus === 'running' ? '#76B900' : 'var(--text-muted)',
+                    animation:  vllmStatus === 'running' ? 'pulse 2s ease-in-out infinite' : 'none',
                   }} />
-                {vllmStatus.toUpperCase()}
+                {vllmStatus === 'running' ? 'RUNNING' : 'STOPPED'}
               </span>
             </div>
 
-            {/* Info line */}
+            {/* Status message */}
             <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {vllmStatus === 'running'   && '✅ Llama 3.1 8B ready on :11000  ·  RAG & VSS paused'}
-              {vllmStatus === 'starting'  && '⏳ Freeing GPU from RAG/VSS → loading model… (~90s)'}
-              {vllmStatus === 'stopping'  && '⏳ Stopping vLLM · restoring RAG & VSS…'}
-              {vllmStatus === 'stopped'   && '⚠️ Start vLLM before running benchmark'}
-              {vllmStatus === 'error'     && '❌ Failed — expand logs below for root cause'}
+              {vllmStatus === 'running'
+                ? '✅ Llama 3.1 8B ready on :11000 — run benchmark now'
+                : '⚠️ Start vLLM from WSL terminal, then run benchmark'}
             </div>
 
-            {/* Toggle button */}
-            <button
-              onClick={toggleVllm}
-              disabled={vllmLoading || vllmStatus === 'starting' || vllmStatus === 'stopping'}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm text-white transition-all duration-150 disabled:opacity-50"
-              style={{
-                background: vllmStatus === 'running'
-                  ? '#ED2738'
-                  : 'linear-gradient(135deg, #76B900 0%, #5a8c00 100%)',
-              }}
-            >
-              {vllmLoading || vllmStatus === 'starting' || vllmStatus === 'stopping' ? (
-                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-              ) : vllmStatus === 'running' ? (
-                '⏹ Stop vLLM  (free GPU)'
-              ) : (
-                '▶ Start vLLM Server'
-              )}
-            </button>
+            {/* Terminal command box */}
+            {vllmStatus !== 'running' && (
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>WSL TERMINAL COMMAND</div>
+                <div className="relative rounded-lg overflow-hidden" style={{ background: '#0D0C0C' }}>
+                  <pre className="text-xs p-3 pr-8 overflow-x-auto leading-relaxed"
+                    style={{ fontFamily: 'var(--font-mono)', color: '#76B900', margin: 0 }}>
+{`source ~/dynamo-env/bin/activate
 
-            {vllmStatus === 'running' && (
-              <div className="text-xs px-2 py-1.5 rounded-lg" style={{ background: 'rgba(237,39,56,0.08)', color: '#ED2738' }}>
-                ⚠️ Stop vLLM after benchmarking to restore Ollama GPU performance
+VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
+  vllm.entrypoints.openai.api_server \
+  --model ~/models/Llama-3.1-8B-Instruct \
+  --served-model-name \
+    "meta-llama/Llama-3.1-8B-Instruct" \
+  --enable-prefix-caching \
+  --enforce-eager \
+  --port 11000 \
+  --max-model-len 16384 \
+  --kv-cache-memory=4859239424`}
+                  </pre>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(
+                      `source ~/dynamo-env/bin/activate\n\nVLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server --model ~/models/Llama-3.1-8B-Instruct --served-model-name "meta-llama/Llama-3.1-8B-Instruct" --enable-prefix-caching --enforce-eager --port 11000 --max-model-len 16384 --kv-cache-memory=4859239424`
+                    )}
+                    className="absolute top-2 right-2 p-1.5 rounded transition-all duration-150"
+                    style={{ background: 'rgba(118,185,0,0.15)', color: '#76B900' }}
+                    title="Copy command"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  </button>
+                </div>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  vLLM takes ~60–90s to load. UI auto-detects when ready.
+                </div>
               </div>
             )}
 
-            {/* Log viewer toggle — always visible when there are logs */}
-            {vllmLogs.length > 0 && (
-              <div>
-                <button
-                  onClick={() => setShowVllmLogs(v => !v)}
-                  className="flex items-center gap-1.5 text-xs transition-all duration-150"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <ChevronDown className="w-3 h-3" style={{ transform: showVllmLogs ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                  {showVllmLogs ? 'Hide' : 'View'} startup logs ({vllmLogs.length} lines)
-                </button>
-                {showVllmLogs && (
-                  <div className="mt-2 rounded-lg overflow-y-auto p-2 space-y-0.5"
-                    style={{ background: '#0D0C0C', maxHeight: 180, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-                    {vllmLogs.map((line, i) => (
-                      <div key={i} style={{
-                        color: line.toLowerCase().includes('error') ? '#ED2738'
-                             : line.toLowerCase().includes('warn') ? '#FF7600'
-                             : line.includes('INFO') ? '#8BBCC9'
-                             : 'rgba(245,246,248,0.75)',
-                        lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all'
-                      }}>{line || '\u00a0'}</div>
-                    ))}
-                  </div>
-                )}
+            {/* Running state info */}
+            {vllmStatus === 'running' && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ background: 'rgba(118,185,0,0.08)', border: '1px solid rgba(118,185,0,0.2)' }}>
+                <span style={{ fontSize: 18 }}>🚀</span>
+                <div>
+                  <div className="text-xs font-semibold" style={{ color: '#76B900' }}>Llama 3.1 8B · port :11000</div>
+                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Dynamo + NIXL + DDN Infinia KV Cache active</div>
+                </div>
               </div>
             )}
 
