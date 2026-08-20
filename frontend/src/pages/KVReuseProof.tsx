@@ -125,7 +125,7 @@ export default function KVReuseProof() {
   const [selectedPreset, setSelectedPreset] = useState('legal_contract')
   const [customQuestion, setCustomQuestion] = useState('')
   const [selectedQuestion, setSelectedQuestion] = useState('')
-  const [endpointUrl, setEndpointUrl] = useState('http://localhost:8000')
+  const [endpointUrl, setEndpointUrl] = useState('http://localhost:11000')
   const [model, setModel] = useState('meta-llama/Llama-3.1-8B-Instruct')
   const [showQDropdown, setShowQDropdown] = useState(false)
 

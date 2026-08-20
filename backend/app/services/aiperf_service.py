@@ -184,29 +184,55 @@ async def start_run(cfg: AIperfConfig) -> str:
 
 
 async def _read_output(run_id: str, process, output_dir: str):
-    """Background coroutine: reads subprocess stdout and accumulates lines + partial metrics."""
+    """Background coroutine: reads subprocess stdout and accumulates lines.
+    Watches for the 'JSON Export:' line (NOT Server Metrics JSON Export) to
+    know where to read final results. Also parses 'Benchmark Duration:' timing.
+    """
     run = _runs[run_id]
-    partial_results = {}
+    json_export_path = ""
+    benchmark_duration = 0.0
 
     try:
         async for raw_line in process.stdout:
             line = raw_line.decode("utf-8", errors="replace").rstrip()
             run["output_lines"].append(line)
 
-            # Try to parse metrics from this line
-            metrics = _parse_metric_line(line)
-            if metrics:
-                partial_results.update(metrics)
-                run["partial_metrics"] = partial_results.copy()
+            # Capture the profile JSON path — MUST exclude 'Server Metrics JSON Export:'
+            # which comes later and has a different structure
+            if "JSON Export:" in line and "Server Metrics" not in line:
+                m = re.search(r"JSON Export:\s+(.+profile_export.+\.json)", line)
+                if m:
+                    json_export_path = m.group(1).strip()
+                    run["json_export_path"] = json_export_path
+                    logger.info(f"[{run_id}] Found profile JSON: {json_export_path}")
+
+            # Parse duration
+            m2 = re.search(r"Benchmark Duration:\s+([\d.]+)\s+sec", line)
+            if m2:
+                benchmark_duration = float(m2.group(1))
 
         await process.wait()
         run["return_code"] = process.returncode
 
         if process.returncode == 0:
             run["status"] = "done"
-            # Try to load the full JSON results written by aiperf
-            results = _load_results_json(output_dir, partial_results)
-            run["results"] = asdict(results) if results else partial_results
+            # Fallback: if regex didn't capture the path, glob for it
+            if not json_export_path or not os.path.exists(json_export_path):
+                import glob
+                matches = glob.glob(os.path.join(output_dir, "**", "profile_export_aiperf.json"), recursive=True)
+                if matches:
+                    json_export_path = matches[0]
+                    logger.info(f"[{run_id}] Fallback glob found: {json_export_path}")
+
+            results = _load_results_json(json_export_path, {})
+            if results:
+                if benchmark_duration > 0:
+                    results.benchmark_duration_sec = benchmark_duration
+                run["results"] = asdict(results)
+                logger.info(f"[{run_id}] Results parsed: TTFT avg={results.ttft_avg_ms:.1f}ms")
+            else:
+                run["results"] = {"error": "Could not parse results JSON", "json_path": json_export_path}
+                logger.warning(f"[{run_id}] Could not parse JSON from: {json_export_path}")
         else:
             run["status"] = "error"
     except Exception as e:
@@ -215,35 +241,65 @@ async def _read_output(run_id: str, process, output_dir: str):
         run["output_lines"].append(f"Internal error: {e}")
 
 
-def _load_results_json(output_dir: str, fallback: dict) -> Optional[AIperfResults]:
-    """Try to load aiperf's exported JSON file."""
+def _load_results_json(json_path: str, fallback: dict) -> Optional[AIperfResults]:
+    """Parse the aiperf JSON export using correct field names."""
     try:
-        import glob
-        pattern = os.path.join(output_dir, "**", "*aiperf*.json")
-        files = glob.glob(pattern, recursive=True)
-        if not files:
+        if not json_path or not os.path.exists(json_path):
+            logger.warning(f"JSON file not found: {json_path}")
             return None
-        with open(files[0]) as f:
+        with open(json_path) as f:
             data = json.load(f)
-        r = AIperfResults()
-        # Map known aiperf JSON fields
-        stats = data.get("stats", data)
-        field_map = {
-            "ttft_avg_ms": ["time_to_first_token_ms", "ttft"],
-            "output_throughput_per_user": ["output_token_throughput_per_user"],
-            "request_latency_avg_ms": ["request_latency_ms"],
-            "benchmark_duration_sec": ["benchmark_duration"],
-        }
-        for attr, keys in field_map.items():
-            for k in keys:
-                if k in stats:
-                    try:
-                        setattr(r, attr, float(stats[k]))
-                    except Exception:
-                        pass
-        r.json_path = files[0]
+
+        def _get(key: str, stat: str = "avg") -> float:
+            obj = data.get(key)
+            if obj is None:
+                return 0.0
+            if isinstance(obj, dict):
+                return float(obj.get(stat, 0.0) or 0.0)
+            return float(obj or 0.0)
+
+        # Parse benchmark duration from run_info timestamps
+        duration_sec = 0.0
+        try:
+            from datetime import datetime
+            ri = data.get("run_info", {})
+            start = data.get("start_time", "")
+            end = data.get("end_time", "")
+            if start and end:
+                fmt = "%Y-%m-%dT%H:%M:%S.%f"
+                duration_sec = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
+        except Exception:
+            pass
+
+        r = AIperfResults(
+            # TTFT — field: time_to_first_output_token
+            ttft_avg_ms=_get("time_to_first_output_token", "avg"),
+            ttft_min_ms=_get("time_to_first_output_token", "min"),
+            ttft_max_ms=_get("time_to_first_output_token", "max"),
+            ttft_p50_ms=_get("time_to_first_output_token", "p50"),
+            ttft_p90_ms=_get("time_to_first_output_token", "p90"),
+            ttft_p99_ms=_get("time_to_first_output_token", "p99"),
+            # Request latency — field: http_req_duration
+            request_latency_avg_ms=_get("http_req_duration", "avg"),
+            request_latency_p99_ms=_get("http_req_duration", "p99"),
+            # Throughput
+            e2e_throughput_per_user=_get("e2e_output_token_throughput", "avg"),
+            output_throughput_per_user=_get("e2e_output_token_throughput", "avg"),
+            output_token_throughput=_get("total_token_throughput", "avg"),
+            # Request count & seq lengths
+            output_seq_len=_get("http_req_chunks_received", "avg"),
+            request_count=int(_get("http_req_chunks_received", "count") or 0),
+            benchmark_duration_sec=duration_sec,
+            json_path=json_path,
+        )
+        # Compute request_throughput = count / duration
+        if duration_sec > 0 and r.request_count > 0:
+            r.request_throughput = round(r.request_count / duration_sec, 2)
+
+        logger.info(f"Parsed aiperf JSON: TTFT avg={r.ttft_avg_ms:.1f}ms p50={r.ttft_p50_ms:.1f}ms p99={r.ttft_p99_ms:.1f}ms")
         return r
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to parse aiperf JSON: {e}")
         return None
 
 
