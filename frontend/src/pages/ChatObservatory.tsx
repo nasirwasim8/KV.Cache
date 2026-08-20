@@ -278,9 +278,9 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
         {/* Side-by-side panels */}
         <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--border-subtle)' }}>
 
-          {/* LEFT — No Cache */}
+          {/* LEFT — GPU HBM Only */}
           <div style={{ background: 'var(--surface-card)' }}>
-            <PanelHeader title="No KV Cache" subtitle="Full GPU recompute every turn" isCache={false} source="GPU_COMPUTED" />
+            <PanelHeader title="GPU HBM Only" subtitle="No persistent cache · Full recompute on every session" isCache={false} source="GPU_COMPUTED" />
             <div className="p-3">
               <div className="chat-bubble-ai text-xs leading-relaxed mb-3">{turn.response}</div>
               <div className="grid grid-cols-3 gap-2">
@@ -297,14 +297,34 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                   <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
                 </div>
               </div>
+              {/* Token breakdown — what the GPU actually processed */}
+              {totalTokens > 0 && (
+                <div className="mt-2 rounded-lg px-2 py-1.5" style={{ background: 'rgba(237,39,56,0.04)', border: '1px solid rgba(237,39,56,0.12)' }}>
+                  <div className="text-center mb-1" style={{ fontSize: '8px', color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>What the GPU processed this turn</div>
+                  <div className="flex items-center justify-center gap-1 flex-wrap" style={{ fontSize: '9px' }}>
+                    <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(237,39,56,0.12)', color: '#ED2738', fontWeight: 600 }}>
+                      Context: {savedTokens > 0 ? savedTokens.toLocaleString() : (totalTokens - newTokens > 0 ? (totalTokens - newTokens).toLocaleString() : '—')}
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>+</span>
+                    <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(237,39,56,0.06)', color: '#ED2738' }}>
+                      New: {newTokens > 0 ? newTokens : turn.left?.tokens_sent ?? '—'}
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>=</span>
+                    <span className="px-1.5 py-0.5 rounded font-bold" style={{ background: 'rgba(237,39,56,0.15)', color: '#ED2738' }}>
+                      {totalTokens.toLocaleString()} total
+                    </span>
+                  </div>
+                  <div className="text-center mt-1" style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>GPU recomputed all {totalTokens.toLocaleString()} tokens — every session, every node</div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* RIGHT — Infinia Cache */}
+          {/* RIGHT — DDN Infinia */}
           <div className={isHit ? 'cache-hit-flash' : ''} style={{ background: 'var(--surface-card)' }}>
             <PanelHeader
-              title="DDN Infinia Cache"
-              subtitle={isHit ? 'Served from Infinia Object Store' : isMiss ? 'First compute → stored in Infinia' : 'KV state from object store'}
+              title="WITH DDN INFINIA"
+              subtitle={isHit ? 'Persistent AI Memory · Zero GPU recompute' : isMiss ? 'Persistent AI Memory · Computing & caching' : 'Persistent AI Memory · Served from Infinia'}
               isCache={true} source={turn.right?.source} latency={turn.right?.infinia_latency_ms}
             />
             <div className="p-3">
@@ -337,6 +357,40 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                 </div>
               )}
               {turn.infinia_object && <InfiniaObjectCard obj={turn.infinia_object} />}
+              {/* Infinia-side breakdown — mirrors left for instant visual contrast */}
+              {totalTokens > 0 && (
+                <div className="mt-2 rounded-lg px-2 py-1.5" style={{ background: 'rgba(0,194,128,0.04)', border: '1px solid rgba(0,194,128,0.15)' }}>
+                  <div className="text-center mb-1" style={{ fontSize: '8px', color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    {isHit ? 'What Infinia handled this turn' : 'What was computed & stored'}
+                  </div>
+                  {isHit ? (
+                    <div className="flex items-center justify-center gap-1 flex-wrap" style={{ fontSize: '9px' }}>
+                      <span className="px-1.5 py-0.5 rounded font-bold" style={{ background: 'rgba(0,194,128,0.15)', color: '#00C280' }}>
+                        Infinia served: {savedTokens > 0 ? savedTokens.toLocaleString() : '—'}
+                      </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>·</span>
+                      <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
+                        GPU saw: {newTokens > 0 ? newTokens : '—'} new only
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-1 flex-wrap" style={{ fontSize: '9px' }}>
+                      <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(26,129,175,0.1)', color: '#1A81AF' }}>
+                        Computed: {totalTokens.toLocaleString()} tokens
+                      </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>·</span>
+                      <span className="px-1.5 py-0.5 rounded font-bold" style={{ background: 'rgba(0,194,128,0.12)', color: '#00C280' }}>
+                        ✓ Stored to Infinia
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-center mt-1" style={{ fontSize: '8px', color: '#00C280' }}>
+                    {isHit
+                      ? `${savedTokens > 0 ? savedTokens.toLocaleString() : totalTokens.toLocaleString()} tokens never touched the GPU`
+                      : 'Every future hit skips this compute entirely'}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -868,10 +922,10 @@ export default function ChatObservatory() {
       {/* Panel Column Headers */}
       <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--border-subtle)' }}>
         <div className="p-3 text-center font-semibold text-sm" style={{ background: 'rgba(237,39,56,0.04)', color: '#ED2738' }}>
-          ❌ WITHOUT KV CACHE<br /><span className="text-xs font-normal text-neutral-500">Full context recomputed every turn</span>
+          🖥️ GPU HBM ONLY<br /><span className="text-xs font-normal text-neutral-500">No persistent cache · Full recompute on every session</span>
         </div>
         <div className="p-3 text-center font-semibold text-sm" style={{ background: 'rgba(0,194,128,0.04)', color: '#00C280' }}>
-          ✅ WITH DDN INFINIA KV CACHE<br /><span className="text-xs font-normal text-neutral-500">KV state retrieved from Infinia Object Store</span>
+          ✅ WITH DDN INFINIA<br /><span className="text-xs font-normal text-neutral-500">Persistent AI Memory · Zero GPU recompute</span>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import ChatObservatory from './pages/ChatObservatory'
 import PrefixMultiplier from './pages/PrefixMultiplier'
 import ROICalculator from './pages/ROICalculator'
 import About from './pages/About'
+import TokenAnimation from './pages/TokenAnimation'
 
 const TABS = [
   { id: 'configuration', label: 'Configuration',      icon: 'settings'   },
@@ -32,6 +33,18 @@ export default function App() {
   }
 
   const headerActiveTab = activeTab === 'observatory' || activeTab === 'prefix' ? 'demo' : activeTab
+
+  // Full-screen animation mode — no chrome
+  if (activeTab === 'animate') return (
+    <div onDoubleClick={() => setActiveTab('observatory')}>
+      <TokenAnimation />
+      <div style={{ position:'fixed', top:12, right:16, fontSize:10, color:'rgba(255,255,255,0.2)',
+        fontFamily:'monospace', zIndex:9999, userSelect:'none', cursor:'pointer' }}
+        onClick={() => setActiveTab('observatory')}>
+        ✕ exit
+      </div>
+    </div>
+  )
 
   return (
     <ThemeProvider>
@@ -60,6 +73,11 @@ export default function App() {
             </span>
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
               llama3.2:3b via Ollama · RTX 5090 GPU
+              {' · '}
+              <span style={{ cursor:'pointer', textDecoration:'underline', opacity:0.5 }}
+                onClick={() => setActiveTab('animate')}>
+                ▶ token animation
+              </span>
             </span>
           </div>
         </footer>
