@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     health_router, config_router, chat_router, prefix_router, cache_router,
-    gpu_direct_router
+    gpu_direct_router, aiperf_router, kv_reuse_router
 )
 
 app = FastAPI(
@@ -35,6 +35,8 @@ app.include_router(chat_router,        prefix="/api")
 app.include_router(prefix_router,      prefix="/api")
 app.include_router(cache_router,       prefix="/api")
 app.include_router(gpu_direct_router,  prefix="/api")
+app.include_router(aiperf_router,      prefix="/api")
+app.include_router(kv_reuse_router,    prefix="/api")
 
 
 @app.get("/")

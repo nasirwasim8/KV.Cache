@@ -1,13 +1,21 @@
 """
 DDN KV Cache Observatory - API Routes
 All endpoints for chat observatory, prefix multiplier, cache stats, and config.
+Phase 4: AIperf live benchmarking + KV Cache Reuse proof.
 """
 import time
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+
+from app.services.aiperf_service import (
+    AIperfConfig, start_run, stop_run, stream_run, get_run, list_runs
+)
+from app.services.kv_reuse_service import (
+    stream_reuse_comparison, PRESET_DOCUMENTS
+)
 
 try:
     import psutil
@@ -27,6 +35,8 @@ chat_router         = APIRouter(prefix="/chat",        tags=["Chat"])
 prefix_router       = APIRouter(prefix="/prefix",      tags=["Prefix"])
 cache_router        = APIRouter(prefix="/cache",       tags=["Cache"])
 gpu_direct_router   = APIRouter(prefix="/gpu-direct",  tags=["GPU Direct"])
+aiperf_router       = APIRouter(prefix="/aiperf",      tags=["AIperf"])
+kv_reuse_router     = APIRouter(prefix="/kv-reuse",    tags=["KV Reuse"])
 
 
 # ── In-memory session store ─────────────────────────────────────────────────
@@ -2913,3 +2923,134 @@ async def purge_infinia_cache():
     except Exception as e:
         logger.error(f"Purge error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — AIperf Live Benchmark Routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AIperfRunRequest(BaseModel):
+    model: str = "meta-llama/Llama-3.1-8B-Instruct"
+    tokenizer: str = ""
+    endpoint_url: str = "http://localhost:8000"
+    endpoint_type: str = "chat"
+    context_tokens: int = 16000
+    output_tokens_mean: int = 100
+    output_tokens_stddev: int = 0
+    concurrency: int = 1
+    request_count: int = 50
+    warmup_count: int = 2
+    streaming: bool = True
+
+
+@aiperf_router.post("/run")
+async def aiperf_start_run(req: AIperfRunRequest):
+    """Start a live aiperf benchmark run. Returns run_id immediately."""
+    cfg = AIperfConfig(
+        model=req.model,
+        tokenizer=req.tokenizer,
+        endpoint_url=req.endpoint_url,
+        endpoint_type=req.endpoint_type,
+        context_tokens=req.context_tokens,
+        output_tokens_mean=req.output_tokens_mean,
+        output_tokens_stddev=req.output_tokens_stddev,
+        concurrency=req.concurrency,
+        request_count=req.request_count,
+        warmup_count=req.warmup_count,
+        streaming=req.streaming,
+    )
+    run_id = await start_run(cfg)
+    return {"run_id": run_id, "status": "starting"}
+
+
+@aiperf_router.get("/stream/{run_id}")
+async def aiperf_stream(run_id: str):
+    """SSE stream of live aiperf output and metrics for a given run."""
+    return StreamingResponse(
+        stream_run(run_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@aiperf_router.get("/results/{run_id}")
+async def aiperf_get_results(run_id: str):
+    """Get final results and full log for a completed run."""
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return {
+        "run_id": run_id,
+        "status": run["status"],
+        "results": run.get("results"),
+        "output_lines": run.get("output_lines", []),
+        "command": run.get("command", ""),
+        "config": run.get("config", {}),
+        "duration_sec": round(time.time() - run["started_at"], 1) if run.get("started_at") else 0,
+    }
+
+
+@aiperf_router.delete("/run/{run_id}")
+async def aiperf_stop_run(run_id: str):
+    """Stop a running aiperf benchmark."""
+    ok = await stop_run(run_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found or already stopped")
+    return {"run_id": run_id, "status": "stopped"}
+
+
+@aiperf_router.get("/runs")
+async def aiperf_list_runs():
+    """List all benchmark runs (history)."""
+    return {"runs": list_runs()}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — KV Cache Reuse Proof Routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@kv_reuse_router.get("/presets")
+async def kv_reuse_presets():
+    """Return available preset documents for the reuse demo."""
+    return {
+        "presets": [
+            {
+                "key": key,
+                "label": doc["label"],
+                "icon": doc["icon"],
+                "sample_questions": doc["sample_questions"],
+            }
+            for key, doc in PRESET_DOCUMENTS.items()
+        ]
+    }
+
+
+@kv_reuse_router.get("/compare")
+async def kv_reuse_compare(
+    endpoint_url: str = Query("http://localhost:8000"),
+    model: str = Query("meta-llama/Llama-3.1-8B-Instruct"),
+    preset: str = Query("legal_contract"),
+    question: str = Query(""),
+):
+    """
+    SSE stream for cold-vs-warm KV cache comparison.
+    Runs the same long-context prompt twice and measures TTFT delta.
+    """
+    return StreamingResponse(
+        stream_reuse_comparison(
+            endpoint_url=endpoint_url,
+            model=model,
+            preset_key=preset,
+            custom_question=question,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

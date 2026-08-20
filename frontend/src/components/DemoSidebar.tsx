@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator } from 'lucide-react'
+import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 interface Tab { id: string; label: string; icon: string }
@@ -11,6 +11,8 @@ const iconMap: Record<string, React.ReactNode> = {
   'bar-chart':  <BarChart3     className="w-5 h-5" />,
   calculator:   <Calculator    className="w-5 h-5" />,
   info:         <Info          className="w-5 h-5" />,
+  activity:     <Activity      className="w-5 h-5" />,
+  'refresh-cw': <RefreshCw     className="w-5 h-5" />,
 }
 
 export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSidebarProps) {
