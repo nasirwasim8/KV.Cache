@@ -1,147 +1,105 @@
 """
 DDN KV Cache Observatory — vLLM Server Manager
-Manages the vLLM subprocess: start, stop, health polling.
-
-Root cause of GPU OOM: infinia-rag (port 8000) + ddn-vss (port 8001) hold ~8 GB VRAM
-for their embedding models. With Llama 3.1 8B needing 15 GB, there's -2.33 GB for KV
-cache. Fix: pause those PM2 services on vLLM start, resume on stop.
+Uses PM2 to manage vLLM as a named process (ddn-vllm), solving the
+subprocess detachment issue when launched from uvicorn/PM2 context.
 """
 import asyncio
 import os
 import logging
 import urllib.request
-import urllib.error
 
 logger = logging.getLogger(__name__)
 
 # ── State ─────────────────────────────────────────────────────────────────────
-_vllm_process = None
 _vllm_status = "stopped"   # stopped | starting | running | stopping | error
 _vllm_log_lines: list[str] = []
 
 VLLM_PORT       = 11000
 VLLM_HEALTH_URL = f"http://localhost:{VLLM_PORT}/health"
+MODEL_PATH      = os.path.expanduser("~/models/Llama-3.1-8B-Instruct")
+LAUNCH_SCRIPT   = "/tmp/ddn_start_vllm.sh"
 
-# Absolute paths — never rely on PATH from PM2 environment
-DYNAMO_PYTHON = os.path.expanduser("~/dynamo-env/bin/python3")
-MODEL_PATH    = os.path.expanduser("~/models/Llama-3.1-8B-Instruct")
-
-VLLM_CMD = [
-    DYNAMO_PYTHON, "-m", "vllm.entrypoints.openai.api_server",
-    "--model", MODEL_PATH,
-    "--served-model-name", "meta-llama/Llama-3.1-8B-Instruct",
-    "--enable-prefix-caching",
-    "--enforce-eager",
-    "--port", str(VLLM_PORT),
-    "--max-model-len", "16384",
-    "--gpu-memory-utilization", "0.98",   # High utilization — we free competing services first
-]
+PM2_BIN         = "/usr/bin/pm2"
+PM2_VLLM_NAME   = "ddn-vllm"
 
 # PM2 services that hold GPU VRAM and must be paused before vLLM can load
-# infinia-rag-backend (port 8000) + ddn-vss-backend (port 8001) together ~8 GB VRAM
 GPU_COMPETING_SERVICES = ["infinia-rag-backend", "ddn-vss-backend"]
 
 
-def _build_env() -> dict:
-    env = os.environ.copy()
-    dynamo_bin = os.path.expanduser("~/dynamo-env/bin")
-    env["PATH"] = f"{dynamo_bin}:{env.get('PATH', '')}"
-    env["VIRTUAL_ENV"] = os.path.expanduser("~/dynamo-env")
-    # Unset PYTHONPATH/PYTHONHOME that might leak from the project venv into dynamo-env
-    env.pop("PYTHONPATH", None)
-    env.pop("PYTHONHOME", None)
-    return env
+def _write_launch_script() -> None:
+    """Write a self-contained bash script that activates dynamo-env then launches vLLM."""
+    model = os.path.expanduser("~/models/Llama-3.1-8B-Instruct")
+    script = f"""#!/bin/bash
+source /home/nwasim/dynamo-env/bin/activate
+exec python3 -m vllm.entrypoints.openai.api_server \\
+  --model {model} \\
+  --served-model-name meta-llama/Llama-3.1-8B-Instruct \\
+  --enable-prefix-caching \\
+  --enforce-eager \\
+  --port {VLLM_PORT} \\
+  --max-model-len 16384 \\
+  --gpu-memory-utilization 0.98
+"""
+    with open(LAUNCH_SCRIPT, "w") as f:
+        f.write(script)
+    os.chmod(LAUNCH_SCRIPT, 0o755)
+    logger.info(f"Launch script written to {LAUNCH_SCRIPT}")
 
 
-async def _pm2(action: str, *services: str) -> None:
-    """Run pm2 stop/start/restart on one or more named services."""
-    for svc in services:
-        try:
-            p = await asyncio.create_subprocess_exec(
-                "pm2", action, svc,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await p.wait()
-            logger.info(f"pm2 {action} {svc} → exit {p.returncode}")
-        except Exception as e:
-            logger.warning(f"pm2 {action} {svc} failed: {e}")
+async def _pm2(action: str, *args: str) -> int:
+    """Run a pm2 command; return exit code."""
+    cmd = [PM2_BIN, action] + list(args)
+    try:
+        p = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await p.wait()
+        logger.info(f"pm2 {action} {' '.join(args)} → {p.returncode}")
+        return p.returncode or 0
+    except Exception as e:
+        logger.warning(f"pm2 {action} error: {e}")
+        return 1
+
+
+async def _pm2_vllm_running() -> bool:
+    """Check if the ddn-vllm PM2 process is in online status."""
+    try:
+        p = await asyncio.create_subprocess_exec(
+            PM2_BIN, "show", PM2_VLLM_NAME,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await p.communicate()
+        return b"online" in stdout
+    except Exception:
+        return False
 
 
 async def start_vllm() -> dict:
-    global _vllm_process, _vllm_status, _vllm_log_lines
+    global _vllm_status, _vllm_log_lines
     if _vllm_status in ("starting", "running"):
-        return {"status": _vllm_status, "message": "vLLM is already running"}
+        return {"status": _vllm_status, "message": "vLLM is already starting/running"}
 
-    # Reset log buffer on every new start attempt
-    _vllm_log_lines = []
+    _vllm_log_lines = ["⏳ Checking if vLLM already reachable…"]
 
-    # Quick health check — maybe vLLM is already up from a previous session
     if await _is_healthy():
         _vllm_status = "running"
         return {"status": "running", "message": "vLLM was already reachable on :11000"}
 
-    # Verify python binary exists
-    if not os.path.exists(DYNAMO_PYTHON):
-        _vllm_status = "error"
-        return {"status": "error", "message": f"Python not found at {DYNAMO_PYTHON}"}
-
     _vllm_status = "starting"
-    logger.info(f"Pausing GPU-competing services: {GPU_COMPETING_SERVICES}")
-    _vllm_log_lines.append("⏸ Pausing RAG + VSS backends to free GPU VRAM…")
 
-    # Free GPU VRAM from competing services
-    await _pm2("stop", *GPU_COMPETING_SERVICES)
-    await asyncio.sleep(3)   # Allow VRAM to be released
-    _vllm_log_lines.append("✅ GPU VRAM freed — starting vLLM…")
+    # Step 1: Stop any stale ddn-vllm PM2 process from a previous session
+    _vllm_log_lines.append("🧹 Removing stale ddn-vllm from PM2 (if any)…")
+    await _pm2("delete", PM2_VLLM_NAME)
 
-    logger.info(f"Starting vLLM: {DYNAMO_PYTHON}")
-    logger.info(f"Command: {' '.join(VLLM_CMD)}")
-
-    try:
-        _vllm_process = await asyncio.create_subprocess_exec(
-            *VLLM_CMD,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            env=_build_env(),
-        )
-        asyncio.create_task(_watch_startup())
-        asyncio.create_task(_drain_output())
-        return {
-            "status": "starting",
-            "pid": _vllm_process.pid,
-            "message": "vLLM starting — model loading (~60–90s). RAG & VSS paused.",
-        }
-    except FileNotFoundError:
-        _vllm_status = "error"
-        await _pm2("start", *GPU_COMPETING_SERVICES)   # Restore on failure
-        return {"status": "error", "message": "python / vLLM not found. Is dynamo-env installed?"}
-    except Exception as e:
-        _vllm_status = "error"
-        await _pm2("start", *GPU_COMPETING_SERVICES)
-        return {"status": "error", "message": str(e)}
-
-
-async def stop_vllm() -> dict:
-    global _vllm_process, _vllm_status
-    _vllm_status = "stopping"
-    logger.info("Stopping vLLM server…")
-
-    # Graceful terminate → force kill
-    if _vllm_process and _vllm_process.returncode is None:
-        try:
-            _vllm_process.terminate()
-            await asyncio.sleep(3)
-            if _vllm_process.returncode is None:
-                _vllm_process.kill()
-                await _vllm_process.wait()
-        except Exception as e:
-            logger.warning(f"vLLM terminate error: {e}")
-
-    # Belt-and-suspenders: kill any lingering vLLM processes
+    # Step 2: Kill any lingering vLLM processes holding VRAM
+    _vllm_log_lines.append("🧹 Killing lingering vLLM processes…")
     try:
         p = await asyncio.create_subprocess_shell(
-            "pkill -f 'vllm.entrypoints.openai' 2>/dev/null; pkill -f 'VLLM::EngineCore' 2>/dev/null; true",
+            "pkill -9 -f 'vllm.entrypoints.openai' 2>/dev/null; "
+            "pkill -9 -f 'EngineCore' 2>/dev/null; sleep 2; true",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -149,33 +107,82 @@ async def stop_vllm() -> dict:
     except Exception:
         pass
 
-    await asyncio.sleep(2)
+    # Step 3: Pause GPU-competing services
+    _vllm_log_lines.append(f"⏸ Stopping {', '.join(GPU_COMPETING_SERVICES)} to free VRAM…")
+    for svc in GPU_COMPETING_SERVICES:
+        await _pm2("stop", svc)
+    await asyncio.sleep(8)   # Allow full VRAM release
+    _vllm_log_lines.append("✅ VRAM freed — writing launch script…")
+
+    # Step 4: Write the launch script
+    _write_launch_script()
+
+    # Step 5: Register and start via PM2
+    _vllm_log_lines.append(f"🚀 Starting via PM2 as '{PM2_VLLM_NAME}'…")
+    rc = await _pm2(
+        "start", LAUNCH_SCRIPT,
+        "--name", PM2_VLLM_NAME,
+        "--no-autorestart",   # Don't auto-restart on crash during demo
+        "--interpreter", "bash",
+    )
+    if rc != 0:
+        _vllm_status = "error"
+        _vllm_log_lines.append(f"❌ pm2 start failed (exit {rc})")
+        await _pm2("start", *GPU_COMPETING_SERVICES)
+        return {"status": "error", "message": f"pm2 start failed (exit {rc})"}
+
+    _vllm_log_lines.append(f"✅ PM2 process '{PM2_VLLM_NAME}' started — health polling…")
+    asyncio.create_task(_watch_startup())
+    asyncio.create_task(_tail_pm2_logs())
+
+    return {
+        "status": "starting",
+        "message": f"vLLM starting via PM2 as '{PM2_VLLM_NAME}' (~90s)",
+    }
+
+
+async def stop_vllm() -> dict:
+    global _vllm_status
+    _vllm_status = "stopping"
+
+    await _pm2("stop", PM2_VLLM_NAME)
+    await _pm2("delete", PM2_VLLM_NAME)
+
+    # Kill any stray processes
+    try:
+        p = await asyncio.create_subprocess_shell(
+            "pkill -9 -f 'vllm.entrypoints.openai' 2>/dev/null; "
+            "pkill -9 -f 'EngineCore' 2>/dev/null; sleep 2; true",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await p.wait()
+    except Exception:
+        pass
+
+    await asyncio.sleep(3)
 
     # Restore GPU-competing services
-    logger.info(f"Restoring GPU-competing services: {GPU_COMPETING_SERVICES}")
-    await _pm2("start", *GPU_COMPETING_SERVICES)
+    for svc in GPU_COMPETING_SERVICES:
+        await _pm2("start", svc)
 
-    _vllm_process = None
     _vllm_status = "stopped"
-    logger.info("vLLM stopped. GPU freed. RAG + VSS backends restored.")
-    return {"status": "stopped", "message": "vLLM stopped — GPU freed. RAG & VSS backends restored."}
+    logger.info("vLLM stopped. GPU freed. RAG + VSS restored.")
+    return {"status": "stopped", "message": "vLLM stopped — GPU freed. RAG & VSS restored."}
 
 
 def get_status() -> dict:
-    pid = _vllm_process.pid if _vllm_process and _vllm_process.returncode is None else None
     return {
         "status": _vllm_status,
-        "pid": pid,
         "port": VLLM_PORT,
         "model": "meta-llama/Llama-3.1-8B-Instruct",
-        "recent_logs": _vllm_log_lines[-50:],   # Return last 50 lines for debugging
+        "recent_logs": _vllm_log_lines[-50:],
     }
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
 async def _is_healthy() -> bool:
-    """Non-blocking health check using stdlib urllib in a thread executor."""
     def _check():
         try:
             with urllib.request.urlopen(VLLM_HEALTH_URL, timeout=2) as r:
@@ -187,32 +194,61 @@ async def _is_healthy() -> bool:
 
 
 async def _watch_startup():
-    """Poll /health until vLLM is ready or times out (150s — model load can take 90s)."""
+    """Poll /health until vLLM is ready or times out (150s)."""
     global _vllm_status
     for i in range(150):
         await asyncio.sleep(1)
-        if _vllm_process is None or _vllm_process.returncode is not None:
-            _vllm_status = "error"
-            logger.error("vLLM process exited during startup — check logs")
-            return
+        # Check if PM2 process is still alive
+        if i % 10 == 0 and i > 0:
+            alive = await _pm2_vllm_running()
+            if not alive:
+                _vllm_status = "error"
+                _vllm_log_lines.append("❌ PM2 process exited — check pm2 logs ddn-vllm")
+                logger.error("vLLM PM2 process died during startup")
+                return
         if await _is_healthy():
             _vllm_status = "running"
-            logger.info(f"vLLM is ready on port {VLLM_PORT} (took {i+1}s)")
+            _vllm_log_lines.append(f"✅ vLLM READY on :{VLLM_PORT} after {i+1}s")
+            logger.info(f"vLLM ready on :{VLLM_PORT} in {i+1}s")
             return
     _vllm_status = "error"
-    logger.error("vLLM health check timed out after 150s")
+    _vllm_log_lines.append("❌ Timeout (150s) — run: pm2 logs ddn-vllm")
+    logger.error("vLLM startup timed out after 150s")
 
 
-async def _drain_output():
-    """Read stdout so the pipe buffer doesn't block the process."""
+async def _tail_pm2_logs():
+    """Read PM2 stdout log for ddn-vllm and feed into _vllm_log_lines."""
     global _vllm_log_lines
-    if not _vllm_process or not _vllm_process.stdout:
-        return
-    try:
-        async for raw in _vllm_process.stdout:
-            line = raw.decode("utf-8", errors="replace").rstrip()
-            _vllm_log_lines.append(line)
-            if len(_vllm_log_lines) > 300:
-                _vllm_log_lines = _vllm_log_lines[-300:]
-    except Exception:
-        pass
+    # PM2 stores logs in ~/.pm2/logs/ddn-vllm-out.log
+    log_path = os.path.expanduser("~/.pm2/logs/ddn-vllm-out.log")
+    err_path = os.path.expanduser("~/.pm2/logs/ddn-vllm-error.log")
+
+    # Wait for log file to appear
+    for _ in range(30):
+        await asyncio.sleep(1)
+        if os.path.exists(log_path) or os.path.exists(err_path):
+            break
+
+    async def tail_file(path):
+        try:
+            with open(path, "r") as f:
+                f.seek(0, 2)  # Start from current end
+                while _vllm_status == "starting":
+                    line = f.readline()
+                    if line:
+                        line = line.rstrip()
+                        _vllm_log_lines.append(line)
+                        if len(_vllm_log_lines) > 300:
+                            _vllm_log_lines = _vllm_log_lines[-300:]
+                    else:
+                        await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.debug(f"tail_file({path}): {e}")
+
+    tasks = []
+    if os.path.exists(log_path):
+        tasks.append(asyncio.create_task(tail_file(log_path)))
+    if os.path.exists(err_path):
+        tasks.append(asyncio.create_task(tail_file(err_path)))
+    if tasks:
+        await asyncio.gather(*tasks)
