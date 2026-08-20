@@ -158,6 +158,39 @@ export default function AIperfBenchmark() {
   const [showComparison, setShowComparison] = useState(false)
   const [showEnv, setShowEnv] = useState(false)
   const [requestsCompleted, setRequestsCompleted] = useState(0)
+  const [vllmStatus, setVllmStatus] = useState<'stopped'|'starting'|'running'|'stopping'|'error'>('stopped')
+  const [vllmLoading, setVllmLoading] = useState(false)
+
+  // Poll vLLM status every 3s
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch('http://localhost:8002/api/vllm/status')
+        if (r.ok) {
+          const d = await r.json()
+          setVllmStatus(d.status)
+        }
+      } catch { /* backend may be starting */ }
+    }
+    poll()
+    const id = setInterval(poll, 3000)
+    return () => clearInterval(id)
+  }, [])
+
+  const toggleVllm = async () => {
+    setVllmLoading(true)
+    try {
+      const action = vllmStatus === 'running' ? 'stop' : 'start'
+      const r = await fetch(`http://localhost:8002/api/vllm/${action}`, { method: 'POST' })
+      const d = await r.json()
+      setVllmStatus(d.status)
+    } catch (e) {
+      console.error('vLLM toggle failed:', e)
+    } finally {
+      setVllmLoading(false)
+    }
+  }
+
 
   const terminalRef = useRef<HTMLDivElement>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -289,6 +322,73 @@ export default function AIperfBenchmark() {
 
         {/* ── Config Panel ──────────────────────────────────────────────────── */}
         <div className="space-y-4">
+
+          {/* vLLM Server toggle */}
+          <div className="card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                vLLM SERVER
+              </h3>
+              {/* Status badge */}
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full"
+                style={{
+                  background: vllmStatus === 'running'  ? 'rgba(118,185,0,0.15)'
+                            : vllmStatus === 'starting' ? 'rgba(255,118,0,0.15)'
+                            : vllmStatus === 'error'    ? 'rgba(237,39,56,0.15)'
+                            : 'var(--surface-secondary)',
+                  color: vllmStatus === 'running'  ? '#76B900'
+                       : vllmStatus === 'starting' ? '#FF7600'
+                       : vllmStatus === 'error'    ? '#ED2738'
+                       : 'var(--text-muted)',
+                }}>
+                <span className="w-1.5 h-1.5 rounded-full inline-block"
+                  style={{
+                    background: vllmStatus === 'running'  ? '#76B900'
+                              : vllmStatus === 'starting' || vllmStatus === 'stopping' ? '#FF7600'
+                              : vllmStatus === 'error'    ? '#ED2738'
+                              : 'var(--text-muted)',
+                    animation: (vllmStatus === 'starting' || vllmStatus === 'stopping') ? 'pulse 1s ease-in-out infinite' : 'none',
+                  }} />
+                {vllmStatus.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Info line */}
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {vllmStatus === 'running'   && '✅ Llama 3.1 8B ready on :11000'}
+              {vllmStatus === 'starting'  && '⏳ Loading model… ~60s'}
+              {vllmStatus === 'stopping'  && '⏳ Freeing GPU VRAM…'}
+              {vllmStatus === 'stopped'   && '⚠️ Start vLLM before running benchmark'}
+              {vllmStatus === 'error'     && '❌ Failed to start — check logs'}
+            </div>
+
+            {/* Toggle button */}
+            <button
+              onClick={toggleVllm}
+              disabled={vllmLoading || vllmStatus === 'starting' || vllmStatus === 'stopping'}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm text-white transition-all duration-150 disabled:opacity-50"
+              style={{
+                background: vllmStatus === 'running'
+                  ? '#ED2738'
+                  : 'linear-gradient(135deg, #76B900 0%, #5a8c00 100%)',
+              }}
+            >
+              {vllmLoading || vllmStatus === 'starting' || vllmStatus === 'stopping' ? (
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+              ) : vllmStatus === 'running' ? (
+                '⏹ Stop vLLM  (free GPU)'
+              ) : (
+                '▶ Start vLLM Server'
+              )}
+            </button>
+
+            {vllmStatus === 'running' && (
+              <div className="text-xs px-2 py-1.5 rounded-lg" style={{ background: 'rgba(237,39,56,0.08)', color: '#ED2738' }}>
+                ⚠️ Stop vLLM after benchmarking to restore Ollama GPU performance
+              </div>
+            )}
+          </div>
+
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>PRESETS</h3>
             <div className="grid grid-cols-1 gap-2">

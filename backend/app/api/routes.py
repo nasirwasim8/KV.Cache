@@ -16,6 +16,7 @@ from app.services.aiperf_service import (
 from app.services.kv_reuse_service import (
     stream_reuse_comparison, PRESET_DOCUMENTS
 )
+from app.services import vllm_manager
 
 try:
     import psutil
@@ -37,6 +38,7 @@ cache_router        = APIRouter(prefix="/cache",       tags=["Cache"])
 gpu_direct_router   = APIRouter(prefix="/gpu-direct",  tags=["GPU Direct"])
 aiperf_router       = APIRouter(prefix="/aiperf",      tags=["AIperf"])
 kv_reuse_router     = APIRouter(prefix="/kv-reuse",    tags=["KV Reuse"])
+vllm_router         = APIRouter(prefix="/vllm",        tags=["vLLM Manager"])
 
 
 # ── In-memory session store ─────────────────────────────────────────────────
@@ -3054,3 +3056,23 @@ async def kv_reuse_compare(
             "Connection": "keep-alive",
         },
     )
+
+
+# ── vLLM Server Manager ────────────────────────────────────────────────────────
+
+@vllm_router.get("/status")
+async def vllm_status():
+    """Current vLLM server status: stopped | starting | running | stopping | error"""
+    return vllm_manager.get_status()
+
+
+@vllm_router.post("/start")
+async def vllm_start():
+    """Start the vLLM inference server (frees Ollama GPU when done; takes ~60s to load)."""
+    return await vllm_manager.start_vllm()
+
+
+@vllm_router.post("/stop")
+async def vllm_stop():
+    """Stop the vLLM server and free GPU VRAM for Ollama / Chat Observatory."""
+    return await vllm_manager.stop_vllm()
