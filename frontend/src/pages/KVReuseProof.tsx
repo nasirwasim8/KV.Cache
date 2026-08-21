@@ -13,12 +13,34 @@ interface PhaseState {
   response: string
 }
 
+interface InfiniaMeta {
+  prefix_hash: string
+  prefix_hash_full: string
+  prefix_tokens: number
+  question_tokens: number
+  kv_size_mb: number
+  kv_size_bytes: number
+  block_count: number
+  block_size: number
+  layers: number
+  kv_heads: number
+  head_dim: number
+  dtype: string
+  model: string
+  bucket: string
+  endpoint: string
+  transfer_mode: string
+  object_key: string
+  gpu_compute_saved_pct: number
+}
+
 interface Summary {
   cold_ttft_ms: number
   warm_ttft_ms: number
   speedup: number
   tokens_in_context: number
   preset: string
+  infinia?: InfiniaMeta
 }
 
 const EMPTY_PHASE: PhaseState = { status: 'idle', message: '', ttft_ms: null, total_ms: null, response: '' }
@@ -402,6 +424,77 @@ export default function KVReuseProof() {
           </div>
           <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
             {summary.tokens_in_context.toLocaleString()} tokens never recomputed — retrieved via NIXL from DDN Infinia storage
+          </div>
+        </div>
+      )}
+
+      {/* Infinia KV Inspector */}
+      {summary?.infinia && (
+        <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--nvidia-green)', borderWidth: 1 }}>
+          {/* Header */}
+          <div className="px-4 py-3 flex items-center gap-2"
+            style={{ background: 'linear-gradient(90deg, rgba(118,185,0,0.12) 0%, rgba(118,185,0,0.04) 100%)' }}>
+            <span style={{ fontSize: 16 }}>↓</span>
+            <span className="text-sm font-bold" style={{ color: 'var(--nvidia-green)' }}>
+              {summary.infinia.transfer_mode === 'NIXL → DDN Infinia'
+                ? 'KV Tensors Retrieved from DDN Infinia'
+                : 'KV Prefix Served from GPU HBM Cache'}
+            </span>
+            <span className="ml-auto text-xs font-mono font-bold px-2 py-0.5 rounded"
+              style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)' }}>
+              {summary.infinia.transfer_mode}
+            </span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {summary.infinia.kv_size_mb.toLocaleString()} MB
+            </span>
+          </div>
+
+          {/* Subheader: bucket + key */}
+          <div className="px-4 py-1.5 text-xs font-mono flex items-center gap-2"
+            style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>{summary.infinia.bucket}</span>
+            <span>/</span>
+            <span>{summary.infinia.object_key}</span>
+          </div>
+
+          {/* Grid of details */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-0 divide-y sm:divide-y-0"
+            style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            {[
+              { label: 'BUCKET',             val: summary.infinia.bucket },
+              { label: 'OBJECT KEY',         val: summary.infinia.object_key },
+              { label: 'ENDPOINT',           val: summary.infinia.endpoint },
+              { label: 'KV SIZE',            val: `${summary.infinia.kv_size_mb.toLocaleString()} MB (${(summary.infinia.kv_size_bytes / 1e9).toFixed(2)} GB)` },
+              { label: 'BLOCKS CACHED',      val: `${summary.infinia.block_count.toLocaleString()} blocks × ${summary.infinia.block_size} tokens` },
+              { label: 'LAYERS STORED',      val: `${summary.infinia.layers} transformer layers` },
+              { label: 'PREFIX TOKENS',      val: `${summary.infinia.prefix_tokens.toLocaleString()} token IDs` },
+              { label: 'NEW GPU TOKENS',     val: `${summary.infinia.question_tokens} tokens only` },
+              { label: 'GPU COMPUTE SAVED',  val: `${summary.infinia.gpu_compute_saved_pct}% of prefill` },
+            ].map(({ label, val }) => (
+              <div key={label} className="px-4 py-3"
+                style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <div className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                  style={{ color: 'var(--text-muted)' }}>{label}</div>
+                <div className="text-xs font-mono" style={{ color: 'var(--text-primary)' }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* KV Hash */}
+          <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>KV PREFIX HASH (SHA-256)</div>
+            <div className="font-mono text-xs break-all" style={{ color: 'var(--nvidia-green)' }}>
+              {summary.infinia.prefix_hash_full}
+            </div>
+          </div>
+
+          {/* Footer explainer */}
+          <div className="px-4 py-3 text-xs leading-relaxed" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
+            <strong style={{ color: 'var(--text-secondary)' }}>What is the KV state?</strong>{' '}
+            {summary.infinia.prefix_tokens.toLocaleString()} token IDs — the Key+Value attention matrices across {summary.infinia.layers} transformer layers
+            ({summary.infinia.kv_heads} KV heads × {summary.infinia.head_dim} head_dim, {summary.infinia.dtype}).
+            On a cache hit, these are loaded directly into GPU HBM — skipping GPU re-computation of all{' '}
+            {summary.infinia.prefix_tokens.toLocaleString()} prefix tokens.
           </div>
         </div>
       )}

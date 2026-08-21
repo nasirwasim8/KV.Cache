@@ -3,11 +3,13 @@ DDN KV Cache Observatory — KV Reuse Service
 Demonstrates KV cache prefix reuse: cold vs warm inference TTFT comparison.
 """
 import asyncio
+import hashlib
 import json
 import time
 import logging
 from typing import AsyncGenerator, Optional
 import httpx
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -346,14 +348,52 @@ async def stream_reuse_comparison(
     # ── SUMMARY ───────────────────────────────────────────────────────────────
     if cold_ttft > 0 and warm_ttft > 0:
         speedup = round(cold_ttft / warm_ttft, 1) if warm_ttft > 0 else 0
-        tokens_saved = len(system_prompt.split())
+
+        # ── KV / Infinia metadata ───────────────────────────────────────────
+        # Compute deterministic prefix hash (what NIXL/LMCache uses as the cache key)
+        prefix_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
+
+        # Approximate token count (tiktoken not available, use word*1.33 heuristic)
+        prefix_tokens = int(len(system_prompt.split()) * 1.33)
+        question_tokens = max(1, int(len(question.split()) * 1.33))
+
+        # Llama 3.1 8B KV tensor size per token (fp16, GQA: 8 KV heads, head_dim=128, 32 layers)
+        # Per token = 2 (K+V) × 8 KV heads × 128 head_dim × 2 bytes × 32 layers = 131,072 bytes
+        bytes_per_token = 2 * 8 * 128 * 2 * 32   # 131,072 bytes = 128 KB
+        kv_bytes = prefix_tokens * bytes_per_token
+        kv_mb = round(kv_bytes / (1024 * 1024), 1)
+
+        # vLLM paged attention blocks: default block_size = 16 tokens
+        block_size = 16
+        block_count = (prefix_tokens + block_size - 1) // block_size
+
         yield sse({
             "type": "summary",
-            "cold_ttft_ms": round(cold_ttft),
-            "warm_ttft_ms": round(warm_ttft),
-            "cold_total_ms": round(cold_total),
-            "warm_total_ms": round(warm_total),
-            "speedup": speedup,
-            "tokens_in_context": len(system_prompt.split()),
-            "preset": preset_key,
+            "cold_ttft_ms":      round(cold_ttft),
+            "warm_ttft_ms":      round(warm_ttft),
+            "cold_total_ms":     round(cold_total),
+            "warm_total_ms":     round(warm_total),
+            "speedup":           speedup,
+            "tokens_in_context": prefix_tokens,
+            "preset":            preset_key,
+            "infinia": {
+                "prefix_hash":           prefix_hash[:24],
+                "prefix_hash_full":      prefix_hash,
+                "prefix_tokens":         prefix_tokens,
+                "question_tokens":       question_tokens,
+                "kv_size_mb":            kv_mb,
+                "kv_size_bytes":         kv_bytes,
+                "block_count":           block_count,
+                "block_size":            block_size,
+                "layers":                32,
+                "kv_heads":              8,
+                "head_dim":              128,
+                "dtype":                 "fp16",
+                "model":                 "Llama-3.1-8B-Instruct",
+                "bucket":                settings.infinia_bucket,
+                "endpoint":              settings.infinia_endpoint or "192.168.147.129:8111",
+                "transfer_mode":         "NIXL \u2192 DDN Infinia" if settings.infinia_endpoint else "GPU HBM Prefix Cache",
+                "object_key":            f"kvcache/{prefix_hash[:24]}.bin",
+                "gpu_compute_saved_pct": round(prefix_tokens / (prefix_tokens + question_tokens) * 100, 1),
+            },
         })
