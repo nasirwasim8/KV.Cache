@@ -819,7 +819,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                       {/* KV Cache insight callout */}
                       <div className="px-4 py-3 border-t flex items-start gap-3"
                         style={{ borderColor: 'var(--border-subtle)', background: 'rgba(118,185,0,0.04)' }}>
-                        <span className="text-lg mt-0.5">💡</span>
+                        <span className="text-lg mt-0.5"></span>
                         <div>
                           <div className="text-xs font-semibold mb-0.5" style={{ color: '#76B900' }}>WHY IS p50 SO MUCH FASTER THAN p99?</div>
                           <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
