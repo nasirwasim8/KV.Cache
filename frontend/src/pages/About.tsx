@@ -637,7 +637,7 @@ function DynamoNIXLArchitectureDetail() {
           },
           {
             name: 'vLLM Engine',
-            color: '#ffffff',
+            color: '#64B5F6',
             role: 'LLM Serving Engine',
             detail: 'High-throughput LLM inference engine with PagedAttention for efficient GPU memory management and prefix caching support. Integrated with Dynamo as the execution backend. In this demo, runs Llama 3.1 8B on the RTX 5090.',
           },
@@ -679,9 +679,9 @@ function DynamoNIXLArchitectureDetail() {
           {[
             { step: '1', label: 'Request arrives', detail: 'AIperf or user app sends prompt to Dynamo endpoint', color: '#1A81AF' },
             { step: '2', label: 'KV-aware routing', detail: 'Dynamo checks which vLLM worker holds the relevant prefix KV cache and routes accordingly', color: '#76B900' },
-            { step: '3', label: 'Prefill or cache fetch', detail: 'If cache MISS → vLLM prefills (GPU compute). If HIT → NIXL fetches from Infinia in <10ms', color: '#ffffff' },
+            { step: '3', label: 'Prefill or cache fetch', detail: 'If cache MISS → vLLM prefills (GPU compute). If HIT → NIXL fetches from Infinia in <10ms', color: '#64B5F6' },
             { step: '4', label: 'KV offload to Infinia', detail: 'After prefill, computed KV tensors are written to DDN Infinia via NIXL for future reuse', color: '#76B900' },
-            { step: '5', label: 'Token decode', detail: 'vLLM generates output tokens autoregressively using the (now cached) KV state', color: '#ffffff' },
+            { step: '5', label: 'Token decode', detail: 'vLLM generates output tokens autoregressively using the (now cached) KV state', color: '#64B5F6' },
             { step: '6', label: 'Metrics captured', detail: 'AIperf measures TTFT, inter-token latency, and throughput — showing the cache speedup', color: '#1A81AF' },
           ].map(({ step, label, detail, color }) => (
             <div key={step} className="flex items-start gap-3">
