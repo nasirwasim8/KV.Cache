@@ -44,7 +44,7 @@ function TTFTGauge({ ttft_ms, max, label, color }: { ttft_ms: number | null; max
 
 // ── Response panel ─────────────────────────────────────────────────────────────
 function ResponsePanel({
-  phase, label, borderColor, badgeColor, badgeText
+  phase, label, subtitle, borderColor, badgeColor, badgeText
 }: {
   phase: PhaseState; label: string; subtitle?: string; borderColor: string; badgeColor: string; badgeText: string
 }) {
