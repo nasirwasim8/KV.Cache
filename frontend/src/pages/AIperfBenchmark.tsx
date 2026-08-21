@@ -398,7 +398,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
             {vllmStatus === 'running' && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{ background: 'rgba(118,185,0,0.08)', border: '1px solid rgba(118,185,0,0.2)' }}>
-                <span style={{ fontSize: 18 }}>🚀</span>
+                <span style={{ fontSize: 18 }}></span>
                 <div>
                   <div className="text-xs font-semibold" style={{ color: '#76B900' }}>Llama 3.1 8B · port :11000</div>
                   <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Dynamo + NIXL + DDN Infinia KV Cache active</div>
