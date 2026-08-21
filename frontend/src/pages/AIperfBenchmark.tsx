@@ -1,6 +1,63 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Activity, Play, Square, Copy, Check, ChevronDown, RotateCcw, Clock, Zap, TrendingUp, BarChart3, Terminal } from 'lucide-react'
+import { Activity, Play, Square, Copy, Check, ChevronDown, RotateCcw, Clock, Zap, TrendingUp, BarChart3, Terminal, Info } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
+
+// ── InfoTooltip ───────────────────────────────────────────────────────────────
+function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative inline-flex" style={{ verticalAlign: 'middle' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center justify-center rounded-full transition-colors"
+        style={{
+          width: 14, height: 14, marginLeft: 4,
+          color: open ? 'var(--ddn-red)' : 'var(--text-muted)',
+        }}
+        aria-label="More info"
+      >
+        <Info className="w-3 h-3" />
+      </button>
+      {open && (
+        <div
+          className="absolute z-50 rounded-lg shadow-xl text-xs leading-relaxed"
+          style={{
+            bottom: '120%', left: '50%', transform: 'translateX(-50%)',
+            width: 220, padding: '10px 12px',
+            background: 'var(--surface-primary)',
+            border: '1px solid var(--border-subtle)',
+            color: 'var(--text-secondary)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            pointerEvents: 'none',
+          }}
+        >
+          {text}
+          {/* Arrow */}
+          <span style={{
+            position: 'absolute', bottom: -5, left: '50%',
+            transform: 'translateX(-50%) rotate(45deg)',
+            width: 9, height: 9,
+            background: 'var(--surface-primary)',
+            border: '1px solid var(--border-subtle)',
+            borderTop: 'none', borderLeft: 'none',
+          }} />
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface RunConfig {
@@ -449,7 +506,10 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
 
             {/* Context length dropdown */}
             <div className="space-y-1 relative">
-              <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>CONTEXT LENGTH</label>
+              <div className="flex items-center gap-0.5">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>CONTEXT LENGTH</label>
+                <InfoTooltip text="How much text the AI reads per request — like its short-term memory. Larger context = richer answers, but more GPU work per query." />
+              </div>
               <button
                 onClick={() => setShowCtxDropdown(v => !v)}
                 disabled={status === 'running'}
@@ -479,14 +539,20 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
             {/* Concurrency + requests */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>CONCURRENCY</label>
+                <div className="flex items-center gap-0.5">
+                  <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>CONCURRENCY</label>
+                  <InfoTooltip text="How many users are asking questions at the same time. 1 = single user; 4 = four simultaneous users. Higher values stress-test the system." />
+                </div>
                 <input type="number" className="input-field text-sm" min={1} max={32}
                   value={config.concurrency}
                   onChange={e => setConfig(c => ({ ...c, concurrency: +e.target.value }))}
                   disabled={status === 'running'} />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>REQUESTS</label>
+                <div className="flex items-center gap-0.5">
+                  <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>REQUESTS</label>
+                  <InfoTooltip text="Total number of questions sent during the test. More requests = more reliable average results. Typical benchmarks use 50–200." />
+                </div>
                 <input type="number" className="input-field text-sm" min={1}
                   value={config.request_count}
                   onChange={e => setConfig(c => ({ ...c, request_count: +e.target.value }))}
@@ -497,14 +563,20 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
             {/* Output tokens + warmup */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>OUTPUT TOKENS</label>
+                <div className="flex items-center gap-0.5">
+                  <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>OUTPUT TOKENS</label>
+                  <InfoTooltip text="How long each AI reply is — roughly 75 words per 100 tokens. A short paragraph is ~100 tokens; a detailed answer is ~300–500." />
+                </div>
                 <input type="number" className="input-field text-sm" min={1}
                   value={config.output_tokens_mean}
                   onChange={e => setConfig(c => ({ ...c, output_tokens_mean: +e.target.value }))}
                   disabled={status === 'running'} />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>WARMUP</label>
+                <div className="flex items-center gap-0.5">
+                  <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>WARMUP</label>
+                  <InfoTooltip text="Practice runs sent before the real test begins. Lets the GPU and KV cache settle so the measured results are fair and stable." />
+                </div>
                 <input type="number" className="input-field text-sm" min={0}
                   value={config.warmup_count}
                   onChange={e => setConfig(c => ({ ...c, warmup_count: +e.target.value }))}
