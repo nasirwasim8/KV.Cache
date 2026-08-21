@@ -46,7 +46,7 @@ function TTFTGauge({ ttft_ms, max, label, color }: { ttft_ms: number | null; max
 function ResponsePanel({
   phase, label, borderColor, badgeColor, badgeText
 }: {
-  phase: PhaseState; label: string; borderColor: string; badgeColor: string; badgeText: string
+  phase: PhaseState; label: string; subtitle?: string; borderColor: string; badgeColor: string; badgeText: string
 }) {
   const { theme } = useTheme()
   const dark = theme === 'dark'
@@ -55,7 +55,10 @@ function ResponsePanel({
     <div className="card flex flex-col gap-4 p-5" style={{ borderTop: `3px solid ${borderColor}` }}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</span>
+        <div>
+          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</span>
+          {subtitle && <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{subtitle}</div>}
+        </div>
         <span className="badge text-xs" style={{ background: `${badgeColor}20`, color: badgeColor }}>
           {badgeText}
         </span>
@@ -110,7 +113,7 @@ function ResponsePanel({
         <div className="flex items-center gap-2 text-xs font-medium"
           style={{ color: badgeColor }}>
           <Zap className="w-3.5 h-3.5" />
-          {badgeText.includes('✅') ? 'KV Cache HIT → Retrieved from DDN Infinia' : 'KV blocks written to GPU memory (no prior cache)'}
+          {badgeText.includes('✅') ? 'KV Cache HIT → Retrieved from DDN Infinia' : 'KV blocks written to GPU HBM · No persistent cache'}
         </div>
       )}
     </div>
@@ -346,7 +349,7 @@ export default function KVReuseProof() {
             )}
           </button>
           <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Sends the same long-context document + question twice. First: cold (GPU computes). Second: warm (Infinia serves cache).
+            Runs the same document + question twice — first on GPU HBM only (full recompute), then with DDN Infinia KV Cache (NIXL retrieval). Live proof of cache speedup.
           </p>
         </div>
       </div>
@@ -355,7 +358,8 @@ export default function KVReuseProof() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ResponsePanel
           phase={coldPhase}
-          label="❌ WITHOUT KV Cache"
+          label="🖥️ GPU HBM ONLY"
+          subtitle="No persistent cache · Full recompute on every session"
           borderColor="var(--ddn-red)"
           badgeColor="var(--ddn-red)"
           badgeText="❌ Cold — GPU Recomputes Prefill"
@@ -363,7 +367,8 @@ export default function KVReuseProof() {
         <div id="warm-panel">
           <ResponsePanel
             phase={warmPhase}
-            label="✅ WITH Infinia KV Cache"
+            label="✅ WITH DDN INFINIA"
+            subtitle="Persistent AI Memory · Zero GPU recompute"
             borderColor="var(--nvidia-green)"
             badgeColor="var(--nvidia-green)"
             badgeText="✅ Warm — Fetched from Infinia"
@@ -375,8 +380,8 @@ export default function KVReuseProof() {
       {(coldPhase.ttft_ms !== null || warmPhase.ttft_ms !== null) && (
         <div className="card p-5 space-y-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>TTFT COMPARISON</h3>
-          <TTFTGauge ttft_ms={coldPhase.ttft_ms} max={maxTTFT} label="Without Cache" color="var(--ddn-red)" />
-          <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="With Infinia KV Cache" color="var(--nvidia-green)" />
+          <TTFTGauge ttft_ms={coldPhase.ttft_ms} max={maxTTFT} label="GPU HBM ONLY" color="var(--ddn-red)" />
+          <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="WITH DDN INFINIA" color="var(--nvidia-green)" />
         </div>
       )}
 
@@ -388,11 +393,11 @@ export default function KVReuseProof() {
             {summary.speedup}×
           </div>
           <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-            faster Time to First Token with DDN Infinia KV Cache
+            faster Time to First Token with DDN Infinia
           </div>
           <div className="flex flex-wrap justify-center gap-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            <span>Cold: <strong>{summary.cold_ttft_ms.toLocaleString()} ms</strong></span>
-            <span>Warm: <strong className="text-[var(--nvidia-green)]">{summary.warm_ttft_ms.toLocaleString()} ms</strong></span>
+            <span>GPU HBM: <strong>{summary.cold_ttft_ms.toLocaleString()} ms</strong></span>
+            <span>DDN Infinia: <strong className="text-[var(--nvidia-green)]">{summary.warm_ttft_ms.toLocaleString()} ms</strong></span>
             <span>Context: <strong>{summary.tokens_in_context.toLocaleString()} tokens</strong> cached</span>
           </div>
           <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
