@@ -599,6 +599,107 @@ function ICPDetail() {
 // ═══════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════
+// SECTION — Dynamo + NIXL Architecture
+// ═══════════════════════════════════════════════════════════════════
+
+function DynamoNIXLArchitectureDetail() {
+  return (
+    <div className="space-y-6">
+
+      {/* Diagram */}
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: 'linear-gradient(90deg, #0a0a0f 0%, #0f1a0f 100%)' }}>
+          <span style={{ color: '#76B900', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em' }}>STACK ARCHITECTURE</span>
+          <span className="ml-auto text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>NVIDIA Dynamo · vLLM · NIXL · DDN Infinia</span>
+        </div>
+        <img
+          src="/dynamo-nixl-architecture.jpg"
+          alt="DDN Infinia KV Cache Stack Architecture — Dynamo, vLLM, NIXL, Infinia"
+          className="w-full"
+          style={{ display: 'block', background: '#0D0C0C' }}
+        />
+      </div>
+
+      {/* Component breakdown */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {[
+          {
+            name: 'NVIDIA AIperf',
+            color: '#1A81AF',
+            role: 'Benchmark Workload Generator',
+            detail: 'Open-source tool from NVIDIA for benchmarking LLM inference throughput and latency. Generates realistic multi-user request patterns and measures TTFT, ITL, and token throughput. Used in this demo to drive load against the full Dynamo + vLLM stack.',
+          },
+          {
+            name: 'NVIDIA Dynamo',
+            color: '#76B900',
+            role: 'Inference Serving Framework',
+            detail: 'NVIDIA\'s open-source inference serving runtime. Handles request routing, KV-aware scheduling (routes requests to workers that already hold the relevant KV cache), worker orchestration, and disaggregated prefill/decode. Designed specifically to maximize KV cache reuse across GPU workers.',
+          },
+          {
+            name: 'vLLM Engine',
+            color: '#ffffff',
+            role: 'LLM Serving Engine',
+            detail: 'High-throughput LLM inference engine with PagedAttention for efficient GPU memory management and prefix caching support. Integrated with Dynamo as the execution backend. In this demo, runs Llama 3.1 8B on the RTX 5090.',
+          },
+          {
+            name: 'GPU HBM',
+            color: '#ED2738',
+            role: 'Active KV Cache (Volatile)',
+            detail: 'High-Bandwidth Memory on the GPU die. Holds actively-used KV tensors during inference. Extremely fast (~3.3 TB/s) but limited (24 GB on RTX 5090) and volatile — all cache is lost on restart, OOM eviction, or GPU reassignment. NIXL offloads KV tensors to Infinia before eviction.',
+          },
+          {
+            name: 'NVIDIA NIXL',
+            color: '#76B900',
+            role: 'Inference Transfer Library',
+            detail: 'NVIDIA Inference Xfer Library — a GPU-direct, zero-copy transfer protocol for moving KV tensors between GPU memory and external storage. Supports multiple backends: DDN Infinia (primary for this demo), GDS (GPUDirect Storage), UCX, LibFabric, and POSIX. Eliminates CPU bottleneck in KV cache transfers.',
+          },
+          {
+            name: 'DDN Infinia',
+            color: '#ED2738',
+            role: 'Persistent AI Memory (KV Store)',
+            detail: 'DDN\'s AI-native object storage optimized as a persistent KV cache backend. NIXL-native with sub-10ms retrieval latency. KV tensors survive GPU restarts, OOM events, and scaling operations. A single Infinia cluster can serve an entire GPU fleet — every GPU benefits from every other GPU\'s cached prefills.',
+          },
+        ].map(({ name, color, role, detail }) => (
+          <div key={name} className="rounded-lg p-4 space-y-2"
+            style={{ background: 'var(--surface-secondary)', border: `1px solid ${color}30` }}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+              <span className="text-xs font-bold tracking-wide" style={{ color }}>{name}</span>
+            </div>
+            <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{role}</div>
+            <div className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>{detail}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Data flow */}
+      <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--surface-secondary)', border: '1px solid var(--border-subtle)' }}>
+        <div className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>KV CACHE DATA FLOW</div>
+        <div className="space-y-2">
+          {[
+            { step: '1', label: 'Request arrives', detail: 'AIperf or user app sends prompt to Dynamo endpoint', color: '#1A81AF' },
+            { step: '2', label: 'KV-aware routing', detail: 'Dynamo checks which vLLM worker holds the relevant prefix KV cache and routes accordingly', color: '#76B900' },
+            { step: '3', label: 'Prefill or cache fetch', detail: 'If cache MISS → vLLM prefills (GPU compute). If HIT → NIXL fetches from Infinia in <10ms', color: '#ffffff' },
+            { step: '4', label: 'KV offload to Infinia', detail: 'After prefill, computed KV tensors are written to DDN Infinia via NIXL for future reuse', color: '#76B900' },
+            { step: '5', label: 'Token decode', detail: 'vLLM generates output tokens autoregressively using the (now cached) KV state', color: '#ffffff' },
+            { step: '6', label: 'Metrics captured', detail: 'AIperf measures TTFT, inter-token latency, and throughput — showing the cache speedup', color: '#1A81AF' },
+          ].map(({ step, label, detail, color }) => (
+            <div key={step} className="flex items-start gap-3">
+              <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold" style={{ background: `${color}20`, color, border: `1px solid ${color}50` }}>{step}</span>
+              <div>
+                <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{label} — </span>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // SECTION 0 — Chat Observatory Architecture
 // ═══════════════════════════════════════════════════════════════════
 
@@ -903,6 +1004,16 @@ function TechArrow() {
 
 const CONCEPTS = [
   {
+    id: 'dynamo',
+    icon: <Zap className="w-5 h-5" />,
+    label: 'Dynamo + NIXL Architecture',
+    subtitle: 'Stack Overview',
+    tag: 'Architecture',
+    tagColor: '#76B900',
+    summary: 'Full stack diagram — AIperf, Dynamo, vLLM, NIXL, GPU HBM, and DDN Infinia with data flow',
+    ready: true,
+  },
+  {
     id: 'observatory',
     icon: <Layers className="w-5 h-5" />,
     label: 'Chat Observatory Architecture',
@@ -966,6 +1077,7 @@ const CONCEPTS = [
 
 function renderSection(id: string) {
   switch (id) {
+    case 'dynamo':    return <DynamoNIXLArchitectureDetail />
     case 'observatory': return <ChatObservatoryArchitectureDetail />
     case 'mechanics': return <KVMechanicsDetail />
     case 'multiturn': return <MultiTurnDetail />
