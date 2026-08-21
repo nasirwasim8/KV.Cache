@@ -870,7 +870,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
 
                       {/* Left: Hardware */}
                       <div className="p-4 space-y-3">
-                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#1A81AF' }}>⚡ Hardware</div>
+                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#1A81AF' }}>Hardware</div>
                         {[
                           { k: 'GPU',           v: 'NVIDIA GeForce RTX 5090' },
                           { k: 'VRAM',          v: '24 GB GDDR7' },
@@ -887,7 +887,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
 
                       {/* Right: Software stack */}
                       <div className="p-4 space-y-3 border-t sm:border-t-0 sm:border-l" style={{ borderColor: 'var(--border-subtle)' }}>
-                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#76B900' }}>🔧 Inference Stack</div>
+                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#76B900' }}>Inference Stack</div>
                         {[
                           { k: 'Engine',        v: 'vLLM v0.26.0 (Dynamo)' },
                           { k: 'KV Transport',  v: 'DDN Infinia · NIXL' },
@@ -906,7 +906,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                     {/* Model + Run Config row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
                       <div className="p-4 space-y-3">
-                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#FF7600' }}>🤖 Model</div>
+                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#FF7600' }}>Model</div>
                         {[
                           { k: 'Name',      v: 'Meta Llama 3.1 8B Instruct' },
                           { k: 'Precision', v: 'bfloat16' },
@@ -921,7 +921,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                       </div>
 
                       <div className="p-4 space-y-3 border-t sm:border-t-0 sm:border-l" style={{ borderColor: 'var(--border-subtle)' }}>
-                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#ED2738' }}>📋 This Run</div>
+                        <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#ED2738' }}>This Run</div>
                         {[
                           { k: 'Context',     v: `${config.context_tokens.toLocaleString()} tokens` },
                           { k: 'Output',      v: `${config.output_tokens_mean} tokens` },
