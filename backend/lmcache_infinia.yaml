@@ -12,8 +12,12 @@
 
 # ── Core KV cache settings ────────────────────────────────────────────────────
 chunk_size: 256              # KV block chunk granularity in tokens
-local_cpu: false             # No CPU DRAM intermediate tier
-max_local_cpu_size: 0.0      # No CPU cache
+# NOTE: local_cpu MUST be true due to LMCache 0.5.4 bug:
+# SafeLocalCPUBackend (created when local_cpu=false) has no .config attribute,
+# causing RemoteBackend.post_init to fail and LMCache to mark itself unhealthy.
+# 0.5GB CPU buffer is a small staging tier between GPU HBM and Infinia S3.
+local_cpu: true
+max_local_cpu_size: 0.5      # 0.5 GB CPU DRAM staging buffer
 save_decode_cache: false     # Prefill KV only (not decode) — saves Infinia space
 use_layerwise: false         # Write all transformer layers at once
 
