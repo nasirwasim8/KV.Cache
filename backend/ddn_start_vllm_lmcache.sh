@@ -18,6 +18,8 @@ export PATH=/home/nwasim/dynamo-env/lib/python3.12/site-packages/nvidia/cu13/bin
 
 # Use fork instead of spawn for multiprocessing — avoids CUDA context re-init
 export VLLM_WORKER_MULTIPROC_METHOD=fork
+# Disable FlashInfer sampler JIT — CUDA 13 header mismatch on RTX 5090 in WSL2
+export VLLM_USE_FLASHINFER_SAMPLER=0
 
 # ── LMCache + Infinia configuration ──────────────────────────────────────────
 # Tell LMCache where to find its config file
