@@ -415,7 +415,8 @@ export default function KVReuseProof() {
             )}
           </button>
           <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Runs the same document + question twice — first on GPU HBM only (full recompute), then with DDN Infinia KV Cache (NIXL retrieval). Live proof of cache speedup.
+            Runs the same document + question twice — first cold (GPU must recompute all tokens), then warm (prefix KV blocks
+            already in GPU HBM, served instantly). LMCache asynchronously persists KV tensors to DDN Infinia so they survive GPU restarts.
           </p>
         </div>
       </div>
@@ -424,8 +425,8 @@ export default function KVReuseProof() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ResponsePanel
           phase={coldPhase}
-          label="🖥️ GPU HBM ONLY"
-          subtitle="No persistent cache · Full recompute on every session"
+          label="🖥️ COLD — Full Recompute"
+          subtitle="GPU computes every token · KV blocks written to HBM + LMCache"
           borderColor="var(--ddn-red)"
           badgeColor="var(--ddn-red)"
           badgeText="❌ Cold — GPU Recomputes Prefill"
@@ -433,11 +434,11 @@ export default function KVReuseProof() {
         <div id="warm-panel">
           <ResponsePanel
             phase={warmPhase}
-            label="✅ WITH DDN INFINIA"
-            subtitle="Persistent AI Memory · Zero GPU recompute"
+            label="⚡ WARM — Prefix Cache Hit"
+            subtitle="GPU HBM hit · KV blocks reused · LMCache persisting to Infinia"
             borderColor="var(--nvidia-green)"
             badgeColor="var(--nvidia-green)"
-            badgeText="✅ Warm — Fetched from Infinia"
+            badgeText="✅ Warm — GPU HBM Prefix Cache Hit"
           />
         </div>
       </div>
@@ -446,8 +447,8 @@ export default function KVReuseProof() {
       {(coldPhase.ttft_ms !== null || warmPhase.ttft_ms !== null) && (
         <div className="card p-5 space-y-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>TTFT COMPARISON</h3>
-          <TTFTGauge ttft_ms={coldPhase.ttft_ms} max={maxTTFT} label="GPU HBM ONLY" color="var(--ddn-red)" />
-          <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="WITH DDN INFINIA" color="var(--nvidia-green)" />
+          <TTFTGauge ttft_ms={coldPhase.ttft_ms} max={maxTTFT} label="COLD (Full Recompute)" color="var(--ddn-red)" />
+          <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="WARM (GPU HBM Hit)" color="var(--nvidia-green)" />
         </div>
       )}
 
@@ -459,15 +460,16 @@ export default function KVReuseProof() {
             {summary.speedup}×
           </div>
           <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-            faster Time to First Token with DDN Infinia
+            faster Time to First Token with Prefix Caching
           </div>
           <div className="flex flex-wrap justify-center gap-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            <span>GPU HBM: <strong>{summary.cold_ttft_ms.toLocaleString()} ms</strong></span>
-            <span>DDN Infinia: <strong className="text-[var(--nvidia-green)]">{summary.warm_ttft_ms.toLocaleString()} ms</strong></span>
+            <span>Cold: <strong>{summary.cold_ttft_ms.toLocaleString()} ms</strong></span>
+            <span>Warm: <strong className="text-[var(--nvidia-green)]">{summary.warm_ttft_ms.toLocaleString()} ms</strong></span>
             <span>Context: <strong>{summary.tokens_in_context.toLocaleString()} tokens</strong> cached</span>
           </div>
           <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {summary.tokens_in_context.toLocaleString()} tokens never recomputed — retrieved via NIXL from DDN Infinia storage
+            Warm hit served from GPU HBM prefix cache — LMCache asynchronously persists these {summary.tokens_in_context.toLocaleString()} tokens
+            to DDN Infinia so they survive GPU restarts and scale across your entire GPU fleet
           </div>
         </div>
       )}
@@ -478,11 +480,9 @@ export default function KVReuseProof() {
           {/* Header */}
           <div className="px-4 py-3 flex items-center gap-2"
             style={{ background: 'linear-gradient(90deg, rgba(118,185,0,0.12) 0%, rgba(118,185,0,0.04) 100%)' }}>
-            <span style={{ fontSize: 16 }}>↓</span>
+            <span style={{ fontSize: 16 }}>💾</span>
             <span className="text-sm font-bold" style={{ color: 'var(--nvidia-green)' }}>
-              {summary.infinia.transfer_mode === 'NIXL → DDN Infinia'
-                ? 'KV Tensors Retrieved from DDN Infinia'
-                : 'KV Prefix Served from GPU HBM Cache'}
+              KV Tensor Map — LMCache → DDN Infinia
             </span>
             <span className="ml-auto text-xs font-mono font-bold px-2 py-0.5 rounded"
               style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)' }}>
