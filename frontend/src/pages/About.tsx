@@ -704,302 +704,272 @@ function DynamoNIXLArchitectureDetail() {
 // ═══════════════════════════════════════════════════════════════════
 
 function ChatObservatoryArchitectureDetail() {
-  const [technical, setTechnical] = useState(false)
+  const [activeDemo, setActiveDemo] = useState<'observatory' | 'kvreuse'>('observatory')
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* Toggle */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {technical ? 'Showing technical internals' : 'Showing high-level flow'}
-        </p>
-        <button
-          onClick={() => setTechnical(t => !t)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border"
-          style={{
-            background: technical ? 'rgba(0,194,128,0.12)' : 'var(--surface-secondary)',
-            borderColor: technical ? 'rgba(0,194,128,0.4)' : 'var(--border-subtle)',
-            color: technical ? '#00C280' : 'var(--text-secondary)',
-          }}
-        >
-          {technical ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-          {technical ? 'Technical View ON' : 'Turn On Technical View'}
-        </button>
+      {/* Tab selector */}
+      <div className="flex gap-1.5 p-1 rounded-xl" style={{ background: 'var(--surface-secondary)' }}>
+        {([
+          { id: 'observatory', label: 'Chat Observatory', color: '#6366f1' },
+          { id: 'kvreuse',     label: 'KV Reuse Proof',  color: '#00C280' },
+        ] as const).map(({ id, label, color }) => (
+          <button key={id}
+            onClick={() => setActiveDemo(id)}
+            className="flex-1 py-2 text-xs font-semibold rounded-lg transition-all"
+            style={activeDemo === id
+              ? { background: color, color: '#fff', boxShadow: `0 2px 8px ${color}40` }
+              : { color: 'var(--text-muted)', background: 'transparent' }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <AnimatePresence mode="wait">
-        {!technical ? (
-          <motion.div key="simple" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+      {/* ═══ CHAT OBSERVATORY TAB ═══════════════════════════════════════════ */}
+      {activeDemo === 'observatory' && (
+        <div className="space-y-4">
 
-            {/* ── Simple Architecture Diagram ── */}
-            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+          {/* What it is */}
+          <div className="p-4 rounded-xl border" style={{ background: 'rgba(99,102,241,0.05)', borderColor: 'rgba(99,102,241,0.25)' }}>
+            <p className="text-xs font-bold mb-1" style={{ color: '#6366f1' }}>What Chat Observatory actually does</p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              An <strong>application-layer semantic response cache.</strong> It stores the LLM's <em>text answer</em> as
+              a JSON object in DDN Infinia. On a cache hit, the stored answer is returned directly —
+              the GPU and LLM are bypassed entirely. This is <strong>not</strong> KV tensor caching;
+              it is response-level caching at the application boundary.
+            </p>
+          </div>
 
-              {/* Header */}
-              <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
-                <Layers className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} />
-                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>Chat Observatory — System Flow</span>
-                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(237,39,56,0.1)', color: 'var(--ddn-red)' }}>High-Level</span>
-              </div>
-
-              <div className="p-6 space-y-4">
-
-                {/* User input row */}
-                <div className="flex justify-center">
-                  <div className="px-5 py-2.5 rounded-xl border-2 text-sm font-semibold text-center" style={{ borderColor: '#6366f1', color: '#6366f1', background: 'rgba(99,102,241,0.08)', minWidth: 220 }}>
-                    👤 User Question
-                  </div>
-                </div>
-
-                <div className="flex justify-center"><ArrowRight className="w-4 h-4 rotate-90" style={{ color: 'var(--border-default)' }} /></div>
-
-                {/* Split into two panels */}
-                <div className="grid grid-cols-2 gap-4">
-
-                  {/* Left — No Cache */}
-                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: '#ED2738' }}>
-                    <div className="px-3 py-2 text-xs font-bold text-center" style={{ background: '#ED273815', color: '#ED2738' }}>❌ WITHOUT KV CACHE</div>
-                    <div className="p-3 space-y-2">
-                      {[
-                        { label: 'Full context sent', sub: 'System prompt + history + new Q' },
-                        { label: 'GPU recomputes all', sub: 'Every token, every turn' },
-                        { label: 'Response generated', sub: 'Decode phase runs' },
-                      ].map((item, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: '#ED2738' }}>{i + 1}</div>
-                          <div>
-                            <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{item.label}</p>
-                            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{item.sub}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="px-3 py-2 text-center text-[10px] font-bold" style={{ background: '#ED273818', color: '#ED2738' }}>TTFT: 200–400ms · Full cost</div>
-                  </div>
-
-                  {/* Right — With Infinia */}
-                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: '#00C280' }}>
-                    <div className="px-3 py-2 text-xs font-bold text-center" style={{ background: '#00C28015', color: '#00C280' }}>✅ WITH DDN INFINIA</div>
-                    <div className="p-3 space-y-2">
-                      {[
-                        { label: 'Check Infinia first', sub: 'S3 GET — 7–80ms lookup' },
-                        { label: 'Cache HIT → skip prefill', sub: 'Only new tokens to GPU' },
-                        { label: 'Response generated', sub: 'Decode phase runs same' },
-                      ].map((item, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: '#00C280' }}>{i + 1}</div>
-                          <div>
-                            <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{item.label}</p>
-                            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{item.sub}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="px-3 py-2 text-center text-[10px] font-bold" style={{ background: '#00C28018', color: '#00C280' }}>TTFT: 7–80ms · 94% cost reduction</div>
-                  </div>
-                </div>
-
-                {/* DDN Infinia box */}
-                <div className="flex justify-center"><ArrowRight className="w-4 h-4 rotate-90" style={{ color: '#00C280' }} /></div>
-                <div className="rounded-xl border-2 px-4 py-3 text-center" style={{ borderColor: '#00C280', background: 'rgba(0,194,128,0.06)' }}>
-                  <p className="text-sm font-bold" style={{ color: '#00C280' }}>🗄️ DDN Infinia Object Store</p>
-                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>KV cache entries stored as JSON objects · Bucket: ddn-kv-cache-01 · Real S3 API</p>
-                </div>
-
-              </div>
+          {/* MISS flow */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(237,39,56,0.35)' }}>
+            <div className="px-4 py-2.5 text-xs font-bold" style={{ background: 'rgba(237,39,56,0.08)', color: '#ED2738' }}>
+              CACHE MISS — First time this question is asked
             </div>
+            <div className="p-4 space-y-2">
+              {[
+                { n: 1, label: 'User submits question', detail: 'Raw text sent to backend. e.g. "What is TTFT and why does it matter?"', color: '#6366f1' },
+                { n: 2, label: 'Normalize → canonical form', detail: 'Acronyms expanded, filler words stripped, lowercased → "time to first token why matter". Ensures different phrasings of the same question map to the same key.', color: '#f59e0b' },
+                { n: 3, label: 'SHA-256 hash → Infinia S3 GET', detail: 'Hash of canonical form = cache key. S3 GET on kvcache/{hash[:24]}.json → HTTP 404 Not Found. Lookup takes ~2ms.', color: '#8b5cf6' },
+                { n: 4, label: '❌ MISS — full LLM call', detail: 'Entire conversation context sent to GPU. Prefill phase: GPU computes attention across all context tokens. Decode phase: response generated token-by-token. TTFT: 200–400ms.', color: '#ED2738' },
+                { n: 5, label: 'S3 PUT — store response in Infinia', detail: 'Response text, token count, compute latency stored as JSON at kvcache/{hash}.json. This is what gets reused on future hits.', color: '#ED2738' },
+                { n: 6, label: 'Response streamed to user', detail: 'User sees the LLM-generated answer. Full GPU cost incurred.', color: '#ED2738' },
+              ].map(({ n, label, detail, color }) => (
+                <div key={n} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: color }}>{n}</div>
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
+                    <p className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--text-muted)' }}>{detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 text-[10px] font-bold" style={{ background: 'rgba(237,39,56,0.06)', color: '#ED2738' }}>
+              Result: TTFT 200–400ms · Full GPU compute cost incurred
+            </div>
+          </div>
 
-            {/* Key insight callout */}
-            <div className="p-4 rounded-xl border" style={{ background: 'rgba(0,194,128,0.05)', borderColor: 'rgba(0,194,128,0.25)' }}>
-              <p className="text-xs font-bold mb-1" style={{ color: '#00C280' }}>💡 What makes this a fair comparison</p>
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                Both chatbots query the same Ollama model on the same hardware. The only difference is the KV cache lookup on the right side.
-                All latency numbers are real wall-clock measurements — not simulated.
+          {/* HIT flow */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(0,194,128,0.35)' }}>
+            <div className="px-4 py-2.5 text-xs font-bold" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
+              CACHE HIT — Same or semantically equivalent question asked again
+            </div>
+            <div className="p-4 space-y-2">
+              {[
+                { n: 1, label: 'User submits same/similar question', detail: 'Could be exact same text, or a variant like "explain TTFT" or "what is time-to-first-token?" — normalization handles all variants.', color: '#6366f1' },
+                { n: 2, label: 'Normalize → same canonical form', detail: 'Different phrasing → same canonical string → same SHA-256 hash. This is the key insight: semantic equivalence mapped to an identical cache key.', color: '#f59e0b' },
+                { n: 3, label: 'SHA-256 hash → Infinia S3 GET', detail: 'Same hash as the first time. S3 GET on kvcache/{hash}.json → HTTP 200 OK. Object retrieved in 7–80ms.', color: '#8b5cf6' },
+                { n: 4, label: '✅ HIT — GPU never called', detail: 'No LLM call is made. No prefill. No decode. Zero GPU cycles consumed. The stored JSON response is returned directly from Infinia.', color: '#00C280' },
+                { n: 5, label: 'Stored response returned to user', detail: 'The cached text answer (generated on the first ask) is served. Response quality is identical — same canonical question, same answer.', color: '#00C280' },
+              ].map(({ n, label, detail, color }) => (
+                <div key={n} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: color }}>{n}</div>
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
+                    <p className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--text-muted)' }}>{detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 text-[10px] font-bold" style={{ background: 'rgba(0,194,128,0.06)', color: '#00C280' }}>
+              Result: TTFT 7–80ms · GPU never called · ~94% cost reduction
+            </div>
+          </div>
+
+          {/* What Infinia actually stores */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
+            <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
+              <Database className="w-3.5 h-3.5" style={{ color: '#00C280' }} />
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>What Infinia Actually Stores</span>
+              <span className="ml-auto text-[9px] font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(0,194,128,0.1)', color: '#00C280' }}>kvcache/{'<hash>'}.json</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="font-mono text-[10px] rounded-lg p-3 leading-relaxed" style={{ background: 'var(--surface-secondary)', color: 'var(--text-secondary)' }}>
+                {`{`}<br />
+                &nbsp;&nbsp;<span style={{ color: '#f59e0b' }}>"query"</span>{`: `}<span style={{ color: '#00C280' }}>"what is kv cache"</span>{`,`}<br />
+                &nbsp;&nbsp;<span style={{ color: '#f59e0b' }}>"response"</span>{`: `}<span style={{ color: '#00C280' }}>"KV cache stands for Key-Value cache..."</span>{`,`}<br />
+                &nbsp;&nbsp;<span style={{ color: '#f59e0b' }}>"full_tokens"</span>{`: `}<span style={{ color: '#64B5F6' }}>293</span>{`,`}<br />
+                &nbsp;&nbsp;<span style={{ color: '#f59e0b' }}>"compute_ms"</span>{`: `}<span style={{ color: '#64B5F6' }}>2949.1</span>{`,`}<br />
+                &nbsp;&nbsp;<span style={{ color: '#f59e0b' }}>"_cached_at"</span>{`: `}<span style={{ color: '#00C280' }}>"2025-08-20T03:32:09"</span><br />
+                {`}`}
+              </div>
+              <p className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                <strong style={{ color: 'var(--text-secondary)' }}>Important:</strong> Infinia stores the <em>text response</em> — not KV attention tensors or GPU memory state.
+                The object is a plain JSON file (~3 KB). Real S3 API calls, real network round-trips, real measured latency.
               </p>
             </div>
+          </div>
 
-          </motion.div>
-        ) : (
+        </div>
+      )}
 
-          <motion.div key="technical" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }} className="space-y-4">
+      {/* ═══ KV REUSE PROOF TAB ═════════════════════════════════════════════ */}
+      {activeDemo === 'kvreuse' && (
+        <div className="space-y-4">
 
-            {/* ── Normalization callout — answers the key question first ── */}
-            <div className="p-4 rounded-xl border" style={{ background: 'rgba(245,158,11,0.06)', borderColor: 'rgba(245,158,11,0.3)' }}>
-              <p className="text-xs font-bold mb-2" style={{ color: '#f59e0b' }}>🔑 How does the normalization engine match different phrasings to the same KV state?</p>
-              <div className="space-y-1.5">
+          {/* What it is */}
+          <div className="p-4 rounded-xl border" style={{ background: 'rgba(0,194,128,0.05)', borderColor: 'rgba(0,194,128,0.25)' }}>
+            <p className="text-xs font-bold mb-1" style={{ color: '#00C280' }}>What KV Reuse Proof actually does</p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              A <strong>GPU-layer KV tensor prefix cache.</strong> A 6,657-token enterprise document is loaded once —
+              the GPU computes Key+Value attention matrices for all 6,657 tokens and stores them in GPU HBM (VRAM).
+              Every subsequent question about that document skips the expensive prefill compute entirely.
+              In production (Dynamo + NIXL), these tensors are offloaded to Infinia so they persist across GPU
+              restarts and are shared across your entire GPU fleet.
+            </p>
+          </div>
+
+          {/* Cold run */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(237,39,56,0.35)' }}>
+            <div className="px-4 py-2.5 text-xs font-bold flex items-center gap-2" style={{ background: 'rgba(237,39,56,0.08)', color: '#ED2738' }}>
+              <span>COLD RUN</span>
+              <span className="text-[9px] font-mono ml-auto">GPU HBM ONLY — first inference</span>
+            </div>
+            <div className="p-4 space-y-2">
+              {[
+                { n: 1, label: '6,657-token document loaded as system prompt', detail: 'A full enterprise legal contract (Master Service Agreement) is set as the system prompt. Every query about this document will include all 6,657 tokens.', color: '#6366f1' },
+                { n: 2, label: 'GPU runs prefill on ALL 6,657 tokens', detail: 'The transformer computes Key (K) and Value (V) attention matrices for every single document token across all 32 transformer layers. This is extremely GPU-intensive — there is no shortcut. TTFT: 3,000–5,000ms.', color: '#ED2738' },
+                { n: 3, label: 'KV tensors stored in GPU HBM as prefix cache block', detail: 'vLLM\'s PagedAttention stores the computed K+V matrices as a prefix cache block in GPU HBM (VRAM). Size: ~832 MB across 32 layers × 8 KV heads × 128 head_dim × fp16. This block is keyed by a hash of the prefix token sequence.', color: '#ED2738' },
+                { n: 4, label: 'User question (15 tokens) decoded normally', detail: 'After the expensive prefill, the user\'s question tokens are processed and the answer is generated token-by-token (decode phase). TTFT reflects the full 6,657-token prefill cost.', color: '#ED2738' },
+              ].map(({ n, label, detail, color }) => (
+                <div key={n} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: color }}>{n}</div>
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
+                    <p className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--text-muted)' }}>{detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 text-[10px] font-bold" style={{ background: 'rgba(237,39,56,0.06)', color: '#ED2738' }}>
+              Result: TTFT 3,000–5,000ms · 832 MB of KV tensors written to GPU HBM
+            </div>
+          </div>
+
+          {/* Warm run */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(0,194,128,0.35)' }}>
+            <div className="px-4 py-2.5 text-xs font-bold flex items-center gap-2" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
+              <span>WARM RUN</span>
+              <span className="text-[9px] font-mono ml-auto">KV PREFIX CACHE HIT — same document, new question</span>
+            </div>
+            <div className="p-4 space-y-2">
+              {[
+                { n: 1, label: 'New user question, same document prefix', detail: 'Any question about the same document. The 6,657-token system prompt prefix is identical — that\'s all vLLM needs to check.', color: '#6366f1' },
+                { n: 2, label: 'vLLM detects prefix cache hit in HBM', detail: 'vLLM hashes the prefix token sequence and finds a matching block in GPU HBM. The 832 MB of pre-computed KV tensors are already there — no network call, no recompute.', color: '#00C280' },
+                { n: 3, label: 'Prefill SKIPPED — 6,657 tokens not recomputed', detail: 'The GPU skips the entire prefill phase for the document tokens. It loads the cached KV block and jumps straight to processing the new question tokens.', color: '#00C280' },
+                { n: 4, label: 'Only ~15 new question tokens processed', detail: 'GPU compute for this request = prefill of just the user\'s question (~15 tokens) + decode. From 6,657 tokens of compute down to 15. TTFT drops to ~50ms.', color: '#00C280' },
+              ].map(({ n, label, detail, color }) => (
+                <div key={n} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: color }}>{n}</div>
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
+                    <p className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--text-muted)' }}>{detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 text-[10px] font-bold" style={{ background: 'rgba(0,194,128,0.06)', color: '#00C280' }}>
+              Result: TTFT ~50ms · 99.8% of prefill compute eliminated · 50–80× speedup
+            </div>
+          </div>
+
+          {/* What GPU HBM stores */}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
+            <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
+              <MemoryStick className="w-3.5 h-3.5" style={{ color: '#ED2738' }} />
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>What GPU HBM Stores (KV Tensor Math)</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 {[
-                  { q: '"What is time-to-first-token and why does it matter?"', k: 'time to first token why matter' },
-                  { q: '"what is TTFT and why does it matter in inference?"', k: 'time to first token why matter' },
-                  { q: '"TTFT — why does it matter?"', k: 'time to first token why matter' },
-                ].map((row, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[10px]">
-                    <span className="font-mono px-2 py-0.5 rounded flex-1" style={{ background: 'var(--surface-card)', color: 'var(--text-secondary)' }}>{row.q}</span>
-                    <ArrowRight className="w-3 h-3 shrink-0" style={{ color: '#f59e0b' }} />
-                    <span className="font-mono px-2 py-0.5 rounded font-bold" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>{row.k}</span>
+                  { label: 'Prefix tokens', val: '6,657 token IDs', color: '#6366f1' },
+                  { label: 'Transformer layers', val: '32 layers', color: '#f59e0b' },
+                  { label: 'KV heads (GQA)', val: '8 heads × 128 dim', color: '#8b5cf6' },
+                  { label: 'Precision', val: 'fp16 (2 bytes/value)', color: '#64B5F6' },
+                  { label: 'Bytes per token', val: '2 × 8 × 128 × 2 × 32 = 131,072', color: '#ED2738' },
+                  { label: 'Total KV size', val: '~832 MB in GPU HBM', color: '#00C280' },
+                ].map(({ label, val, color }) => (
+                  <div key={label} className="p-2.5 rounded-lg" style={{ background: 'var(--surface-secondary)' }}>
+                    <p className="text-[9px] font-bold uppercase tracking-wide mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                    <p className="text-[10px] font-mono font-semibold" style={{ color }}>{val}</p>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                All three normalize to the same canonical string → same SHA-256 hash → same Infinia object key → the cached response is served directly. The LLM is never called again.
-              </p>
-            </div>
-
-            {/* ── Workflow diagram ── */}
-            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
-              <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
-                <Activity className="w-4 h-4" style={{ color: '#6366f1' }} />
-                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>Query → Semantic Cache → Response Workflow</span>
-              </div>
-
-              <div className="p-5 space-y-3">
-
-                {/* Step 1 */}
-                <TechStep n={1} color="#6366f1" label="User types a query" tag="Input"
-                  detail="Any natural language question. The raw text — capitalization, acronyms, trailing context — doesn't matter yet. Both the left (no cache) and right (Infinia) sides receive the same raw query simultaneously."
-                />
-                <TechArrow />
-
-                {/* Step 2 */}
-                <TechStep n={2} color="#f59e0b" label="Normalization Engine resolves the query" tag="Canonical Form"
-                  detail="Before any cache lookup or model call, the query is reduced to a canonical form: acronyms are expanded (TTFT → time to first token), hyphens and punctuation removed, filler words stripped (what is / explain / tell me), trailing context qualifiers dropped (in inference / in production). The output is a stable, lowercase key phrase. Two questions that mean the same thing produce the same canonical form."
-                />
-                <TechArrow />
-
-                {/* Step 3 */}
-                <TechStep n={3} color="#8b5cf6" label="Canonical form hashed → Infinia lookup" tag="Cache Key"
-                  detail="The canonical string is hashed (SHA-256, first 24 chars). This hash is the object key used to look up the KV state in DDN Infinia. If an object exists at that key → Cache HIT. If not → Cache MISS. The hash is deterministic: identical canonical forms always point to the same Infinia object, regardless of the original phrasing."
-                />
-                <TechArrow />
-
-                {/* Step 4 — MISS vs HIT split */}
-                <div className="grid grid-cols-2 gap-3">
-
-                  {/* MISS path */}
-                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: 'rgba(237,39,56,0.4)' }}>
-                    <div className="px-3 py-2 text-[10px] font-bold text-center" style={{ background: 'rgba(237,39,56,0.08)', color: '#ED2738' }}>CACHE MISS — First Ask</div>
-                    <div className="p-3 space-y-2.5">
-                      <TechMiniStep color="#ED2738" label="Full context sent to the model"
-                        detail="System prompt + full conversation history + new question — every token — goes to the LLM for processing. This is the expensive path." />
-                      <TechMiniStep color="#ED2738" label="LLM runs full inference"
-                        detail="The model runs the complete prefill phase (computing attention across all tokens) then the decode phase (generating the response token by token). Full GPU compute cost incurred." />
-                      <TechMiniStep color="#ED2738" label="Response stored in Infinia"
-                        detail="The generated response text, token counts, latency, and cost metadata are serialised and written to Infinia at the canonical key. This is what gets reused on future hits — the response to that canonical question." />
-                    </div>
-                    <div className="px-3 py-2 text-center text-[10px] font-bold" style={{ background: 'rgba(237,39,56,0.08)', color: '#ED2738' }}>TTFT: 200–400ms · Full GPU cost</div>
-                  </div>
-
-                  {/* HIT path */}
-                  <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: 'rgba(0,194,128,0.4)' }}>
-                    <div className="px-3 py-2 text-[10px] font-bold text-center" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>CACHE HIT — Repeat / Variant Ask</div>
-                    <div className="p-3 space-y-2.5">
-                      <TechMiniStep color="#00C280" label="Canonical response retrieved from Infinia"
-                        detail="Infinia returns the stored response for this canonical intent. S3 GET latency: 7–80ms. The response was generated from the exact canonical token sequence on the first ask — the same semantic question." />
-                      <TechMiniStep color="#00C280" label="LLM bypassed entirely"
-                        detail="No model call is made. The cached response is returned directly to the user. Zero GPU cycles consumed. The GPU is completely free for other workloads." />
-                      <TechMiniStep color="#00C280" label="Token savings computed for display"
-                        detail="The UI shows 'tokens saved' as the difference between what the full context would have cost vs the new question tokens only — illustrating the GPU compute that was avoided." />
-                      <TechMiniStep color="#00C280" label="Response quality preserved"
-                        detail="The cached response was generated from the canonical question the first time — a carefully normalized, consistent form of the query. Variant phrasings map to this same response through the normalization layer." />
-                    </div>
-                    <div className="px-3 py-2 text-center text-[10px] font-bold" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>TTFT: 7–80ms · LLM never called · 94% cost reduction</div>
-                  </div>
-                </div>
-
-                {/* Architecture distinction note */}
-                <div className="p-3 rounded-xl border" style={{ background: 'rgba(99,102,241,0.06)', borderColor: 'rgba(99,102,241,0.25)' }}>
-                  <p className="text-[10px] font-bold mb-2" style={{ color: '#6366f1' }}>📐 Three-Layer Architecture — What Each Layer Does</p>
-                  <div className="space-y-1.5">
-                    {[
-                      { label: 'Normalization Engine', role: 'Semantic intent mapping — do these differently-worded queries mean the same thing?', color: '#f59e0b' },
-                      { label: 'SHA-256 Hash', role: 'Exact key lookup — have I seen this exact canonical intent before?', color: '#8b5cf6' },
-                      { label: 'Infinia Object Store', role: 'Persistent storage of the canonical response — the output generated from the consistent canonical token sequence', color: '#00C280' },
-                    ].map((l, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ background: l.color }} />
-                        <p className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                          <span className="font-bold" style={{ color: l.color }}>{l.label}:</span> {l.role}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* What is actually stored in Infinia */}
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
-              <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
-                <Database className="w-3.5 h-3.5" style={{ color: '#00C280' }} />
-                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>What Infinia Actually Stores</span>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Canonical query', sub: 'Normalized form used as lookup key', color: '#f59e0b' },
-                    { label: 'KV attention state', sub: 'Pre-computed K+V matrices = model context', color: '#8b5cf6' },
-                    { label: 'Token count', sub: 'Full context size · new tokens only on HIT', color: '#6366f1' },
-                    { label: 'Compute metadata', sub: 'TTFT, cost, model ID, timestamp', color: '#00C280' },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ background: 'var(--surface-secondary)' }}>
-                      <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ background: item.color }} />
-                      <div>
-                        <p className="text-[10px] font-bold" style={{ color: item.color }}>{item.label}</p>
-                        <p className="text-[9px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{item.sub}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] leading-relaxed pt-1 border-t" style={{ color: 'var(--text-muted)', borderColor: 'var(--border-subtle)' }}>
-                  <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Key insight:</span> Infinia stores the <em>response to the canonical question</em> — not raw K/V attention tensors. The normalization engine handles semantic equivalence; the storage layer handles persistence and retrieval speed. Together they deliver the same economic outcome: the LLM is bypassed, the GPU is free, the cost is eliminated.
+              <div className="p-3 rounded-lg border" style={{ background: 'rgba(118,185,0,0.05)', borderColor: 'rgba(118,185,0,0.2)' }}>
+                <p className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                  <strong style={{ color: '#76B900' }}>Production with NIXL + Infinia:</strong> These 832 MB of KV tensors would be
+                  written to DDN Infinia via NIXL after each prefill. On subsequent requests — even after GPU restart
+                  or across different GPUs — NIXL fetches them back in &lt;10ms instead of recomputing.
+                  One Infinia cluster serves your entire GPU fleet.
                 </p>
               </div>
             </div>
+          </div>
 
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-function TechStep({ n, color, label, tag, detail }: { n: number; color: string; label: string; tag: string; detail: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <button onClick={() => setOpen(o => !o)} className="w-full text-left rounded-xl border px-4 py-3 transition-all"
-      style={{ borderColor: open ? `${color}50` : 'var(--border-subtle)', background: open ? `${color}08` : 'var(--surface-card)' }}>
-      <div className="flex items-center gap-3">
-        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 text-white" style={{ background: color }}>{n}</div>
-        <span className="text-xs font-semibold flex-1" style={{ color: 'var(--text-primary)' }}>{label}</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-mono hidden md:inline" style={{ background: `${color}18`, color, border: `1px solid ${color}30` }}>{tag}</span>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0 transition-transform" style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'none' }} />
-      </div>
-      {open && (
-        <p className="mt-2 ml-9 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{detail}</p>
+        </div>
       )}
-    </button>
-  )
-}
 
-function TechMiniStep({ color, label, detail }: { color: string; label: string; detail: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ background: color }} />
-      <div>
-        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
-        <p className="text-[9px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{detail}</p>
+      {/* ═══ COMPARISON TABLE (always visible) ═════════════════════════════ */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="px-4 py-2.5 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
+          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>Side-by-Side: Two Different Caching Strategies</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+                <th className="px-4 py-2 text-left font-bold" style={{ color: 'var(--text-muted)' }}>Dimension</th>
+                <th className="px-4 py-2 text-left font-bold" style={{ color: '#6366f1' }}>Chat Observatory</th>
+                <th className="px-4 py-2 text-left font-bold" style={{ color: '#00C280' }}>KV Reuse Proof</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { dim: 'What is cached',      obs: 'LLM text response (JSON)',       kv: 'KV attention tensors (binary GPU state)' },
+                { dim: 'Cache layer',         obs: 'Application layer',              kv: 'Inference engine layer (vLLM)' },
+                { dim: 'Where stored',        obs: 'DDN Infinia (S3 object store)',  kv: 'GPU HBM → Infinia via NIXL (production)' },
+                { dim: 'Object size',         obs: '~3 KB (text JSON)',              kv: '~832 MB (tensor blocks)' },
+                { dim: 'Cache key',           obs: 'SHA-256 of normalized question', kv: 'Hash of prefix token sequence' },
+                { dim: 'On cache hit',        obs: 'GPU never called at all',        kv: 'Prefill skipped, decode still runs' },
+                { dim: 'GPU compute saved',   obs: '100% (LLM bypassed)',            kv: '99.8% of prefill tokens' },
+                { dim: 'Infinia live today',  obs: '✅ Real S3 calls',               kv: '⚠️ GPU HBM in demo; Infinia in production' },
+              ].map(({ dim, obs, kv }, i) => (
+                <tr key={dim} style={{ borderBottom: '1px solid var(--border-subtle)', background: i % 2 === 0 ? 'transparent' : 'var(--surface-secondary)' }}>
+                  <td className="px-4 py-2.5 font-semibold" style={{ color: 'var(--text-secondary)' }}>{dim}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--text-muted)' }}>{obs}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--text-muted)' }}>{kv}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+
     </div>
   )
 }
 
-function TechArrow() {
-  return (
-    <div className="flex justify-center py-0.5">
-      <ArrowRight className="w-3.5 h-3.5 rotate-90" style={{ color: 'var(--border-default)' }} />
-    </div>
-  )
-}
 
 
 const CONCEPTS = [
