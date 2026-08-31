@@ -2881,17 +2881,18 @@ async def clear_cache():
 @cache_router.delete("/purge-infinia")
 async def purge_infinia_cache():
     """
-    Delete ALL kvcache/* objects from DDN Infinia.
-    Use this to reset for a fresh demo (first question will be a genuine MISS).
+    Delete ALL objects from DDN Infinia bucket.
+    Clears both:
+      - Old kvcache/ prefix objects (Ollama-based demo)
+      - New LMCache objects at bucket root (_home_nwasim_models_...@bfloat16)
+    Use this to reset for a fresh demo — next request will be a genuine cache MISS.
     """
     try:
         client = kv_cache._get_client()
-        # List all objects under kvcache/ prefix
+        # List ALL objects in the bucket (no prefix filter)
         paginator = client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(
-            Bucket=settings.infinia_bucket,
-            Prefix="kvcache/"
-        )
+        pages = paginator.paginate(Bucket=settings.infinia_bucket)
+
         keys_to_delete = []
         for page in pages:
             for obj in page.get("Contents", []):
@@ -2900,7 +2901,7 @@ async def purge_infinia_cache():
         if not keys_to_delete:
             return {"success": True, "deleted": 0, "message": "Cache was already empty"}
 
-        # Delete in batches of 1000 (S3 limit)
+        # Delete in batches of 1000 (S3 API limit)
         deleted_count = 0
         for i in range(0, len(keys_to_delete), 1000):
             batch = keys_to_delete[i:i+1000]
@@ -2910,22 +2911,21 @@ async def purge_infinia_cache():
             )
             deleted_count += len(batch)
 
-        # Reset in-memory hit/miss counters too
+        # Reset in-memory hit/miss counters
         kv_cache._hit_count = 0
         kv_cache._miss_count = 0
         kv_cache._total_bytes_stored = 0
         _sessions.clear()
 
-        logger.info(f"Purged {deleted_count} objects from Infinia bucket")
+        logger.info(f"Purged {deleted_count} objects from Infinia bucket {settings.infinia_bucket}")
         return {
             "success": True,
             "deleted": deleted_count,
-            "message": f"Purged {deleted_count} cached objects from DDN Infinia. Next question will be a genuine MISS."
+            "message": f"Purged {deleted_count} KV tensor objects from DDN Infinia. Next request will be a genuine cache MISS.",
         }
     except Exception as e:
         logger.error(f"Purge error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PHASE 4 — AIperf Live Benchmark Routes

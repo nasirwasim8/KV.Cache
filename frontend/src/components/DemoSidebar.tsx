@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw } from 'lucide-react'
+import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw, Trash2 } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 interface Tab { id: string; label: string; icon: string }
@@ -17,18 +17,39 @@ const iconMap: Record<string, React.ReactNode> = {
 
 export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSidebarProps) {
   const [health, setHealth] = useState<{ infinia_connected: boolean; ollama_available: boolean; model_ready: boolean; gpu_available: boolean; hit_count?: number } | null>(null)
+  const [clearing, setClearing] = useState(false)
+  const [clearMsg, setClearMsg] = useState('')
   const { theme } = useTheme()
 
-  useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const [h, s] = await Promise.all([
-          fetch('/health').then(r => r.json()),
-          fetch('/api/cache/stats').then(r => r.json()).catch(() => ({})),
-        ])
-        setHealth({ ...h, hit_count: s.hit_count ?? 0 })
-      } catch { /* ignore */ }
+  const fetchHealth = async () => {
+    try {
+      const [h, s] = await Promise.all([
+        fetch('/health').then(r => r.json()),
+        fetch('/api/cache/stats').then(r => r.json()).catch(() => ({})),
+      ])
+      setHealth({ ...h, hit_count: s.hit_count ?? 0 })
+    } catch { /* ignore */ }
+  }
+
+  const clearCache = async () => {
+    if (clearing) return
+    setClearing(true)
+    setClearMsg('')
+    try {
+      const r = await fetch('/api/cache/purge-infinia', { method: 'DELETE' })
+      const d = await r.json()
+      setClearMsg(`Cleared ${d.deleted ?? 0} objects`)
+      setTimeout(() => setClearMsg(''), 3000)
+      await fetchHealth()
+    } catch {
+      setClearMsg('Error — check connection')
+      setTimeout(() => setClearMsg(''), 3000)
+    } finally {
+      setClearing(false)
     }
+  }
+
+  useEffect(() => {
     fetchHealth()
     const t = setInterval(fetchHealth, 15000)
     return () => clearInterval(t)
@@ -87,6 +108,35 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
                 <span className="text-xs px-2 py-0.5 rounded-full text-[#1A81AF] font-mono" style={{ background: 'var(--status-info-subtle)' }}>
                   {health.hit_count}
                 </span>
+              </div>
+            )}
+
+            {/* Clear Infinia Cache button */}
+            {health?.infinia_connected && (
+              <div className="mt-3">
+                {clearMsg ? (
+                  <div className="text-center text-xs py-1 rounded" style={{ color: '#76B900', background: 'rgba(118,185,0,0.1)' }}>
+                    ✓ {clearMsg}
+                  </div>
+                ) : (
+                  <button
+                    onClick={clearCache}
+                    disabled={clearing}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
+                    style={{
+                      background: clearing ? 'var(--surface-secondary)' : 'rgba(237,39,56,0.08)',
+                      border: '1px solid rgba(237,39,56,0.25)',
+                      color: clearing ? 'var(--text-muted)' : '#ED2738',
+                      cursor: clearing ? 'not-allowed' : 'pointer',
+                    }}
+                    onMouseEnter={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.16)')}
+                    onMouseLeave={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.08)')}
+                    title="Delete all KV tensor objects from DDN Infinia bucket"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    {clearing ? 'Clearing…' : 'Clear Infinia Cache'}
+                  </button>
+                )}
               </div>
             )}
           </div>
