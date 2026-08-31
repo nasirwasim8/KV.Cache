@@ -20,6 +20,7 @@ local_cpu: true
 max_local_cpu_size: 0.5      # 0.5 GB CPU DRAM staging buffer
 save_decode_cache: false     # Prefill KV only (not decode) — saves Infinia space
 use_layerwise: false         # Write all transformer layers at once
+save_unfull_chunk: true      # Save partial chunks too (needed when prompt < 256 tokens)
 
 # ── DDN Infinia S3 remote backend ─────────────────────────────────────────────
 # URL format: s3://<bucket>.<host>:<port>  (virtual-hosted style)
