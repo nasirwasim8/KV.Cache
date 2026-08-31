@@ -37,6 +37,12 @@ extra_config:
   # Use HTTPS but skip cert verification (Infinia uses self-signed cert)
   # Note: s3_connector.py is patched to set verify_peer=False
   disable_tls: false
+  # Use path-style S3 addressing: /bucket/key instead of bucket.host/key
+  # Needed because awscrt can't DNS-resolve "bucket.IP-address:port" style hostnames.
+  # Our patch splits "ddn-kv-cache-01.192.168.147.129:8111" into:
+  #   endpoint = 192.168.147.129:8111  (IP, DNS-resolvable)
+  #   path prefix = /ddn-kv-cache-01/  (bucket in path)
+  s3_use_path_style: true
   # Try HTTP/1.1 first (more compatible with self-signed cert + non-AWS endpoint)
   s3_prefer_http2: false
   # I/O threads for async S3 operations
