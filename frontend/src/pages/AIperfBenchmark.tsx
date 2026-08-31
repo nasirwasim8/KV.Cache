@@ -169,11 +169,14 @@ function MetricCard({
 }
 
 // ── Percentile bar ─────────────────────────────────────────────────────────────
-function PercentileBar({ label, value, max, color }: { label: string; value?: number; max: number; color: string }) {
+function PercentileBar({ label, value, max, color, tooltip }: { label: string; value?: number; max: number; color: string; tooltip?: string }) {
   const pct = value && max ? Math.min((value / max) * 100, 100) : 0
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs font-mono w-8 shrink-0" style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span className="text-xs font-mono w-8 shrink-0 flex items-center" style={{ color: 'var(--text-muted)' }}>
+        {label}
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </span>
       <div className="flex-1 h-4 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
         <div
           className="h-full rounded-full transition-all duration-700"
@@ -705,10 +708,18 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                 <span className="badge badge-nvidia text-xs">✅ Complete</span>
               </div>
               <div className="space-y-3">
-                <PercentileBar label="p50" value={results.ttft_p50_ms} max={maxTTFT} color="#76B900" />
-                <PercentileBar label="p90" value={results.ttft_p90_ms} max={maxTTFT} color="#FF7600" />
-                <PercentileBar label="p99" value={results.ttft_p99_ms} max={maxTTFT} color="#ED2738" />
-                <PercentileBar label="avg" value={results.ttft_avg_ms} max={maxTTFT} color="#1A81AF" />
+                <PercentileBar label="p50" value={results.ttft_p50_ms} max={maxTTFT} color="#76B900"
+                  tooltip="Median speed. 50% of users got their first word faster than this. Think of it as the 'typical' experience."
+                />
+                <PercentileBar label="p90" value={results.ttft_p90_ms} max={maxTTFT} color="#FF7600"
+                  tooltip="90% of users were faster than this. Only 1 in 10 requests was slower. Shows performance under mild stress."
+                />
+                <PercentileBar label="p99" value={results.ttft_p99_ms} max={maxTTFT} color="#ED2738"
+                  tooltip="Worst-case speed. Only 1 in 100 requests was slower than this. Critical for SLAs — no user waits longer than p99."
+                />
+                <PercentileBar label="avg" value={results.ttft_avg_ms} max={maxTTFT} color="#1A81AF"
+                  tooltip="Simple average across all requests. Can be misleading if a few slow requests skew it — p50 is usually more honest."
+                />
               </div>
 
               {/* Full results table */}
@@ -716,9 +727,20 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                 <table className="w-full text-xs font-mono">
                   <thead>
                     <tr style={{ background: 'var(--surface-secondary)' }}>
-                      {['Metric', 'avg', 'p50', 'p90', 'p99'].map(h => (
-                        <th key={h} className="text-left px-3 py-2 font-semibold"
-                          style={{ color: 'var(--text-muted)' }}>{h.toUpperCase()}</th>
+                      {[
+                        { key: 'Metric', tip: '' },
+                        { key: 'avg',    tip: 'Simple average across all requests.' },
+                        { key: 'p50',    tip: 'Median — half of requests were faster than this. The ‘typical’ user experience.' },
+                        { key: 'p90',    tip: '9 out of 10 requests were faster than this. Shows performance under load.' },
+                        { key: 'p99',    tip: 'Worst-case — only 1 in 100 requests was slower. Your SLA guarantee number.' },
+                      ].map(({ key, tip }) => (
+                        <th key={key} className="text-left px-3 py-2 font-semibold"
+                          style={{ color: 'var(--text-muted)' }}>
+                          <span className="flex items-center">
+                            {key.toUpperCase()}
+                            {tip && <InfoTooltip text={tip} />}
+                          </span>
+                        </th>
                       ))}
                     </tr>
                   </thead>
