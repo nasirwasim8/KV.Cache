@@ -709,16 +709,16 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
               </div>
               <div className="space-y-3">
                 <PercentileBar label="p50" value={results.ttft_p50_ms} max={maxTTFT} color="#76B900"
-                  tooltip="Median speed. 50% of users got their first word faster than this. Think of it as the 'typical' experience."
+                  tooltip="p50 = TTFT for the median request. If you ran 20 requests and sorted them by how long they took to return the first word, p50 is request #10. Half were faster, half were slower. This is your 'typical user' speed."
                 />
                 <PercentileBar label="p90" value={results.ttft_p90_ms} max={maxTTFT} color="#FF7600"
-                  tooltip="90% of users were faster than this. Only 1 in 10 requests was slower. Shows performance under mild stress."
+                  tooltip="p90 = TTFT at the 90th percentile. Out of 20 requests, this is request #18 when sorted slowest to fastest. Only 2 out of 20 requests waited longer than this to see their first word."
                 />
                 <PercentileBar label="p99" value={results.ttft_p99_ms} max={maxTTFT} color="#ED2738"
-                  tooltip="Worst-case speed. Only 1 in 100 requests was slower than this. Critical for SLAs — no user waits longer than p99."
+                  tooltip="p99 = TTFT for the slowest 1% of requests — your worst-case experience. Only 1 in 100 users ever waits longer than this for their first word. This is the number used in SLA commitments."
                 />
                 <PercentileBar label="avg" value={results.ttft_avg_ms} max={maxTTFT} color="#1A81AF"
-                  tooltip="Simple average across all requests. Can be misleading if a few slow requests skew it — p50 is usually more honest."
+                  tooltip="avg = Average TTFT across all requests. Add up the time-to-first-word for every request, divide by the count. Can be pulled up by a few slow outliers — p50 gives a more honest 'typical' picture."
                 />
               </div>
 
@@ -729,10 +729,10 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                     <tr style={{ background: 'var(--surface-secondary)' }}>
                       {[
                         { key: 'Metric', tip: '' },
-                        { key: 'avg',    tip: 'Simple average across all requests.' },
-                        { key: 'p50',    tip: 'Median — half of requests were faster than this. The ‘typical’ user experience.' },
-                        { key: 'p90',    tip: '9 out of 10 requests were faster than this. Shows performance under load.' },
-                        { key: 'p99',    tip: 'Worst-case — only 1 in 100 requests was slower. Your SLA guarantee number.' },
+                        { key: 'avg',    tip: 'Average TTFT: add all request times, divide by count.' },
+                        { key: 'p50',    tip: 'Median TTFT — the middle request when sorted by speed. Half were faster, half slower.' },
+                        { key: 'p90',    tip: '90th percentile TTFT — only 1 in 10 requests waited longer than this for the first word.' },
+                        { key: 'p99',    tip: '99th percentile TTFT — only 1 in 100 waited longer. The SLA guarantee number.' },
                       ].map(({ key, tip }) => (
                         <th key={key} className="text-left px-3 py-2 font-semibold"
                           style={{ color: 'var(--text-muted)' }}>
