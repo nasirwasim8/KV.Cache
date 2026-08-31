@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Database, Zap, DollarSign, Clock, RefreshCw, Layers } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { kvApi } from '../services/api'
+import VllmResourceGuard from '../components/VllmResourceGuard'
 
 interface ScenarioMeta { name: string; icon: string; description: string; daily_requests: number; system_tokens: number; example_queries: string[] }
 interface RunResult {
@@ -186,6 +187,9 @@ export default function PrefixMultiplier() {
 
   return (
     <div className="space-y-6">
+      {/* vLLM resource conflict warning — auto-detects if vLLM is running */}
+      <VllmResourceGuard pageName="Prefix Multiplier" vllmMemoryGb={14} />
+
       <div className="section-header">
         <h2 className="section-title">Prefix Cache Multiplier</h2>
         <p className="section-description">

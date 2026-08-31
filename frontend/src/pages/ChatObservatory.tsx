@@ -3,6 +3,7 @@ import { Send, Trash2, Zap, Database, ToggleLeft, ToggleRight, Info, Upload, Dow
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { kvApi, ChatResponse, PanelMetrics, PricingTier, PRICING_TIERS } from '../services/api'
+import VllmResourceGuard from '../components/VllmResourceGuard'
 
 // ─── Error Boundary ────────────────────────────────────────────────────────────
 
@@ -733,6 +734,9 @@ export default function ChatObservatory() {
 
   return (
     <div className="space-y-6">
+      {/* vLLM resource conflict warning — auto-detects if vLLM is running */}
+      <VllmResourceGuard pageName="Chat Observatory" vllmMemoryGb={14} />
+
       {/* Header */}
       <div className="section-header">
         <div className="flex items-center justify-between">
