@@ -599,25 +599,73 @@ function ICPDetail() {
 // ═══════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════
-// SECTION — Dynamo + NIXL Architecture
+// SECTION — Dynamo + LMCache Architecture
 // ═══════════════════════════════════════════════════════════════════
 
 function DynamoNIXLArchitectureDetail() {
   return (
     <div className="space-y-6">
 
-      {/* Diagram */}
+      {/* Live inline architecture diagram */}
       <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-subtle)' }}>
         <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: 'linear-gradient(90deg, #0a0a0f 0%, #0f1a0f 100%)' }}>
           <span style={{ color: '#76B900', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em' }}>STACK ARCHITECTURE</span>
-          <span className="ml-auto text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>NVIDIA Dynamo · vLLM · NIXL · DDN Infinia</span>
+          <span className="ml-auto text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>NVIDIA Dynamo · vLLM · LMCache · DDN Infinia</span>
         </div>
-        <img
-          src="/dynamo-nixl-architecture.jpg"
-          alt="DDN Infinia KV Cache Stack Architecture — Dynamo, vLLM, NIXL, Infinia"
-          className="w-full"
-          style={{ display: 'block', background: '#0D0C0C' }}
-        />
+        {/* Inline diagram */}
+        <div style={{ background: '#0D0C0C', padding: '28px 24px', fontFamily: 'var(--font-mono, monospace)' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: '0.02em' }}>DDN Infinia KV Cache Stack</span>
+          </div>
+          {/* Top row: AIperf + User */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+            {[{ label: 'NVIDIA Alperf', sub: 'Benchmark Workload Generator', color: '#1A81AF' },
+              { label: 'User / Application', sub: 'LLM API Requests', color: '#555' }].map(b => (
+              <div key={b.label} style={{ flex: 1, border: `1px solid ${b.color}`, borderRadius: 6, padding: '10px 14px', background: `${b.color}18` }}>
+                <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{b.label}</div>
+                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 3 }}>{b.sub}</div>
+              </div>
+            ))}
+          </div>
+          {/* Arrow */}
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 6 }}>↓</div>
+          {/* Dynamo */}
+          <div style={{ border: '1px solid #76B900', borderRadius: 6, padding: '10px 14px', marginBottom: 12, background: '#76B90012' }}>
+            <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>NVIDIA Dynamo</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 3 }}>Inference Serving Framework · Request Routing · KV-Aware Scheduling · Worker Orchestration</div>
+          </div>
+          {/* Arrow */}
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 6 }}>↓</div>
+          {/* vLLM + HBM row */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'stretch' }}>
+            <div style={{ flex: 2, border: '1px solid #444', borderRadius: 6, padding: '10px 14px', background: '#ffffff0a' }}>
+              <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>vLLM Engine <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 400 }}>vLLM 0.26+</span></div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 3 }}>Open-source LLM Serving · Llama 3.1 8B · Prefix Caching · PagedAttention</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 11, flexShrink: 0, gap: 4 }}>
+              <span>K/V</span><br/><span>Tensors</span>
+            </div>
+            <div style={{ flex: 1, border: '1px solid #ED2738', borderRadius: 6, padding: '10px 14px', background: '#ED273812' }}>
+              <div style={{ color: '#ED2738', fontWeight: 600, fontSize: 12 }}>GPU HBM (24 GB)</div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 3 }}>Active KV Cache · Fast but Volatile · Evicted on OOM</div>
+            </div>
+          </div>
+          {/* LMCache arrow */}
+          <div style={{ textAlign: 'center', color: '#76B900', fontSize: 11, marginBottom: 6, fontWeight: 600 }}>↓ KV Transfer via LMCache</div>
+          {/* LMCache */}
+          <div style={{ border: '2px solid #76B900', borderRadius: 6, padding: '10px 14px', marginBottom: 12, background: '#76B90018', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: -10, right: 12, background: '#76B900', borderRadius: 4, padding: '2px 8px', fontSize: 10, color: '#000', fontWeight: 700 }}>LIVE</div>
+            <div style={{ color: '#76B900', fontWeight: 700, fontSize: 13 }}>LMCache</div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 3 }}>CPU Staging Buffer (0.5 GB) · S3 Connector · bfloat16 KV Chunks (32 MB each) · Prefix Hash Lookup · vLLM KVConnectorV1</div>
+          </div>
+          {/* Infinia arrow */}
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 6 }}>↓ Persist / Fetch</div>
+          {/* Infinia */}
+          <div style={{ border: '1px solid #ED2738', borderRadius: 6, padding: '10px 14px', background: '#ED273812' }}>
+            <div style={{ color: '#ED2738', fontWeight: 600, fontSize: 13 }}>DDN Infinia</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 3 }}>Persistent AI Memory · KV Cache Object Store · S3-Compatible · Sub-10ms Retrieval · Survives GPU Restarts</div>
+          </div>
+        </div>
       </div>
 
       {/* Component breakdown */}
@@ -645,19 +693,19 @@ function DynamoNIXLArchitectureDetail() {
             name: 'GPU HBM',
             color: '#ED2738',
             role: 'Active KV Cache (Volatile)',
-            detail: 'High-Bandwidth Memory on the GPU die. Holds actively-used KV tensors during inference. Extremely fast (~3.3 TB/s) but limited (24 GB on RTX 5090) and volatile — all cache is lost on restart, OOM eviction, or GPU reassignment. NIXL offloads KV tensors to Infinia before eviction.',
+            detail: 'High-Bandwidth Memory on the GPU die. Holds actively-used KV tensors during inference. Extremely fast (~3.3 TB/s) but limited (24 GB on RTX 5090) and volatile — all cache is lost on restart, OOM eviction, or GPU reassignment. LMCache intercepts KV blocks before eviction and stages them to CPU, then persists to Infinia.',
           },
           {
-            name: 'NVIDIA NIXL',
+            name: 'LMCache',
             color: '#76B900',
-            role: 'Inference Transfer Library',
-            detail: 'NVIDIA Inference Xfer Library — a GPU-direct, zero-copy transfer protocol for moving KV tensors between GPU memory and external storage. Supports multiple backends: DDN Infinia (primary for this demo), GDS (GPUDirect Storage), UCX, LibFabric, and POSIX. Eliminates CPU bottleneck in KV cache transfers.',
+            role: 'KV Cache Bridge (CPU Staging + S3)',
+            detail: 'Open-source KV cache offload layer that integrates with vLLM via LMCacheConnectorV1. Acts as a two-tier bridge: GPU HBM → CPU DRAM staging buffer (0.5 GB) → DDN Infinia S3. Chunks KV tensors into 32 MB bfloat16 objects, computes prefix hashes for lookup, and uploads asynchronously. In this demo, 69+ KV objects are already persisted in Infinia.',
           },
           {
             name: 'DDN Infinia',
             color: '#ED2738',
             role: 'Persistent AI Memory (KV Store)',
-            detail: 'DDN\'s AI-native object storage optimized as a persistent KV cache backend. NIXL-native with sub-10ms retrieval latency. KV tensors survive GPU restarts, OOM events, and scaling operations. A single Infinia cluster can serve an entire GPU fleet — every GPU benefits from every other GPU\'s cached prefills.',
+            detail: 'DDN\'s AI-native object storage optimized as a persistent KV cache backend. LMCache-connected with S3-compatible API, bfloat16 KV chunks (32 MB each). KV tensors survive GPU restarts, OOM events, and scaling operations. In this live demo, 69+ KV tensor objects are already stored in the ddn-kv-cache-01 bucket.',
           },
         ].map(({ name, color, role, detail }) => (
           <div key={name} className="rounded-lg p-4 space-y-2"
@@ -679,8 +727,8 @@ function DynamoNIXLArchitectureDetail() {
           {[
             { step: '1', label: 'Request arrives', detail: 'AIperf or user app sends prompt to Dynamo endpoint', color: '#1A81AF' },
             { step: '2', label: 'KV-aware routing', detail: 'Dynamo checks which vLLM worker holds the relevant prefix KV cache and routes accordingly', color: '#76B900' },
-            { step: '3', label: 'Prefill or cache fetch', detail: 'If cache MISS → vLLM prefills (GPU compute). If HIT → NIXL fetches from Infinia in <10ms', color: '#64B5F6' },
-            { step: '4', label: 'KV offload to Infinia', detail: 'After prefill, computed KV tensors are written to DDN Infinia via NIXL for future reuse', color: '#76B900' },
+            { step: '3', label: 'Prefill or cache fetch', detail: 'If cache MISS → vLLM prefills (GPU compute). If HIT → LMCache loads KV tensors from CPU buffer or Infinia S3 in <10ms', color: '#64B5F6' },
+            { step: '4', label: 'KV offload to Infinia', detail: 'After prefill, computed KV tensors are staged to CPU via LMCache (0.5 GB buffer), then asynchronously written to DDN Infinia S3 as 32 MB bfloat16 objects', color: '#76B900' },
             { step: '5', label: 'Token decode', detail: 'vLLM generates output tokens autoregressively using the (now cached) KV state', color: '#64B5F6' },
             { step: '6', label: 'Metrics captured', detail: 'AIperf measures TTFT, inter-token latency, and throughput — showing the cache speedup', color: '#1A81AF' },
           ].map(({ step, label, detail, color }) => (
@@ -835,7 +883,7 @@ function ChatObservatoryArchitectureDetail() {
               A <strong>GPU-layer KV tensor prefix cache.</strong> A 6,657-token enterprise document is loaded once —
               the GPU computes Key+Value attention matrices for all 6,657 tokens and stores them in GPU HBM (VRAM).
               Every subsequent question about that document skips the expensive prefill compute entirely.
-              In production (Dynamo + NIXL), these tensors are offloaded to Infinia so they persist across GPU
+              In production (Dynamo + LMCache), these tensors are offloaded to Infinia so they persist across GPU
               restarts and are shared across your entire GPU fleet.
             </p>
           </div>
@@ -976,11 +1024,11 @@ const CONCEPTS = [
   {
     id: 'dynamo',
     icon: <Zap className="w-5 h-5" />,
-    label: 'Dynamo + NIXL Architecture',
+    label: 'Dynamo + LMCache Architecture',
     subtitle: 'Stack Overview',
     tag: 'Architecture',
     tagColor: '#76B900',
-    summary: 'Full stack diagram — AIperf, Dynamo, vLLM, NIXL, GPU HBM, and DDN Infinia with data flow',
+    summary: 'Full stack diagram — AIperf, Dynamo, vLLM, LMCache, GPU HBM, and DDN Infinia with data flow',
     ready: true,
   },
   {

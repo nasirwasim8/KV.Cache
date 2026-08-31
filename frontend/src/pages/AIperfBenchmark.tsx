@@ -305,6 +305,7 @@ export default function AIperfBenchmark() {
             setCommand(event.command || '')
             setDuration(event.duration_sec || 0)
             setMetrics(prev => ({ ...prev, ...(event.results || {}) }))
+            setShowComparison(true)  // Auto-expand comparison table when results arrive
             es.close()
           } else if (event.type === 'error') {
             setStatus('error')
@@ -782,7 +783,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                   const rows = [
                     {
                       system: '⚡ This System',
-                      subtitle: 'RTX 5090 · DDN KV Cache · vLLM',
+                      subtitle: 'RTX 5090 · LMCache + DDN Infinia · vLLM',
                       ttft_p50: myP50,
                       ttft_avg: myAvg,
                       throughput: myThrpt,
