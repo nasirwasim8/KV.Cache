@@ -407,12 +407,14 @@ async def stream_reuse_comparison(
                 "layers":                32,
                 "kv_heads":              8,
                 "head_dim":              128,
-                "dtype":                 "fp16",
+                "dtype":                 "bfloat16",
                 "model":                 "Llama-3.1-8B-Instruct",
                 "bucket":                settings.infinia_bucket,
                 "endpoint":              settings.infinia_endpoint or "192.168.147.129:8111",
-                "transfer_mode":         "NIXL \u2192 DDN Infinia" if settings.infinia_endpoint else "GPU HBM Prefix Cache",
-                "object_key":            f"kvcache/{prefix_hash[:24]}.bin",
+                # Real architecture: vLLM → LMCache (CPU staging) → DDN Infinia S3
+                # LMCache object key format: _path_to_model@world_size@worker_id@prefix_hash@dtype
+                "transfer_mode":         "LMCache → DDN Infinia S3",
+                "object_key":            f"_home_nwasim_models_Llama-3.1-8B-Instruct@1@0@{prefix_hash[:16]}@bfloat16",
                 "gpu_compute_saved_pct": round(prefix_tokens / (prefix_tokens + question_tokens) * 100, 1),
             },
         })
