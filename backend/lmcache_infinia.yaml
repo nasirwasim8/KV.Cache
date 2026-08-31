@@ -1,0 +1,39 @@
+# LMCache configuration — DDN Infinia S3 backend
+# Loaded via LMCACHE_CONFIG_FILE env var by vLLM's LMCacheConnectorV1
+#
+# Architecture:
+#   vLLM GPU HBM (hot cache)
+#       ↕ on eviction / cache miss
+#   DDN Infinia S3 — https://192.168.147.129:8111
+#       Bucket: ddn-kv-cache-01
+#
+# S3 credentials are passed via extra_config (see below)
+# and via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env vars
+
+# ── Core KV cache settings ────────────────────────────────────────────────────
+chunk_size: 256              # KV block chunk granularity in tokens
+local_cpu: false             # No CPU DRAM intermediate tier
+max_local_cpu_size: 0.0      # No CPU cache
+save_decode_cache: false     # Prefill KV only (not decode) — saves Infinia space
+use_layerwise: false         # Write all transformer layers at once
+
+# ── DDN Infinia S3 remote backend ─────────────────────────────────────────────
+# URL format: s3://<bucket>.<host>:<port>  (virtual-hosted style)
+# Credentials + endpoint config live in extra_config block below
+remote_url: "s3://ddn-kv-cache-01.192.168.147.129:8111"
+remote_serde: "naive"        # Binary serialization (fastest, no transcoding)
+
+# ── Per-connector extra config ─────────────────────────────────────────────────
+extra_config:
+  # S3 region (required by awscrt)
+  s3_region: "us-east-1"
+  # Static credentials for Infinia
+  aws_access_key_id: "DJ1S7LSGEIT9AKYCWVL5"
+  aws_secret_access_key: "wZ7WQPZyqePwBzhuoQeCQJFRheblRTjwF687KMKu"
+  # Use HTTPS but skip cert verification (Infinia uses self-signed cert)
+  # Note: s3_connector.py is patched to set verify_peer=False
+  disable_tls: false
+  # Try HTTP/1.1 first (more compatible with self-signed cert + non-AWS endpoint)
+  s3_prefer_http2: false
+  # I/O threads for async S3 operations
+  s3_num_io_threads: 16
