@@ -159,6 +159,7 @@ export default function KVReuseProof() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [running, setRunning] = useState(false)
   const [sessionTotal, setSessionTotal] = useState({ runs: 0, savedMs: 0, tokens: 0 })
+  const [vllmError, setVllmError] = useState<{ message: string; detail: string } | null>(null)
 
   const esRef = useRef<EventSource | null>(null)
 
@@ -178,6 +179,7 @@ export default function KVReuseProof() {
     setColdPhase(EMPTY_PHASE)
     setWarmPhase(EMPTY_PHASE)
     setSummary(null)
+    setVllmError(null)
 
     const question = customQuestion.trim() || selectedQuestion || ''
     const params = new URLSearchParams({
@@ -227,8 +229,14 @@ export default function KVReuseProof() {
         }
 
         else if (event.type === 'error') {
-          setColdPhase(prev => prev.status === 'running' ? { ...prev, status: 'error', message: event.message } : prev)
-          setWarmPhase(prev => prev.status === 'running' ? { ...prev, status: 'error', message: event.message } : prev)
+          if (event.code === 'VLLM_NOT_RUNNING') {
+            setVllmError({ message: event.message, detail: event.detail || '' })
+            setColdPhase(EMPTY_PHASE)
+            setWarmPhase(EMPTY_PHASE)
+          } else {
+            setColdPhase(prev => prev.status === 'running' ? { ...prev, status: 'error', message: event.message } : prev)
+            setWarmPhase(prev => prev.status === 'running' ? { ...prev, status: 'error', message: event.message } : prev)
+          }
           setRunning(false)
           es.close()
         }
@@ -259,6 +267,42 @@ export default function KVReuseProof() {
           </div>
         </div>
       </div>
+
+      {/* vLLM not running banner */}
+      {vllmError && (
+        <div className="rounded-xl border-2 overflow-hidden" style={{ borderColor: 'rgba(237,39,56,0.5)' }}>
+          <div className="px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(237,39,56,0.08)' }}>
+            <AlertCircle className="w-5 h-5 shrink-0" style={{ color: 'var(--ddn-red)' }} />
+            <div className="flex-1">
+              <p className="text-sm font-bold" style={{ color: 'var(--ddn-red)' }}>vLLM is not running</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                KV Reuse Proof requires vLLM on <span className="font-mono">{endpointUrl}</span>. Start it from your WSL terminal:
+              </p>
+            </div>
+            <button onClick={() => setVllmError(null)}
+              className="text-xs px-2 py-1 rounded" style={{ color: 'var(--text-muted)' }}>✕</button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="rounded-lg p-3 font-mono text-xs leading-relaxed overflow-x-auto"
+              style={{ background: 'var(--surface-secondary)', color: '#76B900' }}>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}># Activate env and start vLLM</div>
+              source ~/dynamo-env/bin/activate<br />
+              <br />
+              VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server \<br />
+              &nbsp;&nbsp;--model ~/models/Llama-3.1-8B-Instruct \<br />
+              &nbsp;&nbsp;--served-model-name "meta-llama/Llama-3.1-8B-Instruct" \<br />
+              &nbsp;&nbsp;--enable-prefix-caching \<br />
+              &nbsp;&nbsp;--enforce-eager \<br />
+              &nbsp;&nbsp;--port 11000 \<br />
+              &nbsp;&nbsp;--max-model-len 16384
+            </div>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              vLLM takes 60–90 seconds to load. Once ready, click <strong>Run KV Reuse Demo</strong> again.
+              You can also check the <strong>AIperf Benchmark</strong> page — it shows a live vLLM status indicator.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Session savings ticker */}
       {sessionTotal.runs > 0 && (

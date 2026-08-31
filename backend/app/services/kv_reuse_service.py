@@ -277,6 +277,9 @@ async def run_inference(
                             response_text += delta
                     except Exception:
                         pass
+    except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+        # Let these propagate so the caller can yield a proper error event
+        raise
     except Exception as e:
         total_ms = (time.perf_counter() - start) * 1000
         return ttft_ms if ttft_ms >= 0 else total_ms, total_ms, f"[Error: {e}]"
@@ -325,6 +328,14 @@ async def stream_reuse_comparison(
         )
         yield sse({"type": "ttft", "phase": "cold", "ttft_ms": round(cold_ttft), "total_ms": round(cold_total)})
         yield sse({"type": "response", "phase": "cold", "text": cold_text})
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        yield sse({
+            "type": "error",
+            "message": "vLLM is not running",
+            "detail": f"Cannot connect to vLLM at {endpoint_url}. Start vLLM with: VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server --model ~/models/Llama-3.1-8B-Instruct --enable-prefix-caching --port 11000",
+            "code": "VLLM_NOT_RUNNING"
+        })
+        return
     except Exception as e:
         yield sse({"type": "error", "message": f"Cold run failed: {e}"})
         return
@@ -341,6 +352,14 @@ async def stream_reuse_comparison(
         )
         yield sse({"type": "ttft", "phase": "warm", "ttft_ms": round(warm_ttft), "total_ms": round(warm_total)})
         yield sse({"type": "response", "phase": "warm", "text": warm_text})
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        yield sse({
+            "type": "error",
+            "message": "vLLM is not running",
+            "detail": f"Cannot connect to vLLM at {endpoint_url}. Start vLLM from your WSL terminal.",
+            "code": "VLLM_NOT_RUNNING"
+        })
+        return
     except Exception as e:
         yield sse({"type": "error", "message": f"Warm run failed: {e}"})
         return
