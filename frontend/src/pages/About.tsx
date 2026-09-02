@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, ChevronRight, CheckCircle, Zap, Database, Server,
   MemoryStick, Users, Layers, ArrowRight, AlertTriangle, HardDrive,
-  TrendingDown, Shield, Eye, EyeOff, GitBranch, Lock, Hash, Activity
+  TrendingDown, Shield, Eye, EyeOff, GitBranch, Lock, Hash, Activity,
+  ChevronDown
 } from 'lucide-react'
 
 // ─── Shared sub-components (mirrors RAG/VSS Details pattern) ──────────────────
@@ -600,6 +601,14 @@ function ICPDetail() {
 // ═══════════════════════════════════════════════════════════════════
 
 function DetailedWorkflowDetail() {
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  const toggleSection = (key: string) =>
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
   const steps = [
     {
       num: '①',
@@ -847,28 +856,62 @@ function DetailedWorkflowDetail() {
                   style={{ color: 'var(--text-muted)' }}>WHY</span>
                 <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{s.why}</p>
               </div>
-              {/* Optional deep-dive (step 3 only) */}
-              {s.extra && s.extra.sections.map((sec: any) => (
-                <div key={sec.heading} className="rounded-lg overflow-hidden mt-1"
-                  style={{ border: `1px solid ${sec.color}22` }}>
-                  <div className="px-3 py-2"
-                    style={{ background: `${sec.color}10`, borderBottom: `1px solid ${sec.color}18` }}>
-                    <span className="text-[10px] font-bold uppercase tracking-widest"
-                      style={{ color: sec.color }}>🔍 {sec.heading}</span>
+              {/* Optional deep-dive accordion (step 3 only) */}
+              {s.extra && s.extra.sections.map((sec: any) => {
+                const key = `${s.num}-${sec.heading}`
+                const isOpen = openSections.has(key)
+                return (
+                  <div key={key} className="rounded-lg overflow-hidden"
+                    style={{ border: `1px solid ${sec.color}25` }}>
+                    {/* Clickable header */}
+                    <button
+                      onClick={() => toggleSection(key)}
+                      className="w-full px-3 py-2 flex items-center gap-2 text-left transition-colors"
+                      style={{
+                        background: isOpen ? `${sec.color}12` : `${sec.color}08`,
+                        borderBottom: isOpen ? `1px solid ${sec.color}20` : 'none',
+                      }}
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest flex-1"
+                        style={{ color: sec.color }}>
+                        🔍 {sec.heading}
+                      </span>
+                      <motion.div
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" style={{ color: sec.color }} />
+                      </motion.div>
+                    </button>
+                    {/* Collapsible body */}
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          key="content"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.22, ease: 'easeInOut' }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          <div className="divide-y" style={{ borderColor: `${sec.color}15` }}>
+                            {sec.items.map((item: any) => (
+                              <div key={item.label} className="px-3 py-2.5 space-y-1"
+                                style={{ borderTop: `1px solid ${sec.color}12` }}>
+                                <div className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                                  {item.label}
+                                </div>
+                                <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans"
+                                  style={{ color: 'var(--text-muted)' }}>{item.text}</pre>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                  <div className="divide-y" style={{ divideColor: `${sec.color}15` }}>
-                    {sec.items.map((item: any) => (
-                      <div key={item.label} className="px-3 py-2.5 space-y-1">
-                        <div className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>
-                          {item.label}
-                        </div>
-                        <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans"
-                          style={{ color: 'var(--text-muted)' }}>{item.text}</pre>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))}
