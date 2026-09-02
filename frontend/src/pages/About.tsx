@@ -627,9 +627,67 @@ function DetailedWorkflowDetail() {
       title: 'Attention (Prefill) — The expensive step',
       cost: '2–8 seconds for 6,600 tokens',
       who: 'GPU compute (O(n²))',
-      body: 'Every token "attends to" every other token. Token 6,600 must look at tokens 1–6,599 to understand context. This happens across all 32 transformer layers.',
-      example: 'For each token: Q = token × W_Q  |  K = token × W_K  |  V = token × W_V\nAttention = softmax(Q · Kᵀ / √d) · V',
-      why: 'This is the O(n²) bottleneck. A 6,600-token prompt requires ~43 million attention operations per layer × 32 layers. This is why the cold TTFT is slow — it is doing an enormous amount of math.',
+      body: 'Every token “attends to” every other token to understand context. This is the core operation of transformer models and the most computationally expensive step. It runs across all 32 transformer layers of the model.',
+      example: 'Formula: Attention = softmax( Q · Kᵀ / √d ) · V\n\nFor EACH of the 6,600 tokens, compute:\n  Q (Query)  = token embedding × W_Q\n  K (Key)    = token embedding × W_K\n  V (Value)  = token embedding × W_V',
+      why: 'This is O(n²) — quadratic in sequence length. The KV Cache exists for one reason: to avoid repeating this step. Every cached K and V means one fewer attention computation next time.',
+      extra: {
+        sections: [
+          {
+            heading: 'What are Q, K, V and W?',
+            color: '#ED2738',
+            items: [
+              {
+                label: 'W_Q, W_K, W_V (Weight matrices)',
+                text: 'These are the “skills” the model learned during training — giant tables of numbers that transform a raw token vector into the Q, K, or V space. Think of them as lenses that let each token see the document differently depending on its role.',
+              },
+              {
+                label: 'Q — Query (“What am I looking for?”)',
+                text: 'The current token’s search query. When processing “clause” in your question, Q encodes: “I need to find text that defines or limits something.”\n\nLibrary analogy: Q is the search terms you type into the library catalog.',
+              },
+              {
+                label: 'K — Key (“What do I contain?”)',
+                text: 'Every other token broadcasts a label describing what it is about. “Indemnification” broadcasts: “I am about liability and legal protection.”\n\nLibrary analogy: K is the subject index card on the spine of every book.',
+              },
+              {
+                label: 'V — Value (“What information do I carry?”)',
+                text: 'The actual content a token contributes when attended to. When “clause” attends strongly to “indemnification,” it pulls in V — the meaning and context of that word.\n\nLibrary analogy: V is the content inside the book — what you actually read once you find the right one.',
+              },
+            ],
+          },
+          {
+            heading: 'Where does 43 million come from?',
+            color: '#ED2738',
+            items: [
+              {
+                label: 'The calculation',
+                text: 'For every token, attention scores are computed against every other token:\n\n  Token count × Token count = Attention score matrix\n  6,600 tokens × 6,600 tokens = 43,560,000 scores\n\nThat is per layer, per attention head. Llama 3.1 8B has 32 query heads, so the full matrix per layer is:\n  32 heads × 43.5M = ~1.4 billion operations per layer',
+              },
+              {
+                label: 'Why quadratic is a problem',
+                text: 'Double the context, quadruple the compute:\n\n  3,300 tokens × 3,300 = 10.9M  (1× cost)\n  6,600 tokens × 6,600 = 43.5M  (4× cost)\n 13,200 tokens × 13,200 = 174M  (16× cost)\n\nThis is why a 6,600-token legal contract takes 4× longer to prefill than a 3,300-token one.',
+              },
+            ],
+          },
+          {
+            heading: 'What does “32 layers” mean?',
+            color: '#ED2738',
+            items: [
+              {
+                label: 'Each layer is one complete pass',
+                text: 'Llama 3.1 8B has 32 stacked transformer blocks. Each block runs the full Q·Kᵀ·V attention operation. The output of layer 1 becomes the input to layer 2, and so on. Think of it as 32 increasingly sophisticated readings of the document.',
+              },
+              {
+                label: 'What each layer captures',
+                text: 'Early layers (1–8): Basic syntax — subject/verb/object relationships\nMiddle layers (9–20): Semantics — what words mean in context\nLate layers (21–32): High-level reasoning — implications, contradictions, conclusions\n\nBy layer 32, the model has a rich understanding of the entire 6,600-token document.',
+              },
+              {
+                label: 'Why it multiplies the compute',
+                text: 'Each of the 32 layers produces its own K and V matrices. That is why KV cache storage is:\n  6,600 tokens × 32 layers × 4,096 bytes = ~850 MB\n\nAnd why prefill compute is:\n  43.5M attention scores × 32 layers = 1.39 billion operations per request',
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       num: '④',
@@ -789,6 +847,28 @@ function DetailedWorkflowDetail() {
                   style={{ color: 'var(--text-muted)' }}>WHY</span>
                 <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{s.why}</p>
               </div>
+              {/* Optional deep-dive (step 3 only) */}
+              {s.extra && s.extra.sections.map((sec: any) => (
+                <div key={sec.heading} className="rounded-lg overflow-hidden mt-1"
+                  style={{ border: `1px solid ${sec.color}22` }}>
+                  <div className="px-3 py-2"
+                    style={{ background: `${sec.color}10`, borderBottom: `1px solid ${sec.color}18` }}>
+                    <span className="text-[10px] font-bold uppercase tracking-widest"
+                      style={{ color: sec.color }}>🔍 {sec.heading}</span>
+                  </div>
+                  <div className="divide-y" style={{ divideColor: `${sec.color}15` }}>
+                    {sec.items.map((item: any) => (
+                      <div key={item.label} className="px-3 py-2.5 space-y-1">
+                        <div className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                          {item.label}
+                        </div>
+                        <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans"
+                          style={{ color: 'var(--text-muted)' }}>{item.text}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
