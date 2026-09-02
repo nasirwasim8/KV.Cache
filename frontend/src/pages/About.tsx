@@ -595,6 +595,261 @@ function ICPDetail() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// SECTION — Detailed Workflow
+// ═══════════════════════════════════════════════════════════════════
+
+function DetailedWorkflowDetail() {
+  const steps = [
+    {
+      num: '①',
+      color: '#1A81AF',
+      title: 'Tokenization — Text becomes numbers',
+      cost: '~microseconds',
+      who: 'vLLM tokenizer',
+      body: 'Every word (and sub-word) in your question gets mapped to an integer ID from a fixed vocabulary of ~32,000 tokens.',
+      example: '"Summarize the indemnification clause" → [20564, 279, 54792, 72923, 11]',
+      why: 'Computers cannot process English directly. Everything downstream operates on these integers — not the original text.',
+    },
+    {
+      num: '②',
+      color: '#6366f1',
+      title: 'Embedding — Numbers become meaning',
+      cost: '~microseconds',
+      who: 'vLLM embedding layer',
+      body: 'Each integer token ID is looked up in a learned embedding table — producing a 4,096-dimensional float vector that encodes semantic meaning.',
+      example: 'Token 20564 ("Summarize") → [0.234, -0.891, 0.456, … × 4,096 floats]',
+      why: 'Similar words have similar vectors. "Summarize" and "Recap" are close in this 4,096-dimensional space; "Summarize" and "Banana" are far apart. This is how the model understands language.',
+    },
+    {
+      num: '③',
+      color: '#ED2738',
+      title: 'Attention (Prefill) — The expensive step',
+      cost: '2–8 seconds for 6,600 tokens',
+      who: 'GPU compute (O(n²))',
+      body: 'Every token "attends to" every other token. Token 6,600 must look at tokens 1–6,599 to understand context. This happens across all 32 transformer layers.',
+      example: 'For each token: Q = token × W_Q  |  K = token × W_K  |  V = token × W_V\nAttention = softmax(Q · Kᵀ / √d) · V',
+      why: 'This is the O(n²) bottleneck. A 6,600-token prompt requires ~43 million attention operations per layer × 32 layers. This is why the cold TTFT is slow — it is doing an enormous amount of math.',
+    },
+    {
+      num: '④',
+      color: '#ED2738',
+      title: 'KV Tensor Generation — What actually gets cached',
+      cost: '850 MB for 6,600 tokens',
+      who: 'GPU output of attention',
+      body: 'The K (Key) and V (Value) matrices produced during attention are the KV Cache. They are the computed result of processing every prefix token.',
+      example: 'Per token, per layer: K + V = 8 KV heads × 128 dims × 2 bytes × 2 = 4,096 bytes\n6,600 tokens × 32 layers × 4,096 bytes = ~850 MB of bfloat16 tensors',
+      why: 'If you cache these matrices, the next request with the same prefix skips Step ③ entirely. That is the entire value of KV caching. NOT the text — the raw floating-point math.',
+    },
+    {
+      num: '⑤',
+      color: '#00C9FF',
+      title: 'GPU HBM — Tier 1 Cache (hot, volatile)',
+      cost: '~nanoseconds access',
+      who: 'vLLM PagedAttention',
+      body: 'KV blocks are stored in GPU High Bandwidth Memory using vLLM\'s PagedAttention system — dividing the cache into 16-token pages managed like virtual memory.',
+      example: 'RTX 5090: ~24 GB VRAM @ ~10 TB/s bandwidth\n6,600 tokens = ~415 pages of 16 tokens each',
+      why: 'HBM is the fastest possible cache tier. On a warm run (same session), this is what serves the KV — no Infinia needed. BUT: HBM is cleared every time vLLM restarts. That is the persistence gap Infinia fills.',
+    },
+    {
+      num: '⑥',
+      color: '#FF9600',
+      title: 'LMCache — The bridge between GPU and Infinia',
+      cost: 'Async — does not block inference',
+      who: 'LMCacheConnectorV1 (vLLM plugin)',
+      body: 'LMCache hooks into vLLM\'s KV transfer interface. It intercepts KV blocks, batches them into 256-token chunks (~32 MB each), and stages them to a CPU DRAM buffer before writing to Infinia.',
+      example: 'CPU staging buffer: 0.5 GB\nChunk size: 256 tokens = ~32 MB per chunk\n16 async I/O threads write to Infinia S3\nKey format: model@rank@worker@hash@dtype',
+      why: 'Writing directly to S3 on every KV block would stall inference. The CPU buffer absorbs writes asynchronously — inference continues uninterrupted while LMCache uploads in the background.',
+    },
+    {
+      num: '⑦',
+      color: '#76B900',
+      title: 'DDN Infinia — Tier 2 Cache (persistent, shared)',
+      cost: 'Milliseconds to read/write',
+      who: 'S3-compatible object store',
+      body: 'LMCache writes bfloat16 KV tensor chunks as S3 objects to the Infinia bucket. These objects survive vLLM restarts, GPU crashes, and can be read by any GPU node on the network.',
+      example: 'Bucket: ddn-kv-cache-01\nObject: _Llama-3.1-8B@1@0@a3f9b2@bfloat16 (~32 MB)\nEndpoint: 192.168.147.129:8111',
+      why: 'HBM is volatile — Infinia is permanent. If a GPU node crashes and restarts, LMCache fetches the KV tensors from Infinia instead of recomputing. This is also how KV state scales across a GPU fleet — any node can access any cached prefix.',
+    },
+    {
+      num: '⑧',
+      color: '#76B900',
+      title: 'Decode — Fast answer generation (reuses KV)',
+      cost: '~50ms per output token',
+      who: 'GPU compute (O(n) per token)',
+      body: 'Once the prefix KV is available (from HBM or Infinia), generating the answer is cheap. Each new output token only needs its own Q vector — it attends to the cached K,V without recomputing them.',
+      example: 'For each output token:\n  1. Compute Q for THIS token only (1 token, not 6,600)\n  2. Attend to ALL cached K,V — free, already computed\n  3. Sample next token and repeat',
+      why: 'Prefill was O(n²). Decode is O(n) per token — linear. A 300-token answer = 300 fast decode steps, each reusing the cached prefix. This is why TTFT drops so dramatically on a warm hit.',
+    },
+  ]
+
+  const scenarios = [
+    {
+      label: 'COLD RUN',
+      badge: '❌ Slow',
+      badgeColor: '#ED2738',
+      bg: 'rgba(237,39,56,0.06)',
+      border: 'rgba(237,39,56,0.3)',
+      steps: [
+        'User question arrives',
+        'vLLM checks GPU HBM → MISS (empty)',
+        'vLLM checks LMCache → MISS (nothing cached)',
+        'GPU computes FULL prefill (Steps ①–④)',
+        '6,600 tokens × 32 layers × attention = 2–8 seconds',
+        'KV blocks stored in GPU HBM',
+        'LMCache intercepts → CPU buffer → async write to Infinia',
+        'Decode begins · TTFT = 2,000–8,000ms',
+      ],
+    },
+    {
+      label: 'WARM RUN',
+      badge: '⚡ Fast',
+      badgeColor: '#FF9600',
+      bg: 'rgba(255,150,0,0.06)',
+      border: 'rgba(255,150,0,0.3)',
+      steps: [
+        'Same question arrives (same session)',
+        'vLLM checks GPU HBM → HIT ✓ (blocks still there)',
+        'ZERO recomputation of 6,600-token prefix',
+        'Only computes Q for the 12-token question',
+        'Decode begins immediately',
+        'TTFT = 50–300ms',
+      ],
+    },
+    {
+      label: 'RESTART + REPLAY',
+      badge: '✅ Infinia proof',
+      badgeColor: '#76B900',
+      bg: 'rgba(118,185,0,0.06)',
+      border: 'rgba(118,185,0,0.3)',
+      steps: [
+        'vLLM restarted → GPU HBM cleared',
+        'Same question arrives again',
+        'vLLM checks GPU HBM → MISS (cleared by restart)',
+        'LMCache checks CPU buffer → MISS (also cleared)',
+        'LMCache checks Infinia S3 → HIT ✓ (written during cold run)',
+        'Downloads ~850 MB from Infinia into HBM',
+        'ZERO GPU recomputation',
+        'TTFT ≈ warm speed — THIS is the Infinia value proof',
+      ],
+    },
+  ]
+
+  return (
+    <div className="space-y-8">
+
+      {/* Header */}
+      <div className="rounded-xl px-5 py-4"
+        style={{ background: 'linear-gradient(135deg, rgba(118,185,0,0.08) 0%, rgba(26,129,175,0.06) 100%)',
+                 border: '1px solid rgba(118,185,0,0.2)' }}>
+        <h3 className="text-base font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+          End-to-End: What happens when you send a question?
+        </h3>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          When you type <em>"Summarize the indemnification clause"</em> into KV Reuse Proof,
+          you trigger a chain of computation that produces ~850 MB of floating-point math.
+          The entire value of DDN Infinia is capturing that math so it never has to be repeated.
+        </p>
+      </div>
+
+      {/* 8 steps */}
+      <div className="space-y-3">
+        {steps.map((s) => (
+          <div key={s.num} className="rounded-xl overflow-hidden"
+            style={{ border: `1px solid ${s.color}33` }}>
+            {/* Step header */}
+            <div className="px-4 py-2.5 flex items-center gap-3"
+              style={{ background: `${s.color}10`, borderBottom: `1px solid ${s.color}20` }}>
+              <span className="text-lg font-black font-mono" style={{ color: s.color }}>{s.num}</span>
+              <div className="flex-1">
+                <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{s.title}</span>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono"
+                  style={{ background: `${s.color}20`, color: s.color }}>
+                  {s.cost}
+                </span>
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{s.who}</span>
+              </div>
+            </div>
+            {/* Step body */}
+            <div className="px-4 py-3 space-y-2.5">
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{s.body}</p>
+              {/* Example */}
+              <div className="rounded-lg px-3 py-2"
+                style={{ background: 'var(--surface-secondary)', border: '1px solid var(--border-subtle)' }}>
+                <div className="text-[9px] font-bold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>EXAMPLE</div>
+                <pre className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap"
+                  style={{ color: s.color }}>{s.example}</pre>
+              </div>
+              {/* Why it matters */}
+              <div className="flex gap-2">
+                <span className="text-[9px] font-bold uppercase tracking-widest mt-0.5 flex-shrink-0"
+                  style={{ color: 'var(--text-muted)' }}>WHY</span>
+                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{s.why}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Cold / Warm / Restart scenarios */}
+      <div>
+        <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+          The Three Scenarios — Cold · Warm · Infinia Proof
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {scenarios.map((sc) => (
+            <div key={sc.label} className="rounded-xl p-4 space-y-2"
+              style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{sc.label}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: `${sc.badgeColor}20`, color: sc.badgeColor }}>
+                  {sc.badge}
+                </span>
+              </div>
+              <ul className="space-y-1">
+                {sc.steps.map((step, i) => (
+                  <li key={i} className="flex gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    <span className="flex-shrink-0 font-mono" style={{ color: sc.badgeColor }}>→</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Business math */}
+      <div className="rounded-xl p-5 space-y-3"
+        style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.25)' }}>
+        <div className="text-xs font-bold uppercase tracking-widest" style={{ color: '#1A81AF' }}>
+          The Business Math — Why This Matters at Scale
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <div className="space-y-1.5">
+            <div className="font-semibold" style={{ color: '#ED2738' }}>Without KV Cache (contact center, 2K token prompt)</div>
+            <div>50,000 daily requests × 1,000ms prefill = <strong>14 GPU-hours wasted/day</strong></div>
+            <div>At $3/GPU-hour (H100 cloud): <strong>$42/day = $15,000+/year</strong></div>
+            <div style={{ color: 'var(--text-muted)' }}>Per use case. Per tenant. Per model version.</div>
+          </div>
+          <div className="space-y-1.5">
+            <div className="font-semibold" style={{ color: '#76B900' }}>With Infinia KV Cache</div>
+            <div>Prefill computed once, stored in Infinia (~256 MB)</div>
+            <div>50,000 requests fetch from Infinia: <strong>~5ms each</strong></div>
+            <div>GPU-hours wasted: <strong>near zero</strong></div>
+            <div style={{ color: 'var(--text-muted)' }}>Plus: survives restarts, scales across GPU fleet</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
 // CONCEPTS registry + Main Page
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1091,10 +1346,21 @@ const CONCEPTS = [
     summary: 'Recommended demo routes and talking points by audience persona',
     ready: true,
   },
+  {
+    id: 'workflow',
+    icon: <Zap className="w-5 h-5" />,
+    label: 'Detailed Workflow',
+    subtitle: 'Step-by-Step',
+    tag: 'How It Works',
+    tagColor: '#1A81AF',
+    summary: 'End-to-end: tokenization → embedding → attention → KV tensors → HBM → LMCache → Infinia. Cold, warm, and restart scenarios explained.',
+    ready: true,
+  },
 ]
 
 function renderSection(id: string) {
   switch (id) {
+    case 'workflow':   return <DetailedWorkflowDetail />
     case 'dynamo':    return <DynamoNIXLArchitectureDetail />
     case 'observatory': return <ChatObservatoryArchitectureDetail />
     case 'mechanics': return <KVMechanicsDetail />
