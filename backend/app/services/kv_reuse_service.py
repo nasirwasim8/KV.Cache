@@ -7,11 +7,60 @@ import hashlib
 import json
 import time
 import logging
+from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional
 import httpx
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _make_s3_client():
+    """Create a boto3 S3 client pointed at DDN Infinia."""
+    try:
+        import boto3
+        from botocore.config import Config
+        return boto3.client(
+            "s3",
+            endpoint_url=settings.infinia_endpoint,
+            aws_access_key_id=settings.infinia_access_key,
+            aws_secret_access_key=settings.infinia_secret_key,
+            region_name="us-east-1",
+            verify=False,
+            config=Config(s3={"addressing_style": "path"}, signature_version="s3v4"),
+        )
+    except Exception:
+        return None
+
+
+def _list_infinia_objects_since(since_dt: datetime) -> list[dict]:
+    """
+    List all objects in the Infinia bucket modified AFTER since_dt.
+    Returns a list of dicts: {key, size_bytes, size_mb, last_modified}.
+    """
+    client = _make_s3_client()
+    if not client:
+        return []
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        found = []
+        for page in paginator.paginate(Bucket=settings.infinia_bucket):
+            for obj in page.get("Contents", []):
+                lm = obj["LastModified"]
+                # boto3 returns timezone-aware datetime; ensure since_dt is also tz-aware
+                if lm.tzinfo is None:
+                    lm = lm.replace(tzinfo=timezone.utc)
+                if lm >= since_dt:
+                    found.append({
+                        "key":           obj["Key"],
+                        "size_bytes":    obj["Size"],
+                        "size_mb":       round(obj["Size"] / (1024 * 1024), 1),
+                        "last_modified": lm.isoformat(),
+                    })
+        return sorted(found, key=lambda x: x["last_modified"], reverse=True)
+    except Exception as e:
+        logger.warning(f"Infinia object lookup failed: {e}")
+        return []
 
 # ── Preset long-context documents ────────────────────────────────────────────
 PRESET_DOCUMENTS = {
@@ -318,6 +367,9 @@ async def stream_reuse_comparison(
     question = custom_question.strip() if custom_question.strip() else preset["sample_questions"][0]
     system_prompt = preset["system_prompt"]
 
+    # Record timestamp BEFORE cold run so we can find LMCache-written objects afterwards
+    run_start = datetime.now(timezone.utc)
+
     # ── COLD RUN ──────────────────────────────────────────────────────────────
     yield sse({"type": "status", "phase": "cold", "message": "Starting cold inference (no cached KV)..."})
     yield sse({"type": "status", "phase": "warm", "message": "Waiting for cold run to complete first..."})
@@ -376,8 +428,8 @@ async def stream_reuse_comparison(
         prefix_tokens = int(len(system_prompt.split()) * 1.33)
         question_tokens = max(1, int(len(question.split()) * 1.33))
 
-        # Llama 3.1 8B KV tensor size per token (fp16, GQA: 8 KV heads, head_dim=128, 32 layers)
-        # Per token = 2 (K+V) × 8 KV heads × 128 head_dim × 2 bytes × 32 layers = 131,072 bytes
+        # Llama 3.1 8B KV tensor size per token (bfloat16, GQA: 8 KV heads, head_dim=128, 32 layers)
+        # Per token = 2 (K+V) x 8 KV heads x 128 head_dim x 2 bytes x 32 layers = 131,072 bytes
         bytes_per_token = 2 * 8 * 128 * 2 * 32   # 131,072 bytes = 128 KB
         kv_bytes = prefix_tokens * bytes_per_token
         kv_mb = round(kv_bytes / (1024 * 1024), 1)
@@ -385,6 +437,15 @@ async def stream_reuse_comparison(
         # vLLM paged attention blocks: default block_size = 16 tokens
         block_size = 16
         block_count = (prefix_tokens + block_size - 1) // block_size
+
+        # ── Real S3 lookup: find objects LMCache actually wrote during this run ──
+        # Wait 2s for LMCache's async write thread to flush to Infinia
+        yield sse({"type": "status", "phase": "warm",
+                   "message": "Checking DDN Infinia for newly written KV tensors…"})
+        await asyncio.sleep(2.0)
+        confirmed_objects = await asyncio.get_event_loop().run_in_executor(
+            None, _list_infinia_objects_since, run_start
+        )
 
         yield sse({
             "type": "summary",
@@ -395,11 +456,13 @@ async def stream_reuse_comparison(
             "speedup":           speedup,
             "tokens_in_context": prefix_tokens,
             "preset":            preset_key,
+            # Confirmed objects actually found in Infinia during this run
+            "confirmed_infinia_objects": confirmed_objects,
             "infinia": {
                 "prefix_hash":           prefix_hash[:24],
                 "prefix_hash_full":      prefix_hash,
                 "prefix_tokens":         prefix_tokens,
-                "question_tokens":       question_tokens,
+                "question_tokens":        question_tokens,
                 "kv_size_mb":            kv_mb,
                 "kv_size_bytes":         kv_bytes,
                 "block_count":           block_count,
@@ -411,9 +474,9 @@ async def stream_reuse_comparison(
                 "model":                 "Llama-3.1-8B-Instruct",
                 "bucket":                settings.infinia_bucket,
                 "endpoint":              settings.infinia_endpoint or "192.168.147.129:8111",
-                # Real architecture: vLLM → LMCache (CPU staging) → DDN Infinia S3
+                # Real architecture: vLLM -> LMCache (CPU staging) -> DDN Infinia S3
                 # LMCache object key format: _path_to_model@world_size@worker_id@prefix_hash@dtype
-                "transfer_mode":         "LMCache → DDN Infinia S3",
+                "transfer_mode":         "LMCache -> DDN Infinia S3",
                 "object_key":            f"_home_nwasim_models_Llama-3.1-8B-Instruct@1@0@{prefix_hash[:16]}@bfloat16",
                 "gpu_compute_saved_pct": round(prefix_tokens / (prefix_tokens + question_tokens) * 100, 1),
             },

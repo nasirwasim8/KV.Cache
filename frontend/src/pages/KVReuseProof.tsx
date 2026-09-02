@@ -34,6 +34,13 @@ interface InfiniaMeta {
   gpu_compute_saved_pct: number
 }
 
+interface ConfirmedObject {
+  key: string
+  size_bytes: number
+  size_mb: number
+  last_modified: string
+}
+
 interface Summary {
   cold_ttft_ms: number
   warm_ttft_ms: number
@@ -41,6 +48,7 @@ interface Summary {
   tokens_in_context: number
   preset: string
   infinia?: InfiniaMeta
+  confirmed_infinia_objects?: ConfirmedObject[]
 }
 
 const EMPTY_PHASE: PhaseState = { status: 'idle', message: '', ttft_ms: null, total_ms: null, response: '' }
@@ -477,23 +485,74 @@ export default function KVReuseProof() {
       {/* Infinia KV Inspector */}
       {summary?.infinia && (
         <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--nvidia-green)', borderWidth: 1 }}>
-          {/* Header */}
+
+          {/* ── Section 1: Real Infinia Confirmation ── */}
           <div className="px-4 py-3 flex items-center gap-2"
             style={{ background: 'linear-gradient(90deg, rgba(118,185,0,0.12) 0%, rgba(118,185,0,0.04) 100%)' }}>
             <span style={{ fontSize: 16 }}>💾</span>
             <span className="text-sm font-bold" style={{ color: 'var(--nvidia-green)' }}>
-              KV Tensor Map — LMCache → DDN Infinia
+              DDN Infinia — Live Bucket Scan
             </span>
-            <span className="ml-auto text-xs font-mono font-bold px-2 py-0.5 rounded"
-              style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)' }}>
-              {summary.infinia.transfer_mode}
+            {summary.confirmed_infinia_objects && summary.confirmed_infinia_objects.length > 0 ? (
+              <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded"
+                style={{ background: 'rgba(118,185,0,0.2)', color: 'var(--nvidia-green)', border: '1px solid rgba(118,185,0,0.4)' }}>
+                ✓ {summary.confirmed_infinia_objects.length} OBJECT{summary.confirmed_infinia_objects.length > 1 ? 'S' : ''} CONFIRMED
+              </span>
+            ) : (
+              <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded"
+                style={{ background: 'rgba(255,150,0,0.15)', color: '#FF9600', border: '1px solid rgba(255,150,0,0.3)' }}>
+                ⚡ GPU HBM — NOT YET IN INFINIA
+              </span>
+            )}
+          </div>
+
+          {/* Confirmed objects list — real S3 keys */}
+          {summary.confirmed_infinia_objects && summary.confirmed_infinia_objects.length > 0 ? (
+            <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              {summary.confirmed_infinia_objects.map((obj, i) => (
+                <div key={i} className="px-4 py-2.5 flex items-center gap-3"
+                  style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,
+                           background: 'rgba(118,185,0,0.03)' }}>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                    style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)', flexShrink: 0 }}>
+                    S3
+                  </span>
+                  <span className="font-mono text-xs flex-1 truncate" style={{ color: 'var(--text-primary)' }}
+                    title={obj.key}>
+                    {obj.key}
+                  </span>
+                  <span className="font-mono text-xs flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                    {obj.size_mb} MB
+                  </span>
+                  <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+                    {new Date(obj.last_modified).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="px-4 py-3 text-xs leading-relaxed"
+              style={{ background: 'rgba(255,150,0,0.04)', borderBottom: '1px solid var(--border-subtle)' }}>
+              <strong style={{ color: '#FF9600' }}>No new objects written to Infinia during this run.</strong>
+              {' '}The KV tensors are being served from <strong>GPU HBM prefix cache</strong> (this session is still active).
+              To see Infinia writes: <strong>restart vLLM</strong> to flush HBM, then run the test again.
+              LMCache will then fetch from Infinia instead of recomputing.
+            </div>
+          )}
+
+          {/* ── Section 2: Estimated KV Tensor Architecture ── */}
+          <div className="px-4 py-2.5 flex items-center gap-2"
+            style={{ background: 'var(--surface-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+              KV Tensor Architecture (calculated from model spec)
             </span>
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {summary.infinia.kv_size_mb.toLocaleString()} MB
+            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded"
+              style={{ background: 'var(--surface-tertiary)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}>
+              ESTIMATED
             </span>
           </div>
 
-          {/* Subheader: bucket + key */}
+          {/* Subheader: bucket + estimated key */}
           <div className="px-4 py-1.5 text-xs font-mono flex items-center gap-2"
             style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
             <span style={{ color: 'var(--text-secondary)' }}>{summary.infinia.bucket}</span>
