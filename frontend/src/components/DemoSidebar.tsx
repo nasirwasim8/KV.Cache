@@ -19,6 +19,7 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
   const [health, setHealth] = useState<{ infinia_connected: boolean; ollama_available: boolean; model_ready: boolean; gpu_available: boolean; hit_count?: number } | null>(null)
   const [clearing, setClearing] = useState(false)
   const [clearMsg, setClearMsg] = useState('')
+  const [vllmRestarting, setVllmRestarting] = useState(false)
   const { theme } = useTheme()
 
   const fetchHealth = async () => {
@@ -38,9 +39,37 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
     try {
       const r = await fetch('/api/cache/purge-infinia', { method: 'DELETE' })
       const d = await r.json()
-      setClearMsg(`Cleared ${d.deleted ?? 0} objects`)
-      setTimeout(() => setClearMsg(''), 3000)
-      await fetchHealth()
+      if (d.vllm_restarting) {
+        // vLLM is restarting to flush LMCache CPU buffer
+        setVllmRestarting(true)
+        setClearMsg(`Cleared ${d.deleted ?? 0} objects · vLLM restarting…`)
+        // Poll vLLM health until it comes back up (~90s)
+        const pollStart = Date.now()
+        const poll = async () => {
+          try {
+            const hRes = await fetch('http://localhost:11000/health')
+            if (hRes.ok) {
+              setVllmRestarting(false)
+              setClearMsg('Ready — run benchmark for fresh Infinia writes')
+              setTimeout(() => setClearMsg(''), 5000)
+              await fetchHealth()
+              return
+            }
+          } catch { /* still restarting */ }
+          if (Date.now() - pollStart < 120000) {
+            setTimeout(poll, 4000)
+          } else {
+            setVllmRestarting(false)
+            setClearMsg('vLLM restart timed out — check PM2')
+            setTimeout(() => setClearMsg(''), 5000)
+          }
+        }
+        setTimeout(poll, 8000) // first check after 8s
+      } else {
+        setClearMsg(`Cleared ${d.deleted ?? 0} objects`)
+        setTimeout(() => setClearMsg(''), 3000)
+        await fetchHealth()
+      }
     } catch {
       setClearMsg('Error — check connection')
       setTimeout(() => setClearMsg(''), 3000)
@@ -115,8 +144,12 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
             {health?.infinia_connected && (
               <div className="mt-3">
                 {clearMsg ? (
-                  <div className="text-center text-xs py-1 rounded" style={{ color: '#76B900', background: 'rgba(118,185,0,0.1)' }}>
-                    ✓ {clearMsg}
+                  <div className="text-center text-xs py-1.5 px-2 rounded leading-relaxed" style={{
+                    color: vllmRestarting ? '#FF7600' : '#76B900',
+                    background: vllmRestarting ? 'rgba(255,118,0,0.08)' : 'rgba(118,185,0,0.1)',
+                    border: vllmRestarting ? '1px solid rgba(255,118,0,0.2)' : 'none',
+                  }}>
+                    {vllmRestarting ? '⟳' : '✓'} {clearMsg}
                   </div>
                 ) : (
                   <button

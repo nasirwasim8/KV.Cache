@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Activity, Play, Square, Copy, Check, ChevronDown, RotateCcw, Clock, Zap, TrendingUp, BarChart3, Terminal, Info } from 'lucide-react'
+import { Activity, Play, Square, Copy, Check, ChevronDown, RotateCcw, Clock, Zap, TrendingUp, BarChart3, Terminal, Info, Download, PackageOpen } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 // ── InfoTooltip ───────────────────────────────────────────────────────────────
@@ -217,6 +217,8 @@ export default function AIperfBenchmark() {
   const [showCtxDropdown, setShowCtxDropdown] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [showEnv, setShowEnv] = useState(false)
+  const [showWhatWeTest, setShowWhatWeTest] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [requestsCompleted, setRequestsCompleted] = useState(0)
   const [vllmStatus, setVllmStatus] = useState<'stopped'|'starting'|'running'|'stopping'|'error'>('stopped')
   const [vllmLoading, setVllmLoading] = useState(false)
@@ -698,6 +700,56 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
           </div>
 
           {/* Results: percentile bars */}
+          {/* ── Download Results ZIP — shown when benchmark completes ── */}
+          {results && status === 'done' && runId && (
+            <div className="card px-4 py-3 flex items-center justify-between gap-4"
+              style={{ border: '1px solid rgba(118,185,0,0.35)', background: 'rgba(118,185,0,0.04)' }}>
+              <div className="flex items-center gap-2.5">
+                <PackageOpen className="w-4 h-4 shrink-0" style={{ color: '#76B900' }} />
+                <div>
+                  <div className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Benchmark results ready</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    CSV · JSON · Server Metrics · Log — bundled as a single ZIP
+                  </div>
+                </div>
+              </div>
+              <button
+                id="aiperf-download-btn"
+                disabled={downloading}
+                onClick={async () => {
+                  if (!runId) return
+                  setDownloading(true)
+                  try {
+                    const res = await fetch(`/api/aiperf/download/${runId}`)
+                    if (!res.ok) throw new Error(await res.text())
+                    const blob = await res.blob()
+                    const url  = URL.createObjectURL(blob)
+                    const a    = document.createElement('a')
+                    a.href     = url
+                    a.download = `aiperf_results_${runId.slice(0, 8)}.zip`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  } catch (err) { console.error('Download failed:', err) }
+                  finally { setDownloading(false) }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 shrink-0"
+                style={{
+                  background: downloading ? 'rgba(118,185,0,0.15)' : '#76B900',
+                  color: downloading ? '#76B900' : '#000',
+                  border: '1px solid rgba(118,185,0,0.4)',
+                  cursor: downloading ? 'not-allowed' : 'pointer',
+                  minWidth: 130,
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={e => { if (!downloading) (e.currentTarget as HTMLButtonElement).style.background = '#8fd400' }}
+                onMouseLeave={e => { if (!downloading) (e.currentTarget as HTMLButtonElement).style.background = '#76B900' }}
+              >
+                <Download className="w-3.5 h-3.5" />
+                {downloading ? 'Downloading…' : 'Download ZIP'}
+              </button>
+            </div>
+          )}
+
           {results && status === 'done' && (
             <div className="card p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -848,6 +900,184 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* What Are We Testing — collapsible */}
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowWhatWeTest(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--surface-secondary)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#ED2738')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>🔬</span>
+                    WHAT ARE WE TESTING? — METRICS &amp; ARCHITECTURE EXPLAINED
+                  </span>
+                  <ChevronDown
+                    className="w-4 h-4 transition-transform duration-200"
+                    style={{ transform: showWhatWeTest ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  />
+                </button>
+
+                {showWhatWeTest && (
+                  <div className="mt-3 space-y-3">
+
+                    {/* What AIperf does */}
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <div className="px-4 py-2.5 flex items-center gap-2 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+                        <span className="text-xs font-bold tracking-wider" style={{ color: 'var(--text-secondary)' }}>THE BENCHMARK — WHAT AIPERF DOES</span>
+                      </div>
+                      <div className="p-4" style={{ background: 'var(--surface-primary)' }}>
+                        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                          AIperf acts as a <strong style={{ color: 'var(--text-primary)' }}>traffic gun</strong> — it fires 20 requests at vLLM and precisely measures how fast the model responds.
+                          Every request carries the <strong style={{ color: 'var(--text-primary)' }}>same long system prompt</strong> (4,000 tokens of shared context)
+                          plus a tiny unique question (1 token). This isolates the exact impact of prefix caching on latency.
+                        </p>
+                        <div className="mt-3 rounded-lg p-3 font-mono text-xs leading-relaxed" style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
+                          <div style={{ color: '#76B900' }}>aiperf fires 20 requests</div>
+                          <div className="ml-4">└── Same 4,000-token system prompt (shared prefix)</div>
+                          <div className="ml-4">└── Unique 1-token question per request</div>
+                          <div className="ml-4">└── Measures TTFT: how fast does the first token come back?</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Metrics explained */}
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <div className="px-4 py-2.5 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}>
+                        <span className="text-xs font-bold tracking-wider" style={{ color: 'var(--text-secondary)' }}>WHAT THE METRICS MEAN</span>
+                      </div>
+                      <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
+                        {[
+                          { label: 'TTFT Warm (avg / p50)', color: '#76B900', meaning: 'Requests 3–20 — the prefix is already in GPU HBM from warmup. GPU skips recomputing the 4K prefix entirely. This is your cache-hit speed.', tag: '✅ Cache HIT' },
+                          { label: 'TTFT Cold (p99)', color: '#ED2738', meaning: 'Warmup requests 1–2 — cold start, empty cache. GPU must compute all 4,000 prefix tokens from scratch before returning the first word.', tag: '❌ Cache MISS' },
+                          { label: 'p50 — median', color: '#76B900', meaning: 'Sort all 20 requests by TTFT — p50 is request #10. Half were faster, half slower. Represents your "typical user" speed.', tag: 'Typical user' },
+                          { label: 'p99 — worst case', color: '#ED2738', meaning: 'Only 1 in 100 requests waited longer than this. The SLA commitment number. In this benchmark, almost always the cold-start request.', tag: 'SLA number' },
+                          { label: 'Speedup ratio (Nx)', color: '#1A81AF', meaning: 'Cold TTFT ÷ Warm TTFT. How many times faster the cached path is. 29× means the GPU responded 29 times faster with cache than without.', tag: 'The headline' },
+                        ].map(({ label, color, meaning, tag }) => (
+                          <div key={label} className="px-4 py-3 flex items-start gap-3" style={{ background: 'var(--surface-primary)' }}>
+                            <div className="shrink-0 mt-0.5">
+                              <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold" style={{ background: color + '18', color }}>{tag}</span>
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold mb-0.5" style={{ color }}>{label}</div>
+                              <div className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>{meaning}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 3-layer architecture */}
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(26,129,175,0.3)' }}>
+                      <div className="px-4 py-2.5 border-b" style={{ borderColor: 'rgba(26,129,175,0.2)', background: 'rgba(26,129,175,0.06)' }}>
+                        <span className="text-xs font-bold tracking-wider" style={{ color: '#1A81AF' }}>3-LAYER CACHE ARCHITECTURE — HOW KV TENSORS FLOW</span>
+                      </div>
+                      <div className="p-4" style={{ background: 'var(--surface-primary)' }}>
+                        <div className="space-y-2">
+                          {[
+                            {
+                              layer: '① GPU HBM', sub: 'Hot cache — nanosecond access',
+                              detail: "vLLM's built-in prefix cache. Fastest tier — KV tensors live here while the GPU is warm. Lost on restart or when memory is full.",
+                              color: '#76B900',
+                              icon: (
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#76B900" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="2" y="7" width="20" height="10" rx="2"/>
+                                  <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
+                                  <line x1="6" y1="12" x2="6" y2="12"/><line x1="10" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="14" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/>
+                                </svg>
+                              ),
+                            },
+                            {
+                              layer: '② CPU DRAM', sub: 'LMCache staging buffer (2 GB)',
+                              detail: 'LMCache intercepts KV tensors on HBM eviction and stages them here. Acts as a write buffer before persisting to Infinia (~200ms).',
+                              color: '#FF7600',
+                              icon: (
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FF7600" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="17 1 21 5 17 9"/>
+                                  <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                  <polyline points="7 23 3 19 7 15"/>
+                                  <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                                </svg>
+                              ),
+                            },
+                            {
+                              layer: '③ DDN Infinia', sub: 'Persistent S3 store — survives restarts',
+                              detail: 'LMCache writes 832 MB of KV tensors here async (~97ms). On next cold start or on a different GPU, LMCache fetches from here — skipping full recompute.',
+                              color: '#1A81AF',
+                              icon: (
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A81AF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                                  <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+                                  <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
+                                </svg>
+                              ),
+                            },
+                          ].map(({ layer, sub, detail, color, icon }) => (
+                            <div key={layer} className="flex items-start gap-3 p-3 rounded-lg" style={{ background: color + '0a', border: `1px solid ${color}25` }}>
+                              <span className="shrink-0 flex items-center justify-center" style={{ width: 28, height: 28 }}>{icon}</span>
+                              <div>
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                  <span className="text-xs font-bold" style={{ color }}>{layer}</span>
+                                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{sub}</span>
+                                </div>
+                                <div className="text-xs leading-relaxed mt-0.5" style={{ color: 'var(--text-secondary)' }}>{detail}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 rounded-lg px-3 py-2 text-xs font-mono" style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
+                          <span style={{ color: '#76B900' }}>vLLM</span> → computes KV tensors →
+                          <span style={{ color: '#FF7600' }}> LMCache</span> → stages in CPU →
+                          <span style={{ color: '#1A81AF' }}> DDN Infinia</span> → persists across restarts &amp; GPUs
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Why Infinia matters */}
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(237,39,56,0.2)' }}>
+                      <div className="px-4 py-2.5 border-b" style={{ borderColor: 'rgba(237,39,56,0.15)', background: 'rgba(237,39,56,0.04)' }}>
+                        <span className="text-xs font-bold tracking-wider" style={{ color: '#ED2738' }}>WHY DDN INFINIA CHANGES THE ECONOMICS</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr style={{ background: 'var(--surface-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
+                              {['Scenario', 'Without Infinia', 'With Infinia'].map(h => (
+                                <th key={h} className="text-left px-4 py-2.5 font-bold" style={{ color: 'var(--text-muted)' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
+                            {[
+                              ['Same request, same GPU (warm)', '✅ Fast — HBM hit', '✅ Fast — HBM hit'],
+                              ['GPU restart', '❌ Cold — 3,100ms recompute', '✅ Warm — loaded from Infinia'],
+                              ['Different GPU, same prefix', '❌ Cold — each GPU recomputes', '✅ Warm — shared KV pool'],
+                              ['Scale to 100 GPUs', '❌ 100× redundant compute', '✅ One Infinia pool serves all'],
+                            ].map(([scenario, without, withInfinia], i) => (
+                              <tr key={i} style={{ background: i % 2 === 0 ? 'var(--surface-primary)' : 'var(--surface-secondary)' }}>
+                                <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--text-secondary)' }}>{scenario}</td>
+                                <td className="px-4 py-2.5" style={{ color: without.startsWith('✅') ? '#76B900' : '#ED2738' }}>{without}</td>
+                                <td className="px-4 py-2.5" style={{ color: '#76B900' }}>{withInfinia}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="px-4 py-3 text-xs leading-relaxed border-t" style={{ color: 'var(--text-muted)', background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>Bottom line:</strong> The AIperf benchmark proves the <strong style={{ color: '#76B900' }}>29× TTFT speedup</strong> on a single GPU.
+                        DDN Infinia proves it <strong style={{ color: '#1A81AF' }}>survives GPU restarts</strong> and <strong style={{ color: '#1A81AF' }}>scales across an entire fleet</strong> — without any GPU recomputing shared context twice.
+                      </div>
+                    </div>
+
+                  </div>
+                )}
               </div>
 
               {/* Industry Comparison — collapsible */}

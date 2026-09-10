@@ -6,6 +6,10 @@ Phase 4: AIperf live benchmarking + KV Cache Reuse proof.
 import time
 import logging
 from typing import Optional
+import asyncio
+import io
+import zipfile
+import os as _os
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -2918,10 +2922,33 @@ async def purge_infinia_cache():
         _sessions.clear()
 
         logger.info(f"Purged {deleted_count} objects from Infinia bucket {settings.infinia_bucket}")
+
+        # ── CRITICAL: Restart vLLM to flush LMCache's in-memory CPU buffer ──────
+        # Problem: LMCache stages KV tensors in a 2GB CPU DRAM buffer (in-process).
+        # When Infinia is cleared but vLLM is still running, LMCache serves subsequent
+        # requests from its CPU buffer — never writing to Infinia again.
+        # Fix: restart vLLM (PM2) so the CPU buffer is wiped, forcing a fresh cold
+        # start on the next benchmark that writes new KV tensors back to Infinia.
+        async def _restart_vllm_after_purge():
+            await asyncio.sleep(0.5)  # small delay so API response returns first
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "pm2", "restart", "ddn-vllm",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await proc.communicate()
+                logger.info(f"vLLM restarted after Infinia purge (rc={proc.returncode})")
+            except Exception as restart_err:
+                logger.warning(f"vLLM restart after purge failed: {restart_err}")
+
+        asyncio.create_task(_restart_vllm_after_purge())
+
         return {
             "success": True,
             "deleted": deleted_count,
-            "message": f"Purged {deleted_count} KV tensor objects from DDN Infinia. Next request will be a genuine cache MISS.",
+            "message": f"Purged {deleted_count} KV tensor objects from DDN Infinia and restarting vLLM to flush LMCache memory buffer. Wait ~90s for vLLM to reload, then run the benchmark for fresh Infinia writes.",
+            "vllm_restarting": True,
         }
     except Exception as e:
         logger.error(f"Purge error: {e}")
@@ -3010,6 +3037,41 @@ async def aiperf_list_runs():
     """List all benchmark runs (history)."""
     return {"runs": list_runs()}
 
+
+
+@aiperf_router.get("/download/{run_id}")
+async def aiperf_download_results(run_id: str):
+    """Bundle all aiperf result files for a run into a single ZIP download."""
+    run_dir = _os.path.expanduser(f"~/aiperf_runs/{run_id}")
+    if not _os.path.isdir(run_dir):
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    # All files to include in the zip
+    candidates = [
+        ("profile_export_aiperf.csv",    _os.path.join(run_dir, "profile_export_aiperf.csv")),
+        ("profile_export_aiperf.json",   _os.path.join(run_dir, "profile_export_aiperf.json")),
+        ("server_metrics_export.csv",    _os.path.join(run_dir, "server_metrics_export.csv")),
+        ("server_metrics_export.json",   _os.path.join(run_dir, "server_metrics_export.json")),
+        ("aiperf.log",                   _os.path.join(run_dir, "logs", "aiperf.log")),
+    ]
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        found = 0
+        for arcname, fpath in candidates:
+            if _os.path.isfile(fpath):
+                zf.write(fpath, arcname=arcname)
+                found += 1
+        if found == 0:
+            raise HTTPException(status_code=404, detail="No result files found for this run")
+
+    buf.seek(0)
+    filename = f"aiperf_results_{run_id[:8]}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PHASE 4 — KV Cache Reuse Proof Routes

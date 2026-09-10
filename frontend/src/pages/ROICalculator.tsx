@@ -42,7 +42,7 @@ const TIERS: Record<string, TierConfig> = {
   openai_gpt4: {
     label: 'API (OpenAI GPT-4o)',
     type: 'cloud_api',
-    costPer1kTokens: 0.0050,
+    costPer1kTokens: 0.0025,  // $2.50/1M input tokens (current GPT-4o pricing, mid-2025)
     gpuServerCostUSD: 0,
     gpuPowerWatts: 0,
     electricityCostPerKwh: 0,
@@ -70,15 +70,25 @@ function computeROI(p: { systemTokens: number; dailyRequests: number; avgNewToke
   const dailyHits   = Math.round(dailyRequests * hitFraction)
   const dailyMisses = Math.round(dailyRequests * (1 - hitFraction))
 
-  // H100 throughput: ~3,000 tokens/sec in prefill (conservative)
-  const tokensPerSec        = 3_000
+  // H100 DGX (8×H100 SXM5), Llama 70B-class, vLLM tensor-parallel prefill throughput.
+  // Conservative: 8B model ≈ 50K tok/s, 70B ≈ 8–15K tok/s, 405B ≈ 2–4K tok/s.
+  // 10,000 = defensible baseline for 70B-class enterprise LLM on 8×H100.
+  const tokensPerSec        = 10_000
   const secSavedPerHit      = systemTokens / tokensPerSec
   const gpuSecSavedPerDay   = secSavedPerHit * dailyHits
   const gpuHoursSavedPerDay = gpuSecSavedPerDay / 3600
   const gpuHoursSavedMonthly = gpuHoursSavedPerDay * 30
   const gpuHoursSavedAnnually = gpuHoursSavedPerDay * 365
 
+  // ── TTFT (Time-To-First-Token) Impact ────────────────────────────────────
+  // Cold prefill: GPU must process entire system prompt before generating token 1
+  const ttftColdMs   = Math.round((systemTokens / tokensPerSec) * 1000)
+  // Warm (cache hit): GPU only processes new question tokens + ~50ms Infinia retrieval
+  const ttftWarmMs   = Math.round((avgNewTokens / tokensPerSec) * 1000) + 50
+  const ttftSpeedupX = parseFloat((ttftColdMs / ttftWarmMs).toFixed(1))
+
   // Throughput multiplier: with cache hits, same GPU can serve X× more requests
+  // (prefill eliminated — GPU only processes avgNewTokens instead of systemTokens+avgNewTokens)
   const throughputMultiplier = (systemTokens + avgNewTokens) / avgNewTokens
 
   // ── CLOUD (pay-per-token) ─────────────────────────────────────────────────
@@ -120,11 +130,13 @@ function computeROI(p: { systemTokens: number; dailyRequests: number; avgNewToke
     dailyHits, dailyMisses,
     gpuHoursSavedPerDay, gpuHoursSavedMonthly, gpuHoursSavedAnnually,
     throughputMultiplier,
+    // TTFT
+    ttftColdMs, ttftWarmMs, ttftSpeedupX,
     // Cloud
     savingsPerHitCloud, dailySavingsCloud, monthlySavingsCloud, annualSavingsCloud,
     costNoCache, costWithCache, costReductionPct,
     // Self-hosted
-    serversAvoided, capexAvoidance, annualCapexAmortised,
+    serversAvoided, serversNeededWithout, serversNeededWith, capexAvoidance, annualCapexAmortised,
     powerSavedKWhAnnually, powerSavedUsdAnnually,
     totalSelfHostedAnnual, gpuUtilFreedPct,
   }
@@ -357,6 +369,54 @@ export default function ROICalculator() {
         {/* ── RIGHT: Results ── */}
         <div className="lg:col-span-3 space-y-5">
 
+          {/* ── TTFT Impact Card — always visible ── */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated p-6" style={{ borderTop: '3px solid #76B900' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <Zap className="w-5 h-5 text-[#76B900]" />
+                TTFT Impact — Time-To-First-Token
+              </h3>
+              <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: '#76B90018', color: '#76B900' }}>
+                Same GPU · Same model
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <KpiCard
+                value={roi.ttftColdMs >= 1000 ? `${(roi.ttftColdMs/1000).toFixed(1)}s` : `${roi.ttftColdMs}ms`}
+                label="TTFT Without Cache"
+                sublabel="Full system prompt prefill"
+                color="#ED2738"
+              />
+              <KpiCard
+                value={`${roi.ttftWarmMs}ms`}
+                label="TTFT With Infinia Cache"
+                sublabel="New tokens only + 50ms fetch"
+                color="#76B900"
+              />
+              <KpiCard
+                value={`${roi.ttftSpeedupX}×`}
+                label="TTFT Speedup"
+                sublabel="Cache hit · prefill eliminated"
+                color="#76B900"
+              />
+            </div>
+            <div className="rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(118,185,0,0.04)', border: '1px solid rgba(118,185,0,0.12)' }}>
+              <div className="font-semibold mb-1" style={{ color: '#76B900' }}>How we calculate TTFT:</div>
+              <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                Cold = {fmtNum(systemTokens)} tokens ÷ 10,000 tok/s (H100 DGX 8×, 70B-class, vLLM) = <span style={{ color: '#ED2738' }}>{roi.ttftColdMs >= 1000 ? `${(roi.ttftColdMs/1000).toFixed(1)}s` : `${roi.ttftColdMs}ms`}</span>
+              </div>
+              <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                Warm = {avgNewTokens} new tokens ÷ 10,000 tok/s + 50ms Infinia retrieval = <span style={{ color: '#76B900' }}>{roi.ttftWarmMs}ms</span>
+              </div>
+              <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                Speedup = {roi.ttftColdMs >= 1000 ? `${(roi.ttftColdMs/1000).toFixed(1)}s` : `${roi.ttftColdMs}ms`} ÷ {roi.ttftWarmMs}ms = <span style={{ color: '#76B900' }}>{roi.ttftSpeedupX}× faster first token</span>
+              </div>
+              <div className="pt-1 mt-1 border-t text-xs" style={{ borderColor: 'rgba(118,185,0,0.12)', color: 'var(--text-muted)' }}>
+                Throughput scales by model: 8B ≈ 50K tok/s · 70B ≈ 8–15K tok/s · 405B ≈ 2–4K tok/s. Infinia retrieval: ~50ms demo, sub-10ms production target with NIXL GPU-Direct RDMA.
+              </div>
+            </div>
+          </motion.div>
+
           {/* ── CLOUD Results ── */}
           {isCloud && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated p-6" style={{ borderTop: `3px solid ${TIERS[tier].color}` }}>
@@ -475,7 +535,7 @@ export default function ROICalculator() {
                   ⚡ Source 3: Power / Electricity Savings (OpEx)
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                  <KpiCard value={`${(roi.gpuHoursSavedAnnually / 1000).toFixed(1)}K`} label="GPU-Hours Freed/Year" sublabel="Prefill compute eliminated" color="#f59e0b" />
+                  <KpiCard value={`${(roi.gpuHoursSavedAnnually / 1000).toFixed(1)}K`} label="DGX Compute-Hours Freed/Year" sublabel="Prefill eliminated (10K tok/s, 70B-class)" color="#f59e0b" />
                   <KpiCard value={`${(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K`} label="kWh Saved/Year" sublabel="At 6.4kW per DGX server" color="#f59e0b" />
                   <KpiCard value={fmt$(roi.powerSavedUsdAnnually)} label="Power Cost Saved/Year" sublabel="@$0.10/kWh data center rate" color="#f59e0b" />
                 </div>
@@ -483,10 +543,10 @@ export default function ROICalculator() {
                 <div className="mt-3 rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
                   <div className="font-semibold" style={{ color: '#f59e0b' }}>How we calculate these numbers:</div>
                   <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                    GPU-hours/yr = {roi.gpuHoursSavedPerDay.toFixed(1)} hrs/day × 365 = <span style={{ color: '#f59e0b' }}>{roi.gpuHoursSavedAnnually.toFixed(0)} hrs</span>
+                    DGX-hours/yr = {roi.gpuHoursSavedPerDay.toFixed(1)} hrs/day × 365 = <span style={{ color: '#f59e0b' }}>{roi.gpuHoursSavedAnnually.toFixed(0)} hrs</span>
                   </div>
                   <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                    kWh saved = {roi.gpuHoursSavedAnnually.toFixed(0)} hrs × 6.4 kW (DGX power draw) = <span style={{ color: '#f59e0b' }}>{(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K kWh</span>
+                    kWh saved = {roi.gpuHoursSavedAnnually.toFixed(0)} DGX-hrs × 6.4 kW/DGX (8×H100 @ 700W ea + overhead) = <span style={{ color: '#f59e0b' }}>{(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K kWh</span>
                   </div>
                   <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
                     Power cost = {(roi.powerSavedKWhAnnually / 1000).toFixed(1)}K kWh × $0.10/kWh = <span style={{ color: '#f59e0b' }}>{fmt$(roi.powerSavedUsdAnnually)}/yr</span>
@@ -517,6 +577,42 @@ export default function ROICalculator() {
             </motion.div>
           )}
 
+
+          {/* Technical Assumptions Disclosure */}
+          <motion.div layout>
+            <details className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+              <summary className="px-4 py-3 cursor-pointer text-xs font-semibold uppercase tracking-wider flex items-center gap-2"
+                style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', listStyle: 'none' }}>
+                <Info className="w-3.5 h-3.5" /> Technical Assumptions &amp; Methodology
+              </summary>
+              <div className="p-4 text-xs space-y-2" style={{ color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.15)' }}>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                  {[
+                    ['Prefill throughput', '10,000 tok/s — H100 DGX 8×, Llama 70B-class, vLLM tensor-parallel'],
+                    ['Scale note', '8B model ≈ 50K tok/s · 70B ≈ 8–15K tok/s · 405B ≈ 2–4K tok/s'],
+                    ['DGX server capacity', '200,000 req/day — ~batch size 24 at 50K token context'],
+                    ['DGX server cost', '$300,000 — 8×H100 SXM5 DGX H100 list price'],
+                    ['DGX power draw', '6,400W — 8×H100 @ 700W + system overhead'],
+                    ['Electricity cost', '$0.10/kWh — typical data center rate'],
+                    ['Server lifecycle', '3 years — standard CapEx amortisation period'],
+                    ['Cache hit overhead', '+50ms — Infinia KV retrieval (S3-compatible, sub-10ms NVMe production target)'],
+                    ['Infinia hardware cost', 'NOT INCLUDED — contact DDN for sizing and pricing'],
+                    ['Output tokens', 'Not modelled — KV cache saves input/prefill only; output decode unaffected'],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex gap-2">
+                      <span className="font-mono shrink-0" style={{ color: 'var(--text-muted)', minWidth: 160 }}>{k}:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-2 border-t text-xs" style={{ borderColor: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
+                  All calculations assume reusable system prompt context with stable hit rate.
+                  Cloud API savings assume full token bypass (self-hosted vLLM + DDN Infinia replaces cloud API).
+                  GPU-hours represent DGX-level compute time, not per-GPU.
+                </div>
+              </div>
+            </details>
+          </motion.div>
 
           {/* Scaling insight */}
           <motion.div className="p-5 rounded-2xl" style={{ background: `linear-gradient(135deg, ${accent}12, ${accent}05)`, border: `1px solid ${accent}25` }} layout>
