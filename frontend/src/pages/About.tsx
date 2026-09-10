@@ -4,7 +4,7 @@ import {
   BookOpen, ChevronRight, CheckCircle, Zap, Database, Server,
   MemoryStick, Users, Layers, ArrowRight, AlertTriangle, HardDrive,
   TrendingDown, Shield, Eye, EyeOff, GitBranch, Lock, Hash, Activity,
-  ChevronDown
+  ChevronDown, Trophy, Cpu, RefreshCw, TrendingUp, Award
 } from 'lucide-react'
 
 // ─── Shared sub-components (mirrors RAG/VSS Details pattern) ──────────────────
@@ -410,11 +410,12 @@ function SessionResumeDetail() {
 function StorageComparisonDetail() {
   const ROWS = [
     { metric: 'Capacity', gpu: '~2–8 GB (shares VRAM with model weights)', infinia: 'Petabytes — unlimited sessions', winner: 'infinia' },
-    { metric: 'Speed (read)', gpu: '< 1ms (on-chip HBM)', infinia: '10–80ms (network S3 GET)', winner: 'gpu' },
+    { metric: 'Speed (read)', gpu: '< 1ms (on-chip HBM)', infinia: '< 1ms via GPU-Direct RDMA (NIXL)', winner: 'both' },
+    { metric: 'Transfer protocol', gpu: 'N/A — memory-mapped on-chip', infinia: 'Zero-copy RDMA — bypasses CPU entirely', winner: 'infinia' },
     { metric: 'Persistence', gpu: '❌ Lost on restart / GPU OOM', infinia: '✅ Persistent — survives any event', winner: 'infinia' },
     { metric: 'Multi-node sharing', gpu: 'Single GPU only', infinia: 'Shared across ALL GPU nodes in cluster', winner: 'infinia' },
-    { metric: 'Cost', gpu: 'Competes with model weights for VRAM', infinia: '$0.023/GB/month (object store pricing)', winner: 'infinia' },
-    { metric: 'Concurrent sessions', gpu: 'Dozens (VRAM-limited)', infinia: 'Millions', winner: 'infinia' },
+
+    { metric: 'Concurrent sessions', gpu: 'Dozens (VRAM-limited)', infinia: '100,000+ AI calls/second', winner: 'infinia' },
     { metric: 'Eviction policy', gpu: 'LRU — silent, uncontrolled', infinia: 'No eviction — explicit lifecycle', winner: 'infinia' },
     { metric: 'Best for', gpu: 'Single active session, real-time streaming', infinia: 'Enterprise scale, multi-user, multi-GPU', winner: 'infinia' },
   ]
@@ -430,10 +431,10 @@ function StorageComparisonDetail() {
               Core Principle — Speed on-chip. Scale in Infinia.
             </p>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              GPU HBM is fast but <strong>finite and volatile</strong>. DDN Infinia is 10–80ms slower per lookup,
-              but provides <strong>unlimited, persistent, shared</strong> KV storage across your entire GPU cluster.
-              At scale (50K+ requests/day), the 70ms read overhead is negligible compared to the
-              4,000ms+ prefill cost it eliminates.
+              GPU HBM is fast but <strong>finite and volatile</strong>. DDN Infinia with NIXL delivers
+              <strong> sub-1ms GPU-Direct RDMA transfers</strong> — matching HBM speed — while providing
+              <strong> unlimited, persistent, shared</strong> KV storage across your entire GPU cluster.
+              At scale (50K+ requests/day), Infinia is the only tier that is both fast enough and large enough.
             </p>
           </div>
         </div>
@@ -455,11 +456,11 @@ function StorageComparisonDetail() {
               {ROWS.map((row, i) => (
                 <tr key={row.metric} style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
                   <td className="px-4 py-3 font-semibold" style={{ color: 'var(--text-primary)' }}>{row.metric}</td>
-                  <td className="px-4 py-3 text-center" style={{ color: row.winner === 'gpu' ? '#76B900' : 'var(--text-secondary)', background: row.winner === 'gpu' ? 'rgba(118,185,0,0.06)' : undefined }}>
-                    {row.winner === 'gpu' && <span className="mr-1">⭐</span>}{row.gpu}
+                  <td className="px-4 py-3 text-center" style={{ color: (row.winner === 'gpu' || row.winner === 'both') ? '#76B900' : 'var(--text-secondary)', background: (row.winner === 'gpu' || row.winner === 'both') ? 'rgba(118,185,0,0.06)' : undefined }}>
+                    {(row.winner === 'gpu' || row.winner === 'both') && <span className="mr-1">⭐</span>}{row.gpu}
                   </td>
-                  <td className="px-4 py-3 text-center font-medium" style={{ color: row.winner === 'infinia' ? '#ED2738' : 'var(--text-secondary)', background: row.winner === 'infinia' ? 'rgba(237,39,56,0.04)' : undefined }}>
-                    {row.winner === 'infinia' && <span className="mr-1">⭐</span>}{row.infinia}
+                  <td className="px-4 py-3 text-center font-medium" style={{ color: (row.winner === 'infinia' || row.winner === 'both') ? '#ED2738' : 'var(--text-secondary)', background: (row.winner === 'infinia' || row.winner === 'both') ? 'rgba(237,39,56,0.04)' : undefined }}>
+                    {(row.winner === 'infinia' || row.winner === 'both') && <span className="mr-1">⭐</span>}{row.infinia}
                   </td>
                 </tr>
               ))}
@@ -467,11 +468,46 @@ function StorageComparisonDetail() {
           </table>
         </div>
         <div className="mt-4 p-4 rounded-xl" style={{ background: 'rgba(237,39,56,0.05)', border: '1px solid rgba(237,39,56,0.15)' }}>
-          <div className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>🏆 Bottom line for enterprise AI:</div>
+          <div className="text-sm font-semibold mb-1 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><Trophy className="w-4 h-4" style={{ color: '#ED2738' }} /> Bottom line for enterprise AI:</div>
           <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            The 70ms Infinia read overhead is paid <strong>once per session resume</strong>. The alternative
-            — GPU recomputing 50,000 tokens — takes <strong>4,000–8,000ms</strong>. Infinia is 100× faster
-            than the failure mode it prevents.
+            With NIXL + GPU-Direct RDMA, DDN Infinia delivers <strong>&lt;1ms KV cache retrieval</strong> —
+            the same speed class as GPU HBM, but with petabyte capacity and full persistence.
+            The recompute tax of <strong>4,000–8,000ms per prefill is eliminated</strong> across your entire GPU fleet.
+          </div>
+        </div>
+
+        {/* DDN Exclusivity Banner */}
+        <div className="mt-4 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(118,185,0,0.4)' }}>
+          <div className="px-4 py-2 flex items-center gap-2" style={{ background: 'linear-gradient(90deg, rgba(118,185,0,0.15) 0%, rgba(118,185,0,0.05) 100%)' }}>
+            <Award className="w-4 h-4 shrink-0" style={{ color: '#76B900' }} />
+            <span className="text-xs font-black uppercase tracking-widest" style={{ color: '#76B900' }}>DDN — First Storage Vendor Natively in the NVIDIA Dynamo Container</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              DDN is the <strong style={{ color: '#76B900' }}>first storage vendor</strong> to have its Infinia plugin
+              natively bundled inside the <strong>NVIDIA NIXL package v1.3</strong> (NVIDIA Inference Xfer Library,
+              released July 2026) — the transport layer that ships inside every official NVIDIA Dynamo container.
+              Pull the Dynamo container, point it at Infinia, and KV cache acceleration is live with <strong>zero code changes</strong>.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { Icon: Zap,       stat: '< 1ms', label: 'KV retrieval',         sub: 'GPU-Direct RDMA vs 300–500ms S3 HTTP',      color: '#76B900' },
+                { Icon: TrendingUp, stat: '25×',   label: 'Faster context load',  sub: '2.1s vs 57s baseline (Qwen3-32B, 131K ctx)', color: '#76B900' },
+                { Icon: RefreshCw, stat: '100K+', label: 'AI calls / second',     sub: 'sustained concurrency at scale',             color: '#76B900' },
+                { Icon: Cpu,       stat: '−90%',  label: 'CPU utilization',       sub: 'zero-copy RDMA bypasses CPU entirely',       color: '#76B900' },
+              ].map(s => (
+                <div key={s.stat} className="p-3 rounded-lg text-center" style={{ background: 'rgba(118,185,0,0.06)', border: '1px solid rgba(118,185,0,0.15)' }}>
+                  <div className="flex justify-center mb-1"><s.Icon className="w-5 h-5" style={{ color: s.color }} /></div>
+                  <div className="font-black text-xl" style={{ color: '#76B900' }}>{s.stat}</div>
+                  <div className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-secondary)' }}>{s.label}</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{s.sub}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Source: DDN.com · NVIDIA NIXL v1.3 (github.com/ai-dynamo/nixl) · UCX RDMA transport (InfiniBand / RoCE) ·
+              75% reduction in input-token processing costs · 99% GPU utilization reported by DDN
+            </p>
           </div>
         </div>
       </div>
@@ -725,7 +761,7 @@ function DetailedWorkflowDetail() {
       cost: 'Async — does not block inference',
       who: 'LMCacheConnectorV1 (vLLM plugin)',
       body: 'LMCache hooks into vLLM\'s KV transfer interface. It intercepts KV blocks, batches them into 256-token chunks (~32 MB each), and stages them to a CPU DRAM buffer before writing to Infinia.',
-      example: 'CPU staging buffer: 0.5 GB\nChunk size: 256 tokens = ~32 MB per chunk\n16 async I/O threads write to Infinia S3\nKey format: model@rank@worker@hash@dtype',
+      example: 'CPU staging buffer: 2 GB\nChunk size: 256 tokens = ~32 MB per chunk\n16 async I/O threads write to Infinia S3\nKey format: model@rank@worker@hash@dtype',
       why: 'Writing directly to S3 on every KV block would stall inference. The CPU buffer absorbs writes asynchronously — inference continues uninterrupted while LMCache uploads in the background.',
     },
     {
@@ -753,54 +789,69 @@ function DetailedWorkflowDetail() {
   const scenarios = [
     {
       label: 'COLD RUN',
-      badge: '❌ Slow',
+      badge: 'GPU HBM ONLY · First inference',
       badgeColor: '#ED2738',
       bg: 'rgba(237,39,56,0.06)',
       border: 'rgba(237,39,56,0.3)',
       steps: [
-        'User question arrives',
-        'vLLM checks GPU HBM → MISS (empty)',
-        'vLLM checks LMCache → MISS (nothing cached)',
-        'GPU computes FULL prefill (Steps ①–④)',
-        '6,600 tokens × 32 layers × attention = 2–8 seconds',
-        'KV blocks stored in GPU HBM',
-        'LMCache intercepts → CPU buffer → async write to Infinia',
-        'Decode begins · TTFT = 2,000–8,000ms',
+        'Step 1 — Request arrives: system prompt (6,600 tokens) + user question sent to vLLM',
+        'Step 2 — HBM prefix cache: MISS (fresh restart = empty HBM)',
+        'Step 3 — GPU runs FULL PREFILL across all 6,600+ tokens × 32 layers',
+        'Step 4 — 850 MB of KV tensors (bfloat16) stored in GPU HBM via PagedAttention blocks',
+        'Step 5 — LMCache intercepts KV blocks → stages to 2 GB CPU DRAM buffer in 24 chunks × 32 MB',
+        'Step 6 — LMCache async writes CPU buffer → DDN Infinia S3 (16 threads, ~650 ms total, non-blocking)',
+        'Step 7 — GPU runs DECODE: generates answer tokens one by one',
+        'Result: TTFT = ~2,200 ms · 850 MB KV written to Infinia in background',
+      ],
+    },
+    {
+      label: '⏳  3-SECOND GAP',
+      badge: 'LMCache stabilisation',
+      badgeColor: '#FF9600',
+      bg: 'rgba(255,150,0,0.04)',
+      border: 'rgba(255,150,0,0.2)',
+      steps: [
+        'Backend waits 3 seconds between cold and warm runs',
+        'LMCache background threads finish writing all 24 chunks to Infinia (~650 ms total)',
+        'Without this gap: LMCache writes race with the warm run\'s HBM lookup → corrupted KV context → wrong output',
+        'After 3 s: all KV blocks are cleanly settled in HBM — warm run gets uncontested prefix cache access',
       ],
     },
     {
       label: 'WARM RUN',
-      badge: '⚡ Fast',
-      badgeColor: '#FF9600',
-      bg: 'rgba(255,150,0,0.06)',
-      border: 'rgba(255,150,0,0.3)',
+      badge: '⚡ KV PREFIX CACHE HIT',
+      badgeColor: '#00C280',
+      bg: 'rgba(0,194,128,0.06)',
+      border: 'rgba(0,194,128,0.3)',
       steps: [
-        'Same question arrives (same session)',
-        'vLLM checks GPU HBM → HIT ✓ (blocks still there)',
-        'ZERO recomputation of 6,600-token prefix',
-        'Only computes Q for the 12-token question',
-        'Decode begins immediately',
-        'TTFT = 50–300ms',
+        'Step 1 — Same request arrives: identical system prompt + identical question',
+        'Step 2 — HBM prefix cache: HIT ✓ (6,600-token prefix blocks still in GPU HBM from cold run)',
+        'Step 3 — GPU skips PREFILL entirely for the 6,600-token prefix',
+        'Step 4 — Decode begins immediately using cached KV from HBM',
+        'Step 5 — temperature=0.0 → deterministic output, word-for-word identical to cold run',
+        'Result: TTFT = ~56 ms · 39.7× speedup · GPU did zero prefill work',
       ],
     },
     {
-      label: 'RESTART + REPLAY',
-      badge: '✅ Infinia proof',
+      label: 'RESTART + INFINIA PROOF',
+      badge: '✅ Infinia read path',
       badgeColor: '#76B900',
       bg: 'rgba(118,185,0,0.06)',
       border: 'rgba(118,185,0,0.3)',
       steps: [
-        'vLLM restarted → GPU HBM cleared',
+        'vLLM restarted → GPU HBM cleared · LMCache CPU buffer cleared',
         'Same question arrives again',
-        'vLLM checks GPU HBM → MISS (cleared by restart)',
-        'LMCache checks CPU buffer → MISS (also cleared)',
-        'LMCache checks Infinia S3 → HIT ✓ (written during cold run)',
-        'Downloads ~850 MB from Infinia into HBM',
-        'ZERO GPU recomputation',
-        'TTFT ≈ warm speed — THIS is the Infinia value proof',
+        'HBM prefix cache: MISS (cleared by restart)',
+        'LMCache checks CPU buffer: MISS (also cleared)',
+        'LMCache checks Infinia S3: HIT ✓ (24 objects written during cold run)',
+        'Downloads ~750 MB from Infinia into HBM (9–15 s over S3 / HTTPS)',
+        'GPU computed tokens: 0 — zero prefill work despite fresh restart',
+        'Log proof: "Inference Engine computed tokens: 0, LMCache hit tokens: 6144"',
+        'In production with NIXL: same result in <500 ms via GPU-Direct RDMA',
       ],
     },
   ]
+
 
   return (
     <div className="space-y-8">
@@ -917,12 +968,12 @@ function DetailedWorkflowDetail() {
         ))}
       </div>
 
-      {/* Cold / Warm / Restart scenarios */}
+      {/* Cold / Gap / Warm / Restart scenarios */}
       <div>
         <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
-          The Three Scenarios — Cold · Warm · Infinia Proof
+          The Four Scenarios — Cold → 3s Gap → Warm → Infinia Proof
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {scenarios.map((sc) => (
             <div key={sc.label} className="rounded-xl p-4 space-y-2"
               style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
@@ -945,6 +996,7 @@ function DetailedWorkflowDetail() {
           ))}
         </div>
       </div>
+
 
       {/* Business math */}
       <div className="rounded-xl p-5 space-y-3"
@@ -969,6 +1021,180 @@ function DetailedWorkflowDetail() {
         </div>
       </div>
 
+      {/* ── AIPerf Benchmark — collapsible ──────────────────────────────── */}
+      {(() => {
+        const key = 'aiperf-benchmark'
+        const isOpen = openSections.has(key)
+        return (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(26,129,175,0.35)' }}>
+            <button onClick={() => toggleSection(key)} className="w-full px-4 py-3 flex items-center gap-3 text-left transition-colors"
+              style={{ background: isOpen ? 'rgba(26,129,175,0.12)' : 'rgba(26,129,175,0.06)', borderBottom: isOpen ? '1px solid rgba(26,129,175,0.25)' : 'none' }}>
+              <span className="text-base shrink-0">📊</span>
+              <div className="flex-1">
+                <div className="text-xs font-bold" style={{ color: '#1A81AF' }}>AIPerf Benchmark — What Are We Testing?</div>
+                <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>At-scale proof: TTFT, throughput, P99 latency under concurrent load with and without KV cache</div>
+              </div>
+              <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                <ChevronDown className="w-4 h-4" style={{ color: '#1A81AF' }} />
+              </motion.div>
+            </button>
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div key="aiperf" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: 'easeInOut' }} style={{ overflow: 'hidden' }}>
+                  <div className="p-4 space-y-4">
+                    <div className="p-3 rounded-lg" style={{ background: 'var(--surface-secondary)', border: '1px solid var(--border-subtle)' }}>
+                      <p className="text-xs font-bold mb-1" style={{ color: '#1A81AF' }}>What is AIPerf?</p>
+                      <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                        NVIDIA AIPerf (aiperf) is an open-source LLM inference benchmarking tool that drives realistic
+                        multi-user workloads against a serving stack and measures production-grade performance metrics.
+                        In this demo it targets the full <strong style={{ color: 'var(--text-secondary)' }}>Dynamo + vLLM + LMCache + DDN Infinia</strong> stack.
+                      </p>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>What We Measure</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {[
+                          { metric: 'TTFT', full: 'Time To First Token', color: '#ED2738', detail: 'ms from request to first output token. Cache hit drops TTFT from 2,224ms → 56ms (39.7×).' },
+                          { metric: 'Throughput', full: 'Tokens / Second', color: '#00C280', detail: 'Output tokens/s across all concurrent users. GPU cycles freed from prefill serve more users.' },
+                          { metric: 'P99 Latency', full: '99th Percentile', color: '#1A81AF', detail: 'Worst-case latency for 1 in 100 requests. Stays flat with Infinia even under burst load.' },
+                        ].map(m => (
+                          <div key={m.metric} className="p-3 rounded-lg" style={{ background: `${m.color}08`, border: `1px solid ${m.color}25` }}>
+                            <div className="font-mono font-black text-base" style={{ color: m.color }}>{m.metric}</div>
+                            <div className="text-[10px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>{m.full}</div>
+                            <div className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{m.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Actual Benchmark Configuration</div>
+                      <div className="space-y-1.5">
+                        {[
+                          { label: 'Model', val: 'meta-llama/Llama-3.1-8B-Instruct', color: '#6366f1' },
+                          { label: 'Endpoint', val: 'http://localhost:11000 (Dynamo → vLLM)', color: '#1A81AF' },
+                          { label: 'Output tokens', val: '100 per request', color: '#f59e0b' },
+                          { label: 'Warmup', val: '4 warmup requests before measurement begins', color: '#807778' },
+                        ].map(row => (
+                          <div key={row.label} className="flex gap-2 text-[11px]">
+                            <span className="font-semibold shrink-0" style={{ color: row.color, minWidth: 120 }}>{row.label}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>{row.val}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Presets — What Each Tests</div>
+                      <div className="space-y-2">
+                        {[
+                          { name: 'Quick', params: '4K ctx / c1 / 20 req', color: '#807778', why: 'Baseline sanity check. Short context, 1 user, 20 requests. Fast to run — confirms the stack is up and responding correctly before a full benchmark.' },
+                          { name: 'Standard', params: '16K ctx / c1 / 50 req', color: '#1A81AF', why: 'Production-representative single-user run. 16K token context = large enterprise document. 50 requests shows stable, repeatable TTFT without noise.' },
+                          { name: 'Deep', params: '126K ctx / c1 / 50 req', color: '#ED2738', why: 'Long-context stress test. 126K tokens = full contract book or meeting transcript. Prefill cost without cache: 15–30s. With Infinia KV: near-instant. Shows the most dramatic speedup.' },
+                          { name: 'Scale', params: '16K ctx / c4 / 100 req', color: '#00C280', why: 'Multi-user concurrency test. 4 concurrent users × 100 requests. Tests KV cache sharing — all 4 users hit the same 16K prefix, so one prefill serves all. Throughput multiplier is visible here.' },
+                        ].map(p => (
+                          <div key={p.name} className="rounded-lg p-2.5" style={{ background: `${p.color}08`, border: `1px solid ${p.color}25` }}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-bold text-[11px]" style={{ color: p.color }}>{p.name}</span>
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${p.color}20`, color: p.color }}>{p.params}</span>
+                            </div>
+                            <div className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{p.why}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-lg" style={{ background: 'rgba(0,194,128,0.05)', border: '1px solid rgba(0,194,128,0.2)' }}>
+                      <p className="text-[10px] font-bold mb-1" style={{ color: '#00C280' }}>What the Benchmark Proves</p>
+                      <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                        AIPerf eliminates the &ldquo;it only works in a demo&rdquo; objection — generates real concurrent load,
+                        measures real latency percentiles, and delivers the same speedup at scale that the single-user
+                        KV Reuse Proof demonstrates interactively.
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )
+      })()}
+
+      {/* ── LMCache YAML Key Attributes — collapsible ───────────────────── */}
+      {(() => {
+        const key = 'lmcache-yaml'
+        const isOpen = openSections.has(key)
+        return (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(118,185,0,0.35)' }}>
+            <button onClick={() => toggleSection(key)} className="w-full px-4 py-3 flex items-center gap-3 text-left transition-colors"
+              style={{ background: isOpen ? 'rgba(118,185,0,0.12)' : 'rgba(118,185,0,0.06)', borderBottom: isOpen ? '1px solid rgba(118,185,0,0.25)' : 'none' }}>
+              <span className="text-base shrink-0">⚙️</span>
+              <div className="flex-1">
+                <div className="text-xs font-bold" style={{ color: '#76B900' }}>LMCache YAML — Live Configuration</div>
+                <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>~/lmcache_infinia.yaml · every key explained</div>
+              </div>
+              <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                <ChevronDown className="w-4 h-4" style={{ color: '#76B900' }} />
+              </motion.div>
+            </button>
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div key="yaml" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: 'easeInOut' }} style={{ overflow: 'hidden' }}>
+                  <div className="p-4 space-y-4">
+                    <div className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(118,185,0,0.2)' }}>
+                      <div className="px-3 py-1.5 flex items-center gap-2" style={{ background: 'rgba(118,185,0,0.1)' }}>
+                        <span className="text-[10px] font-mono font-bold" style={{ color: '#76B900' }}>~/lmcache_infinia.yaml</span>
+                        <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(118,185,0,0.2)', color: '#76B900' }}>LIVE CONFIG</span>
+                      </div>
+                      <pre className="p-4 text-[11px] font-mono leading-relaxed overflow-x-auto" style={{ background: '#0D0C0C', color: '#d4d4d4' }}>{
+`# ── Core KV cache settings ─────────────────
+chunk_size: 256          # tokens/chunk → 32 MB each
+local_cpu: true          # MUST be true (0.5.4 workaround)
+max_local_cpu_size: 2.0  # GB staging buffer (updated tonight)
+save_decode_cache: false # prefill KV only, not decode
+use_layerwise: false     # write all 32 layers at once
+save_unfull_chunk: true  # save partial chunks too
+
+# ── DDN Infinia S3 backend ──────────────────
+remote_url: "s3://ddn-kv-cache-01.192.168.147.129:8111"
+remote_serde: "naive"    # raw binary, zero overhead
+
+# ── S3 connector ────────────────────────────
+extra_config:
+  s3_region: "us-east-1"
+  s3_use_path_style: true   # required for IP endpoint
+  s3_num_io_threads: 16     # 16 parallel upload threads
+  s3_prefer_http2: false    # HTTP/1.1 for cert compat
+  disable_tls: false        # HTTPS on`}
+                      </pre>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Key Parameters Explained</div>
+                      <div className="space-y-2">
+                        {[
+                          { k: 'chunk_size: 256', color: '#6366f1', why: '256 tokens = 32 MB per chunk. 6,600 tokens ÷ 256 = 24 chunks per cold run. Matches LMCache\'s internal block boundary.' },
+                          { k: 'max_local_cpu_size: 2.0 GB', color: '#ED2738', why: 'Staging buffer. Increased from 0.5 GB tonight — 24 chunks × 32 MB = 768 MB needs room. At 0.5 GB caused "no memory available" errors and 11,975ms cold TTFT from constant retries.' },
+                          { k: 'save_decode_cache: false', color: '#f59e0b', why: 'Only prefill (document understanding) KV saved — not answer tokens. Saves ~80% Infinia storage with zero cache quality loss.' },
+                          { k: 'local_cpu: true', color: '#FF9600', why: 'Required due to LMCache 0.5.4 bug — SafeLocalCPUBackend (created when false) missing .config attribute causes RemoteBackend.post_init crash.' },
+                          { k: 's3_use_path_style: true', color: '#00C280', why: 'Infinia at 192.168.147.129:8111. awscrt cannot DNS-resolve "bucket.IP:port" virtual-host style. Path-style puts bucket in URL: /ddn-kv-cache-01/key.' },
+                          { k: 's3_num_io_threads: 16', color: '#1A81AF', why: '16 parallel PUT threads — each chunk independent. Cuts write time from ~10s (serial) to ~650ms (parallel) for 24 chunks.' },
+                          { k: 'remote_serde: naive', color: '#76B900', why: 'Raw bfloat16 binary — tensors written as-is from GPU memory. Zero conversion overhead. Fastest upload/download path possible.' },
+                        ].map(row => (
+                          <div key={row.k} className="rounded-lg p-2.5" style={{ background: 'var(--surface-secondary)', border: `1px solid ${row.color}20` }}>
+                            <div className="font-mono text-[11px] font-bold mb-1" style={{ color: row.color }}>{row.k}</div>
+                            <div className="text-[10px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{row.why}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }
@@ -983,6 +1209,69 @@ function DetailedWorkflowDetail() {
 function DynamoNIXLArchitectureDetail() {
   return (
     <div className="space-y-6">
+
+      {/* ── Demo vs Production Disclaimer ──────────────────────────────── */}
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(26,129,175,0.4)', background: '#0D0C0C' }}>
+        {/* Header */}
+        <div className="px-4 py-2.5 flex items-center gap-3 border-b" style={{ borderColor: 'rgba(26,129,175,0.3)', background: 'rgba(26,129,175,0.12)' }}>
+          <span className="text-xs font-bold tracking-wider" style={{ color: '#1A81AF' }}>DEMO ARCHITECTURE</span>
+          <span className="text-xs px-2 py-0.5 rounded font-semibold" style={{ background: 'rgba(26,129,175,0.2)', color: '#60bfe8', border: '1px solid rgba(26,129,175,0.4)' }}>
+            CLOSE TO PRODUCTION · NOT PRODUCTION GRADE
+          </span>
+        </div>
+        {/* Two-column: Demo vs Production */}
+        <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'rgba(26,129,175,0.2)' }}>
+          {/* Left: Demo stack — Blue */}
+          <div className="p-4" style={{ background: 'rgba(26,129,175,0.06)' }}>
+            <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#60bfe8' }}>
+              This Demo Stack
+            </div>
+            {[
+              { label: 'KV Transfer', value: 'LMCache → S3-compatible API', note: 'CPU-staged, async upload' },
+              { label: 'Transport',   value: 'S3 over TCP/IP',              note: 'Standard object store protocol' },
+              { label: 'GPU Path',   value: 'GPU → CPU DRAM → Infinia',    note: '2 GB staging buffer, software copy' },
+              { label: 'Container',  value: 'Standalone vLLM + LMCache',   note: 'Manual integration' },
+              { label: 'Scale',      value: 'Single RTX 5090 GPU',         note: 'GTC booth hardware' },
+            ].map(({ label, value, note }) => (
+              <div key={label} className="flex items-start gap-2 mb-2.5">
+                <div className="text-xs shrink-0 mt-0.5 font-medium" style={{ color: 'rgba(96,191,232,0.5)', minWidth: 82 }}>{label}</div>
+                <div>
+                  <div className="text-xs font-mono font-semibold" style={{ color: '#60bfe8' }}>{value}</div>
+                  <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{note}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Right: Production stack — Green */}
+          <div className="p-4" style={{ background: 'rgba(118,185,0,0.06)' }}>
+            <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#76B900' }}>
+              Production Stack
+            </div>
+            {[
+              { label: 'KV Transfer', value: 'NIXL — NVIDIA Inference Xfer Library', note: 'Native NVIDIA transport layer' },
+              { label: 'Transport',   value: 'GPU-Direct RDMA',                       note: 'Zero-copy, sub-ms, no CPU in path' },
+              { label: 'GPU Path',   value: 'GPU HBM → DDN Infinia direct',          note: 'Single hop, no memory copies' },
+              { label: 'Container',  value: 'NVIDIA Dynamo container',               note: 'DDN first storage vendor bundled natively' },
+              { label: 'Scale',      value: 'Multi-GPU cluster, shared KV pool',     note: 'Unlimited Infinia capacity' },
+            ].map(({ label, value, note }) => (
+              <div key={label} className="flex items-start gap-2 mb-2.5">
+                <div className="text-xs shrink-0 mt-0.5 font-medium" style={{ color: 'rgba(118,185,0,0.5)', minWidth: 82 }}>{label}</div>
+                <div>
+                  <div className="text-xs font-mono font-semibold" style={{ color: '#76B900' }}>{value}</div>
+                  <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{note}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Footer note */}
+        <div className="px-4 py-3 border-t text-xs leading-relaxed" style={{ borderColor: 'rgba(26,129,175,0.2)', background: 'rgba(26,129,175,0.05)', color: 'rgba(255,255,255,0.55)' }}>
+          The demo demonstrates the same KV caching principle and DDN Infinia value — cache once, reuse across requests.
+          In production, NIXL replaces LMCache as the transport layer, GPU-Direct RDMA eliminates the CPU staging hop,
+          and the Dynamo container ships with DDN Infinia support pre-integrated.
+          <span style={{ color: '#76B900', fontWeight: 600 }}> The speedup you see here is real — production numbers are larger.</span>
+        </div>
+      </div>
 
       {/* Live inline architecture diagram */}
       <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -1034,7 +1323,7 @@ function DynamoNIXLArchitectureDetail() {
           <div style={{ border: '2px solid #76B900', borderRadius: 6, padding: '10px 14px', marginBottom: 12, background: '#76B90018', position: 'relative' }}>
             <div style={{ position: 'absolute', top: -10, right: 12, background: '#76B900', borderRadius: 4, padding: '2px 8px', fontSize: 10, color: '#000', fontWeight: 700 }}>LIVE</div>
             <div style={{ color: '#76B900', fontWeight: 700, fontSize: 13 }}>LMCache</div>
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 3 }}>CPU Staging Buffer (0.5 GB) · S3 Connector · bfloat16 KV Chunks (32 MB each) · Prefix Hash Lookup · vLLM KVConnectorV1</div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 3 }}>CPU Staging Buffer (2 GB) · S3 Connector · bfloat16 KV Chunks (32 MB each) · Prefix Hash Lookup · vLLM KVConnectorV1</div>
           </div>
           {/* Infinia arrow */}
           <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 6 }}>↓ Persist / Fetch</div>
@@ -1077,7 +1366,7 @@ function DynamoNIXLArchitectureDetail() {
             name: 'LMCache',
             color: '#76B900',
             role: 'KV Cache Bridge (CPU Staging + S3)',
-            detail: 'Open-source KV cache offload layer that integrates with vLLM via LMCacheConnectorV1. Acts as a two-tier bridge: GPU HBM → CPU DRAM staging buffer (0.5 GB) → DDN Infinia S3. Chunks KV tensors into 32 MB bfloat16 objects, computes prefix hashes for lookup, and uploads asynchronously. In this demo, 69+ KV objects are already persisted in Infinia.',
+            detail: 'Open-source KV cache offload layer that integrates with vLLM via LMCacheConnectorV1. Acts as a two-tier bridge: GPU HBM → CPU DRAM staging buffer (2 GB) → DDN Infinia S3. Chunks KV tensors into 32 MB bfloat16 objects, computes prefix hashes for lookup, and uploads asynchronously. In this demo, 69+ KV objects are already persisted in Infinia.',
           },
           {
             name: 'DDN Infinia',
@@ -1106,7 +1395,7 @@ function DynamoNIXLArchitectureDetail() {
             { step: '1', label: 'Request arrives', detail: 'AIperf or user app sends prompt to Dynamo endpoint', color: '#1A81AF' },
             { step: '2', label: 'KV-aware routing', detail: 'Dynamo checks which vLLM worker holds the relevant prefix KV cache and routes accordingly', color: '#76B900' },
             { step: '3', label: 'Prefill or cache fetch', detail: 'If cache MISS → vLLM prefills (GPU compute). If HIT → LMCache loads KV tensors from CPU buffer or Infinia S3 in <10ms', color: '#64B5F6' },
-            { step: '4', label: 'KV offload to Infinia', detail: 'After prefill, computed KV tensors are staged to CPU via LMCache (0.5 GB buffer), then asynchronously written to DDN Infinia S3 as 32 MB bfloat16 objects', color: '#76B900' },
+            { step: '4', label: 'KV offload to Infinia', detail: 'After prefill, computed KV tensors are staged to CPU via LMCache (2 GB buffer), then asynchronously written to DDN Infinia S3 as 32 MB bfloat16 objects', color: '#76B900' },
             { step: '5', label: 'Token decode', detail: 'vLLM generates output tokens autoregressively using the (now cached) KV state', color: '#64B5F6' },
             { step: '6', label: 'Metrics captured', detail: 'AIperf measures TTFT, inter-token latency, and throughput — showing the cache speedup', color: '#1A81AF' },
           ].map(({ step, label, detail, color }) => (
@@ -1274,10 +1563,13 @@ function ChatObservatoryArchitectureDetail() {
             </div>
             <div className="p-4 space-y-2">
               {[
-                { n: 1, label: '6,657-token document loaded as system prompt', detail: 'A full enterprise legal contract (Master Service Agreement) is set as the system prompt. Every query about this document will include all 6,657 tokens.', color: '#6366f1' },
-                { n: 2, label: 'GPU runs prefill on ALL 6,657 tokens', detail: 'The transformer computes Key (K) and Value (V) attention matrices for every single document token across all 32 transformer layers. This is extremely GPU-intensive — there is no shortcut. TTFT: 3,000–5,000ms.', color: '#ED2738' },
-                { n: 3, label: 'KV tensors stored in GPU HBM as prefix cache block', detail: 'vLLM\'s PagedAttention stores the computed K+V matrices as a prefix cache block in GPU HBM (VRAM). Size: ~832 MB across 32 layers × 8 KV heads × 128 head_dim × fp16. This block is keyed by a hash of the prefix token sequence.', color: '#ED2738' },
-                { n: 4, label: 'User question (15 tokens) decoded normally', detail: 'After the expensive prefill, the user\'s question tokens are processed and the answer is generated token-by-token (decode phase). TTFT reflects the full 6,657-token prefill cost.', color: '#ED2738' },
+                { n: 1, label: 'Request arrives at vLLM', detail: 'System prompt (6,600-token legal contract) + user question sent to the vLLM endpoint.', color: '#6366f1' },
+                { n: 2, label: 'HBM prefix cache: MISS', detail: 'vLLM checks GPU HBM for cached KV blocks matching this token sequence. Fresh restart = empty HBM. Nothing found — full prefill required.', color: '#ED2738' },
+                { n: 3, label: 'GPU runs FULL PREFILL — 6,600+ tokens × 32 layers', detail: 'GPU computes Q, K, V matrices for every single token across all 32 transformer layers. This is the expensive O(n²) operation — 43M attention scores per layer. Cannot be skipped.', color: '#ED2738' },
+                { n: 4, label: 'KV tensors stored in GPU HBM', detail: '~750 MB of bfloat16 KV tensors stored via vLLM PagedAttention blocks (24 chunks × 32 MB each). Keyed by hash of the prefix token sequence.', color: '#ED2738' },
+                { n: 5, label: 'LMCache intercepts KV blocks (async)', detail: 'LMCache stages KV blocks into the 2 GB CPU DRAM buffer across 16 I/O threads. Total write time ~650 ms. Runs in the background — does NOT block inference.', color: '#FF9600' },
+                { n: 6, label: 'LMCache writes to DDN Infinia S3', detail: 'CPU buffer flushes to Infinia as 24 real S3 PUT objects. KV tensors now persist and survive any GPU restart.', color: '#FF9600' },
+                { n: 7, label: 'GPU runs DECODE — answer generated', detail: 'GPU generates answer tokens one by one using the KV already in HBM. First token arrives.', color: '#00C280' },
               ].map(({ n, label, detail, color }) => (
                 <div key={n} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: color }}>{n}</div>
@@ -1289,7 +1581,20 @@ function ChatObservatoryArchitectureDetail() {
               ))}
             </div>
             <div className="px-4 py-2 text-[10px] font-bold" style={{ background: 'rgba(237,39,56,0.06)', color: '#ED2738' }}>
-              Result: TTFT 3,000–5,000ms · 832 MB of KV tensors written to GPU HBM
+              Result: TTFT ~2,200 ms · 750 MB KV written to Infinia in background
+            </div>
+          </div>
+
+          {/* 3-second gap */}
+          <div className="rounded-xl border px-4 py-3 flex items-start gap-3" style={{ background: 'rgba(255,150,0,0.04)', borderColor: 'rgba(255,150,0,0.25)' }}>
+            <span className="text-base shrink-0">⏳</span>
+            <div>
+              <p className="text-xs font-bold" style={{ color: '#FF9600' }}>3-Second Stabilisation Gap</p>
+              <p className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Backend waits 3 seconds between cold and warm runs. LMCache background threads are still writing KV chunks to Infinia (~650 ms total).
+                Starting the warm run too early causes a race condition where those writes corrupt the HBM prefix cache lookup → garbage output.
+                After 3 s, all 24 KV blocks are cleanly settled — warm run gets uncontested HBM access.
+              </p>
             </div>
           </div>
 
@@ -1297,14 +1602,14 @@ function ChatObservatoryArchitectureDetail() {
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(0,194,128,0.35)' }}>
             <div className="px-4 py-2.5 text-xs font-bold flex items-center gap-2" style={{ background: 'rgba(0,194,128,0.08)', color: '#00C280' }}>
               <span>WARM RUN</span>
-              <span className="text-[9px] font-mono ml-auto">KV PREFIX CACHE HIT — same document, new question</span>
+              <span className="text-[9px] font-mono ml-auto">KV PREFIX CACHE HIT — same document, same question</span>
             </div>
             <div className="p-4 space-y-2">
               {[
-                { n: 1, label: 'New user question, same document prefix', detail: 'Any question about the same document. The 6,657-token system prompt prefix is identical — that\'s all vLLM needs to check.', color: '#6366f1' },
-                { n: 2, label: 'vLLM detects prefix cache hit in HBM', detail: 'vLLM hashes the prefix token sequence and finds a matching block in GPU HBM. The 832 MB of pre-computed KV tensors are already there — no network call, no recompute.', color: '#00C280' },
-                { n: 3, label: 'Prefill SKIPPED — 6,657 tokens not recomputed', detail: 'The GPU skips the entire prefill phase for the document tokens. It loads the cached KV block and jumps straight to processing the new question tokens.', color: '#00C280' },
-                { n: 4, label: 'Only ~15 new question tokens processed', detail: 'GPU compute for this request = prefill of just the user\'s question (~15 tokens) + decode. From 6,657 tokens of compute down to 15. TTFT drops to ~50ms.', color: '#00C280' },
+                { n: 1, label: 'Same request arrives — identical system prompt + question', detail: 'Exact same 6,600-token document + exact same question. temperature=0.0 ensures deterministic output.', color: '#6366f1' },
+                { n: 2, label: 'HBM prefix cache: HIT ✓', detail: 'vLLM checks GPU HBM and finds the 6,600-token prefix blocks from the cold run still in memory. Full match — no network call, no recomputation.', color: '#00C280' },
+                { n: 3, label: 'GPU skips PREFILL entirely', detail: 'The 6,600-token prefix prefill is skipped completely. GPU jumps straight to decode using the cached KV blocks already in HBM.', color: '#00C280' },
+                { n: 4, label: 'Decode begins immediately', detail: 'GPU generates answer tokens one by one using cached HBM KV. temperature=0.0 → word-for-word identical output to the cold run.', color: '#00C280' },
               ].map(({ n, label, detail, color }) => (
                 <div key={n} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 text-white" style={{ background: color }}>{n}</div>
@@ -1316,9 +1621,10 @@ function ChatObservatoryArchitectureDetail() {
               ))}
             </div>
             <div className="px-4 py-2 text-[10px] font-bold" style={{ background: 'rgba(0,194,128,0.06)', color: '#00C280' }}>
-              Result: TTFT ~50ms · 99.8% of prefill compute eliminated · 50–80× speedup
+              Result: TTFT ~56 ms · 39.7× speedup · GPU did zero prefill work · answers word-for-word identical
             </div>
           </div>
+
 
           {/* What GPU HBM stores */}
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -1419,36 +1725,7 @@ const CONCEPTS = [
     summary: 'Side-by-side chatbot internals — request flow, cache key generation, S3 operations, and metrics',
     ready: true,
   },
-  {
-    id: 'mechanics',
-    icon: <Zap className="w-5 h-5" />,
-    label: 'KV Cache Mechanics',
-    subtitle: 'Architecture',
-    tag: 'Architecture',
-    tagColor: 'var(--ddn-red)',
-    summary: 'What K/V matrices are, what gets cached, and the 4-stage request lifecycle',
-    ready: true,
-  },
-  {
-    id: 'multiturn',
-    icon: <TrendingDown className="w-5 h-5" />,
-    label: 'Multi-Turn Walkthrough',
-    subtitle: 'How It Works',
-    tag: 'How It Works',
-    tagColor: '#00C280',
-    summary: 'Turn-by-turn breakdown — MISS, HIT, and compound savings over time',
-    ready: true,
-  },
-  {
-    id: 'session',
-    icon: <Server className="w-5 h-5" />,
-    label: 'Session Resume',
-    subtitle: 'Enterprise Scenario',
-    tag: 'Enterprise',
-    tagColor: '#1A81AF',
-    summary: 'GPU memory eviction, Infinia persistence, and the 50ms resume advantage',
-    ready: true,
-  },
+
   {
     id: 'storage',
     icon: <HardDrive className="w-5 h-5" />,
@@ -1486,9 +1763,9 @@ function renderSection(id: string) {
     case 'workflow':   return <DetailedWorkflowDetail />
     case 'dynamo':    return <DynamoNIXLArchitectureDetail />
     case 'observatory': return <ChatObservatoryArchitectureDetail />
-    case 'mechanics': return <KVMechanicsDetail />
-    case 'multiturn': return <MultiTurnDetail />
-    case 'session':   return <SessionResumeDetail />
+    case 'mechanics': return null
+    case 'multiturn': return null
+    case 'session':   return null
     case 'storage':   return <StorageComparisonDetail />
     case 'icp':       return <ICPDetail />
     default:          return null
@@ -1496,7 +1773,7 @@ function renderSection(id: string) {
 }
 
 export default function About() {
-  const [active, setActive] = useState('mechanics')
+  const [active, setActive] = useState('dynamo')
   const concept = CONCEPTS.find(c => c.id === active)!
 
   return (

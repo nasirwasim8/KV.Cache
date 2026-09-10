@@ -742,7 +742,7 @@ export default function ChatObservatory() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="section-title">Live Chat Observatory</h2>
-            <p className="section-description">Watch DDN Infinia KV Cache eliminate GPU recomputation. Every cache hit is a real S3 GET from Infinia.</p>
+            <p className="section-description">Same GPU. Same model. One remembers, one recomputes. Watch the difference in real time.</p>
           </div>
           <div className="flex items-center gap-3">
             {/* Pricing Tier Selector */}

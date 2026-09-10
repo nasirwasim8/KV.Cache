@@ -295,7 +295,7 @@ async def run_inference(
         ],
         "max_tokens": 300,
         "stream": True,
-        "temperature": 0.1,
+        "temperature": 0.0,  # deterministic — cold and warm produce identical answers
     }
 
     start = time.perf_counter()
@@ -392,8 +392,10 @@ async def stream_reuse_comparison(
         yield sse({"type": "error", "message": f"Cold run failed: {e}"})
         return
 
-    # Small delay between runs
-    await asyncio.sleep(0.5)
+    # 3s gap: LMCache background threads are still writing KV chunks to CPU buffer
+    # after the cold run completes. Starting the warm run too quickly causes a race
+    # condition where those writes corrupt the HBM prefix cache lookup.
+    await asyncio.sleep(3.0)
 
     # ── WARM RUN (same prefix — should hit KV cache) ──────────────────────────
     yield sse({"type": "status", "phase": "warm", "message": "Starting warm inference (KV cache should hit)..."})
@@ -438,11 +440,11 @@ async def stream_reuse_comparison(
         block_size = 16
         block_count = (prefix_tokens + block_size - 1) // block_size
 
-        # ── Real S3 lookup: find objects LMCache actually wrote during this run ──
-        # Wait 2s for LMCache's async write thread to flush to Infinia
+        # Wait 5s — LMCache writes 24 chunks async (~650ms total write time).
+        # 5s gives a comfortable buffer before scanning Infinia for new objects.
         yield sse({"type": "status", "phase": "warm",
-                   "message": "Checking DDN Infinia for newly written KV tensors…"})
-        await asyncio.sleep(2.0)
+                   "message": "Checking DDN Infinia for newly written KV tensors… (waiting for LMCache async writes)"})
+        await asyncio.sleep(5.0)
         confirmed_objects = await asyncio.get_event_loop().run_in_executor(
             None, _list_infinia_objects_since, run_start
         )
