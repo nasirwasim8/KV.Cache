@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator } from 'lucide-react'
+import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw, Trash2 } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 interface Tab { id: string; label: string; icon: string }
@@ -11,22 +11,74 @@ const iconMap: Record<string, React.ReactNode> = {
   'bar-chart':  <BarChart3     className="w-5 h-5" />,
   calculator:   <Calculator    className="w-5 h-5" />,
   info:         <Info          className="w-5 h-5" />,
+  activity:     <Activity      className="w-5 h-5" />,
+  'refresh-cw': <RefreshCw     className="w-5 h-5" />,
 }
 
 export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSidebarProps) {
   const [health, setHealth] = useState<{ infinia_connected: boolean; ollama_available: boolean; model_ready: boolean; gpu_available: boolean; hit_count?: number } | null>(null)
+  const [clearing, setClearing] = useState(false)
+  const [clearMsg, setClearMsg] = useState('')
+  const [vllmRestarting, setVllmRestarting] = useState(false)
   const { theme } = useTheme()
 
-  useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const [h, s] = await Promise.all([
-          fetch('/health').then(r => r.json()),
-          fetch('/api/cache/stats').then(r => r.json()).catch(() => ({})),
-        ])
-        setHealth({ ...h, hit_count: s.hit_count ?? 0 })
-      } catch { /* ignore */ }
+  const fetchHealth = async () => {
+    try {
+      const [h, s] = await Promise.all([
+        fetch('/health').then(r => r.json()),
+        fetch('/api/cache/stats').then(r => r.json()).catch(() => ({})),
+      ])
+      setHealth({ ...h, hit_count: s.hit_count ?? 0 })
+    } catch { /* ignore */ }
+  }
+
+  const clearCache = async () => {
+    if (clearing) return
+    setClearing(true)
+    setClearMsg('')
+    try {
+      const r = await fetch('/api/cache/purge-infinia', { method: 'DELETE' })
+      const d = await r.json()
+      if (d.vllm_restarting) {
+        // vLLM is restarting to flush LMCache CPU buffer
+        setVllmRestarting(true)
+        setClearMsg(`Cleared ${d.deleted ?? 0} objects · vLLM restarting…`)
+        // Poll vLLM health until it comes back up (~90s)
+        const pollStart = Date.now()
+        const poll = async () => {
+          try {
+            const hRes = await fetch('http://localhost:11000/health')
+            if (hRes.ok) {
+              setVllmRestarting(false)
+              setClearMsg('Ready — run benchmark for fresh Infinia writes')
+              setTimeout(() => setClearMsg(''), 5000)
+              await fetchHealth()
+              return
+            }
+          } catch { /* still restarting */ }
+          if (Date.now() - pollStart < 120000) {
+            setTimeout(poll, 4000)
+          } else {
+            setVllmRestarting(false)
+            setClearMsg('vLLM restart timed out — check PM2')
+            setTimeout(() => setClearMsg(''), 5000)
+          }
+        }
+        setTimeout(poll, 8000) // first check after 8s
+      } else {
+        setClearMsg(`Cleared ${d.deleted ?? 0} objects`)
+        setTimeout(() => setClearMsg(''), 3000)
+        await fetchHealth()
+      }
+    } catch {
+      setClearMsg('Error — check connection')
+      setTimeout(() => setClearMsg(''), 3000)
+    } finally {
+      setClearing(false)
     }
+  }
+
+  useEffect(() => {
     fetchHealth()
     const t = setInterval(fetchHealth, 15000)
     return () => clearInterval(t)
@@ -85,6 +137,39 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
                 <span className="text-xs px-2 py-0.5 rounded-full text-[#1A81AF] font-mono" style={{ background: 'var(--status-info-subtle)' }}>
                   {health.hit_count}
                 </span>
+              </div>
+            )}
+
+            {/* Clear Infinia Cache button */}
+            {health?.infinia_connected && (
+              <div className="mt-3">
+                {clearMsg ? (
+                  <div className="text-center text-xs py-1.5 px-2 rounded leading-relaxed" style={{
+                    color: vllmRestarting ? '#FF7600' : '#76B900',
+                    background: vllmRestarting ? 'rgba(255,118,0,0.08)' : 'rgba(118,185,0,0.1)',
+                    border: vllmRestarting ? '1px solid rgba(255,118,0,0.2)' : 'none',
+                  }}>
+                    {vllmRestarting ? '⟳' : '✓'} {clearMsg}
+                  </div>
+                ) : (
+                  <button
+                    onClick={clearCache}
+                    disabled={clearing}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
+                    style={{
+                      background: clearing ? 'var(--surface-secondary)' : 'rgba(237,39,56,0.08)',
+                      border: '1px solid rgba(237,39,56,0.25)',
+                      color: clearing ? 'var(--text-muted)' : '#ED2738',
+                      cursor: clearing ? 'not-allowed' : 'pointer',
+                    }}
+                    onMouseEnter={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.16)')}
+                    onMouseLeave={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.08)')}
+                    title="Delete all KV tensor objects from DDN Infinia bucket"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    {clearing ? 'Clearing…' : 'Clear Infinia Cache'}
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -1,13 +1,26 @@
 """
 DDN KV Cache Observatory - API Routes
 All endpoints for chat observatory, prefix multiplier, cache stats, and config.
+Phase 4: AIperf live benchmarking + KV Cache Reuse proof.
 """
 import time
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+import asyncio
+import io
+import zipfile
+import os as _os
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+
+from app.services.aiperf_service import (
+    AIperfConfig, start_run, stop_run, stream_run, get_run, list_runs
+)
+from app.services.kv_reuse_service import (
+    stream_reuse_comparison, PRESET_DOCUMENTS
+)
+from app.services import vllm_manager
 
 try:
     import psutil
@@ -27,6 +40,9 @@ chat_router         = APIRouter(prefix="/chat",        tags=["Chat"])
 prefix_router       = APIRouter(prefix="/prefix",      tags=["Prefix"])
 cache_router        = APIRouter(prefix="/cache",       tags=["Cache"])
 gpu_direct_router   = APIRouter(prefix="/gpu-direct",  tags=["GPU Direct"])
+aiperf_router       = APIRouter(prefix="/aiperf",      tags=["AIperf"])
+kv_reuse_router     = APIRouter(prefix="/kv-reuse",    tags=["KV Reuse"])
+vllm_router         = APIRouter(prefix="/vllm",        tags=["vLLM Manager"])
 
 
 # ── In-memory session store ─────────────────────────────────────────────────
@@ -2869,17 +2885,18 @@ async def clear_cache():
 @cache_router.delete("/purge-infinia")
 async def purge_infinia_cache():
     """
-    Delete ALL kvcache/* objects from DDN Infinia.
-    Use this to reset for a fresh demo (first question will be a genuine MISS).
+    Delete ALL objects from DDN Infinia bucket.
+    Clears both:
+      - Old kvcache/ prefix objects (Ollama-based demo)
+      - New LMCache objects at bucket root (_home_nwasim_models_...@bfloat16)
+    Use this to reset for a fresh demo — next request will be a genuine cache MISS.
     """
     try:
         client = kv_cache._get_client()
-        # List all objects under kvcache/ prefix
+        # List ALL objects in the bucket (no prefix filter)
         paginator = client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(
-            Bucket=settings.infinia_bucket,
-            Prefix="kvcache/"
-        )
+        pages = paginator.paginate(Bucket=settings.infinia_bucket)
+
         keys_to_delete = []
         for page in pages:
             for obj in page.get("Contents", []):
@@ -2888,7 +2905,7 @@ async def purge_infinia_cache():
         if not keys_to_delete:
             return {"success": True, "deleted": 0, "message": "Cache was already empty"}
 
-        # Delete in batches of 1000 (S3 limit)
+        # Delete in batches of 1000 (S3 API limit)
         deleted_count = 0
         for i in range(0, len(keys_to_delete), 1000):
             batch = keys_to_delete[i:i+1000]
@@ -2898,18 +2915,226 @@ async def purge_infinia_cache():
             )
             deleted_count += len(batch)
 
-        # Reset in-memory hit/miss counters too
+        # Reset in-memory hit/miss counters
         kv_cache._hit_count = 0
         kv_cache._miss_count = 0
         kv_cache._total_bytes_stored = 0
         _sessions.clear()
 
-        logger.info(f"Purged {deleted_count} objects from Infinia bucket")
+        logger.info(f"Purged {deleted_count} objects from Infinia bucket {settings.infinia_bucket}")
+
+        # ── CRITICAL: Restart vLLM to flush LMCache's in-memory CPU buffer ──────
+        # Problem: LMCache stages KV tensors in a 2GB CPU DRAM buffer (in-process).
+        # When Infinia is cleared but vLLM is still running, LMCache serves subsequent
+        # requests from its CPU buffer — never writing to Infinia again.
+        # Fix: restart vLLM (PM2) so the CPU buffer is wiped, forcing a fresh cold
+        # start on the next benchmark that writes new KV tensors back to Infinia.
+        async def _restart_vllm_after_purge():
+            await asyncio.sleep(0.5)  # small delay so API response returns first
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "pm2", "restart", "ddn-vllm",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await proc.communicate()
+                logger.info(f"vLLM restarted after Infinia purge (rc={proc.returncode})")
+            except Exception as restart_err:
+                logger.warning(f"vLLM restart after purge failed: {restart_err}")
+
+        asyncio.create_task(_restart_vllm_after_purge())
+
         return {
             "success": True,
             "deleted": deleted_count,
-            "message": f"Purged {deleted_count} cached objects from DDN Infinia. Next question will be a genuine MISS."
+            "message": f"Purged {deleted_count} KV tensor objects from DDN Infinia and restarting vLLM to flush LMCache memory buffer. Wait ~90s for vLLM to reload, then run the benchmark for fresh Infinia writes.",
+            "vllm_restarting": True,
         }
     except Exception as e:
         logger.error(f"Purge error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — AIperf Live Benchmark Routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AIperfRunRequest(BaseModel):
+    model: str = "meta-llama/Llama-3.1-8B-Instruct"
+    tokenizer: str = ""
+    endpoint_url: str = "http://localhost:8000"
+    endpoint_type: str = "chat"
+    context_tokens: int = 16000
+    output_tokens_mean: int = 100
+    output_tokens_stddev: int = 0
+    concurrency: int = 1
+    request_count: int = 50
+    warmup_count: int = 2
+    streaming: bool = True
+
+
+@aiperf_router.post("/run")
+async def aiperf_start_run(req: AIperfRunRequest):
+    """Start a live aiperf benchmark run. Returns run_id immediately."""
+    cfg = AIperfConfig(
+        model=req.model,
+        tokenizer=req.tokenizer,
+        endpoint_url=req.endpoint_url,
+        endpoint_type=req.endpoint_type,
+        context_tokens=req.context_tokens,
+        output_tokens_mean=req.output_tokens_mean,
+        output_tokens_stddev=req.output_tokens_stddev,
+        concurrency=req.concurrency,
+        request_count=req.request_count,
+        warmup_count=req.warmup_count,
+        streaming=req.streaming,
+    )
+    run_id = await start_run(cfg)
+    return {"run_id": run_id, "status": "starting"}
+
+
+@aiperf_router.get("/stream/{run_id}")
+async def aiperf_stream(run_id: str):
+    """SSE stream of live aiperf output and metrics for a given run."""
+    return StreamingResponse(
+        stream_run(run_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@aiperf_router.get("/results/{run_id}")
+async def aiperf_get_results(run_id: str):
+    """Get final results and full log for a completed run."""
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return {
+        "run_id": run_id,
+        "status": run["status"],
+        "results": run.get("results"),
+        "output_lines": run.get("output_lines", []),
+        "command": run.get("command", ""),
+        "config": run.get("config", {}),
+        "duration_sec": round(time.time() - run["started_at"], 1) if run.get("started_at") else 0,
+    }
+
+
+@aiperf_router.delete("/run/{run_id}")
+async def aiperf_stop_run(run_id: str):
+    """Stop a running aiperf benchmark."""
+    ok = await stop_run(run_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found or already stopped")
+    return {"run_id": run_id, "status": "stopped"}
+
+
+@aiperf_router.get("/runs")
+async def aiperf_list_runs():
+    """List all benchmark runs (history)."""
+    return {"runs": list_runs()}
+
+
+
+@aiperf_router.get("/download/{run_id}")
+async def aiperf_download_results(run_id: str):
+    """Bundle all aiperf result files for a run into a single ZIP download."""
+    run_dir = _os.path.expanduser(f"~/aiperf_runs/{run_id}")
+    if not _os.path.isdir(run_dir):
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    # All files to include in the zip
+    candidates = [
+        ("profile_export_aiperf.csv",    _os.path.join(run_dir, "profile_export_aiperf.csv")),
+        ("profile_export_aiperf.json",   _os.path.join(run_dir, "profile_export_aiperf.json")),
+        ("server_metrics_export.csv",    _os.path.join(run_dir, "server_metrics_export.csv")),
+        ("server_metrics_export.json",   _os.path.join(run_dir, "server_metrics_export.json")),
+        ("aiperf.log",                   _os.path.join(run_dir, "logs", "aiperf.log")),
+    ]
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        found = 0
+        for arcname, fpath in candidates:
+            if _os.path.isfile(fpath):
+                zf.write(fpath, arcname=arcname)
+                found += 1
+        if found == 0:
+            raise HTTPException(status_code=404, detail="No result files found for this run")
+
+    buf.seek(0)
+    filename = f"aiperf_results_{run_id[:8]}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — KV Cache Reuse Proof Routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@kv_reuse_router.get("/presets")
+async def kv_reuse_presets():
+    """Return available preset documents for the reuse demo."""
+    return {
+        "presets": [
+            {
+                "key": key,
+                "label": doc["label"],
+                "icon": doc["icon"],
+                "sample_questions": doc["sample_questions"],
+            }
+            for key, doc in PRESET_DOCUMENTS.items()
+        ]
+    }
+
+
+@kv_reuse_router.get("/compare")
+async def kv_reuse_compare(
+    endpoint_url: str = Query("http://localhost:8000"),
+    model: str = Query("meta-llama/Llama-3.1-8B-Instruct"),
+    preset: str = Query("legal_contract"),
+    question: str = Query(""),
+):
+    """
+    SSE stream for cold-vs-warm KV cache comparison.
+    Runs the same long-context prompt twice and measures TTFT delta.
+    """
+    return StreamingResponse(
+        stream_reuse_comparison(
+            endpoint_url=endpoint_url,
+            model=model,
+            preset_key=preset,
+            custom_question=question,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ── vLLM Server Manager ────────────────────────────────────────────────────────
+
+@vllm_router.get("/status")
+async def vllm_status():
+    """Current vLLM server status: stopped | starting | running | stopping | error"""
+    return vllm_manager.get_status()
+
+
+@vllm_router.post("/start")
+async def vllm_start():
+    """Start the vLLM inference server (frees Ollama GPU when done; takes ~60s to load)."""
+    return await vllm_manager.start_vllm()
+
+
+@vllm_router.post("/stop")
+async def vllm_stop():
+    """Stop the vLLM server and free GPU VRAM for Ollama / Chat Observatory."""
+    return await vllm_manager.stop_vllm()

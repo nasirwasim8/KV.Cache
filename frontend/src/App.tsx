@@ -9,18 +9,23 @@ import PrefixMultiplier from './pages/PrefixMultiplier'
 import ROICalculator from './pages/ROICalculator'
 import About from './pages/About'
 import TokenAnimation from './pages/TokenAnimation'
+import AIperfBenchmark from './pages/AIperfBenchmark'
+import KVReuseProof from './pages/KVReuseProof'
 
 const TABS = [
   { id: 'configuration', label: 'Configuration',      icon: 'settings'   },
   { id: 'observatory',   label: 'Chat Observatory',   icon: 'message-sq' },
   { id: 'prefix',        label: 'Prefix Multiplier',  icon: 'bar-chart'  },
   { id: 'roi',           label: 'ROI Calculator',     icon: 'calculator' },
+  { id: 'aiperf',        label: 'AIperf Benchmark',   icon: 'activity'   },
+  { id: 'kv-reuse',      label: 'KV Reuse Proof',     icon: 'refresh-cw' },
   { id: 'about',         label: 'Architecture',       icon: 'info'       },
 ]
 
 const HEADER_TABS = [
   { id: 'configuration', label: 'Configuration' },
   { id: 'demo',          label: 'Live Demos' },
+  { id: 'benchmark',     label: 'AIperf + KV Reuse' },
   { id: 'about',         label: 'Architecture' },
 ]
 
@@ -29,10 +34,14 @@ export default function App() {
 
   const handleHeaderTab = (id: string) => {
     if (id === 'demo') setActiveTab('observatory')
+    else if (id === 'benchmark') setActiveTab('aiperf')
     else setActiveTab(id)
   }
 
-  const headerActiveTab = activeTab === 'observatory' || activeTab === 'prefix' ? 'demo' : activeTab
+  const headerActiveTab =
+    activeTab === 'observatory' || activeTab === 'prefix' ? 'demo' :
+    activeTab === 'aiperf' || activeTab === 'kv-reuse' ? 'benchmark' :
+    activeTab
 
   // Full-screen animation mode — no chrome
   if (activeTab === 'animate') return (
@@ -60,6 +69,8 @@ export default function App() {
               {activeTab === 'observatory'   && <ChatObservatory />}
               {activeTab === 'prefix'        && <PrefixMultiplier />}
               {activeTab === 'roi'           && <ROICalculator />}
+              {activeTab === 'aiperf'        && <AIperfBenchmark />}
+              {activeTab === 'kv-reuse'      && <KVReuseProof />}
               {activeTab === 'about'         && <About />}
             </main>
           </div>

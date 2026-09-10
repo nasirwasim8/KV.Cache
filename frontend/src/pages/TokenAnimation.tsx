@@ -100,19 +100,15 @@ export default function TokenAnimation() {
 
   useEffect(() => {
     const schedule: [number, number][] = [
-      [1,   300],   // Scene 1  — Cost Per Token            (2.2s)
-      [2,  2500],   // Scene 2  — Cost Per Useful Token     (2.5s)
-      [3,  5000],   // Scene 3  — Token rivers appear       (2.0s)
-      [4,  7000],   // Scene 4  — GPU heats up              (2.0s)
-      [5,  9000],   // Scene 5  — Cost callout              (2.5s)
-      [6, 11500],   // Scene 6  — DDN Infinia punchline     (3.5s ← main punchline)
-      [7, 15000],   // Scene 7  — With Infinia layout       (1.5s)
-      [8, 16500],   // Scene 8  — Infinia intercepts        (2.0s)
-      [9, 18500],   // Scene 9  — GPU cools                 (2.0s)
-      [10,20500],   // Scene 10 — Savings callout           (2.5s)
-      [11,23000],   // Scene 11 — Closing statement         (2.5s)
-      [12,25500],   // Scene 12 — CTA left/right cards      (3.5s)
-      [13,29000],   // Scene 13 — Cinematic close           (holds)
+      [1,  300],   // Scene 1 — Cost Per Token               (~2.2s)
+      [2, 2500],   // Scene 2 — Cost Per Useful Token        (~3.5s)
+      [3, 6000],   // Scene 3 — Context types                (~4s)
+      [4,10000],   // Scene 4 — Identical context            (~4s)
+      [5,14000],   // Scene 5 — The KEY question             (~4s)
+      [6,18000],   // Scene 6 — KV cache changes economics   (~3s)
+      [7,21000],   // Scene 7 — Compute once, reuse          (~4s)
+      [8,25000],   // Scene 8 — Side-by-side cards           (~3s)
+      [9,28000],   // Scene 9 — CTA                          (holds)
     ]
     const timers = schedule.map(([p, ms]) => setTimeout(() => setPhase(p), ms))
     return () => timers.forEach(clearTimeout)
@@ -182,183 +178,220 @@ export default function TokenAnimation() {
       )}
 
       {/* ══════════════════════════════
-          SCENE 3–5 — WITHOUT INFINIA
+          SCENE 3 — CONTEXT TYPES
+          "processing context the model has already seen"
       ══════════════════════════════ */}
-      {show(3,5) && (
-        <div className="scene" style={{ animation:'fadeIn 0.7s ease both', justifyContent:'center', gap:32 }}>
-          <div className="center-col" style={{ gap:10 }}>
-
-            {/* Label */}
-            <div style={{ fontSize:12, fontWeight:700, letterSpacing:'0.18em', textTransform:'uppercase',
-              color:'#DC2626', animation:'slideDown 0.6s ease both',
-              borderBottom:'2px solid rgba(220,38,38,0.2)', paddingBottom:10, width:'100%', textAlign:'center' }}>
-              🖥️ GPU HBM Only — Standard Inference Today
+      {show(3,3) && (
+        <div className="scene" style={{ animation:'fadeIn 0.8s ease both' }}>
+          <div className="center-col" style={{ gap:28 }}>
+            <div style={{
+              fontSize:22, fontWeight:400, color:'#6B7280',
+              lineHeight:1.6, textAlign:'center',
+              animation:'slideDown 0.7s ease both',
+            }}>
+              A significant amount of inference compute is spent processing<br />
+              <strong style={{ color:'#111827' }}>context the model has already seen.</strong>
             </div>
-
-            {/* Token rows */}
-            <div style={{ display:'flex', flexDirection:'column', gap:14, alignItems:'center', marginTop:8 }}>
-              <TokenRow color="#D97706" width="280px" label="System Prompt"   count="16,000 tokens" delay={0} />
-              <TokenRow color="#EA580C" width="100px" label="Conversation"    count="1,600 tokens"  delay={0.15} />
-              <TokenRow color="#F97316" width="60px"  label="Prior Turn"      count="400 tokens"    delay={0.25} />
-              <TokenRow color="#374151" width="32px"  label="New Question"    count="12 tokens"     delay={0.35} />
+            <div style={{
+              display:'flex', gap:16, flexWrap:'wrap', justifyContent:'center',
+              animation:'fadeIn 0.7s ease 0.4s both',
+            }}>
+              {[
+                { label:'System Prompts',         color:'#D97706', bg:'rgba(217,119,6,0.08)'  },
+                { label:'Policies & Compliance',  color:'#EA580C', bg:'rgba(234,88,12,0.08)'  },
+                { label:'Documents & Manuals',    color:'#DC2626', bg:'rgba(220,38,38,0.08)'  },
+                { label:'Conversation History',   color:'#9333EA', bg:'rgba(147,51,234,0.08)' },
+              ].map(({ label, color, bg }) => (
+                <div key={label} style={{
+                  padding:'10px 22px', borderRadius:40,
+                  border:`1.5px solid ${color}44`,
+                  background: bg,
+                  fontSize:15, fontWeight:700, color,
+                  animation:'scaleIn 0.5s ease both',
+                }}>{label}</div>
+              ))}
             </div>
-
-            {/* Arrow + GPU */}
-            {show(4) && (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12,
-                animation:'fadeIn 0.6s ease both', marginTop:8 }}>
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:'#9CA3AF', letterSpacing:'0.08em', textTransform:'uppercase' }}>All tokens — full recompute</div>
-                  <div style={{ width:2, height:28, background:'linear-gradient(180deg,rgba(220,38,38,0.3),#DC2626)' }} />
-                  <div style={{ fontSize:14, color:'#DC2626' }}>▼</div>
-                </div>
-                <div className="gpu-chip gpu-hot">
-                  <div style={{ position:'relative', zIndex:1, fontSize:28 }}>⚡</div>
-                  <div style={{ position:'relative', zIndex:1, fontSize:11, fontWeight:800, letterSpacing:'0.1em' }}>GPU</div>
-                  <div style={{ position:'relative', zIndex:1, fontSize:9, opacity:0.7 }}>COMPUTING</div>
-                </div>
-              </div>
-            )}
-
-            {/* Cost callout */}
-            {show(5) && (
-              <div className="callout-red" style={{ animation:'scaleIn 0.5s ease both', textAlign:'center' }}>
-                <div style={{ fontSize:15, color:'#6B7280', marginBottom:6 }}>You paid for 16,012 tokens.</div>
-                <div style={{ fontSize:36, fontWeight:900, color:'#DC2626', letterSpacing:'-0.02em' }}>12 were new.</div>
-                <div style={{ fontSize:13, color:'#9CA3AF', marginTop:8, lineHeight:1.6 }}>
-                  The other 16,000 were identical to the last turn — recomputed anyway, on every node, every session.
-                </div>
-              </div>
-            )}
+            <div style={{
+              fontSize:20, fontWeight:500, color:'#374151',
+              textAlign:'center', lineHeight:1.7,
+              animation:'fadeIn 0.7s ease 0.9s both',
+            }}>
+              Much of that context may be <strong>identical</strong> from one request to the next.
+            </div>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════
-          SCENE 6 — TRANSITION
+          SCENE 4 — IDENTICAL CONTEXT
+          "same context, every request, every session"
+      ══════════════════════════════ */}
+      {show(4,4) && (
+        <div className="scene" style={{ animation:'fadeIn 0.8s ease both' }}>
+          <div className="center-col" style={{ gap:24 }}>
+            <div style={{
+              fontSize:15, fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase',
+              color:'#9CA3AF', animation:'slideDown 0.6s ease both',
+            }}>
+              Same context — every request, every session, every node
+            </div>
+
+            {/* Two identical request blocks */}
+            <div style={{ display:'flex', gap:20, animation:'fadeIn 0.7s ease 0.3s both' }}>
+              {['Request 1', 'Request 2'].map((req, i) => (
+                <div key={req} style={{
+                  flex:1, borderRadius:16, padding:'18px 20px',
+                  border:'1.5px solid rgba(217,119,6,0.25)',
+                  background:'rgba(217,119,6,0.04)',
+                }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:'#9CA3AF', letterSpacing:'0.1em',
+                    textTransform:'uppercase', marginBottom:10 }}>{req}</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    <div style={{ height:8, borderRadius:4, background:'rgba(217,119,6,0.5)', width:'100%' }} />
+                    <div style={{ height:8, borderRadius:4, background:'rgba(234,88,12,0.4)', width:'80%' }} />
+                    <div style={{ height:8, borderRadius:4, background:'rgba(220,38,38,0.35)', width:'60%' }} />
+                    <div style={{ height:8, borderRadius:4, background:'rgba(17,24,39,0.7)', width:'15%',
+                      ...(i === 1 ? { boxShadow:'0 0 8px rgba(0,194,128,0.6)', background:'#00C280' } : {}) }} />
+                  </div>
+                  <div style={{ fontSize:10, color:'#9CA3AF', marginTop:8 }}>
+                    {i === 0 ? '16,012 tokens processed' : '16,000 recomputed · 12 new'}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              fontSize:28, fontWeight:800, color:'#DC2626',
+              textAlign:'center', lineHeight:1.4,
+              animation:'scaleIn 0.7s ease 0.7s both',
+            }}>
+              The GPU recomputed 16,000 identical tokens<br />
+              <span style={{ fontSize:18, fontWeight:500, color:'#6B7280' }}>on request 2 — and every request after that.</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════
+          SCENE 5 — THE KEY QUESTION
+          "Why should an expensive GPU keep recomputing..."
+      ══════════════════════════════ */}
+      {show(5,5) && (
+        <div className="scene" style={{ animation:'fadeIn 0.8s ease both' }}>
+          <div className="center-col" style={{ gap:20 }}>
+            <div style={{
+              fontSize:15, fontWeight:600, letterSpacing:'0.18em', textTransform:'uppercase',
+              color:'#9CA3AF', animation:'slideDown 0.6s ease both',
+            }}>
+              The question becomes very simple
+            </div>
+            <div style={{
+              fontSize: 56, fontWeight:900, letterSpacing:'-0.03em', lineHeight:1.12,
+              textAlign:'center',
+              animation:'scaleIn 0.9s cubic-bezier(0.22,1,0.36,1) 0.2s both',
+              color:'#111827',
+            }}>
+              Why should an expensive GPU<br />
+              <span style={{
+                background:'linear-gradient(135deg,#DC2626 0%,#D97706 100%)',
+                WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
+              }}>
+                keep recomputing
+              </span>
+              <br />something it has<br />already computed?
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════
+          SCENE 6 — KV CACHE ECONOMICS
+          "That is where persistent KV cache changes the economics."
       ══════════════════════════════ */}
       {show(6,6) && (
         <div className="scene" style={{ animation:'fadeIn 0.8s ease both' }}>
-          <div className="center-col" style={{ gap:18 }}>
-            <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase',
-              color:'#9CA3AF', animation:'slideDown 0.6s ease both' }}>
-              But now
+          <div className="center-col" style={{ gap:20 }}>
+            <div style={{
+              fontSize:18, fontWeight:600, color:'#6B7280',
+              animation:'slideDown 0.7s ease both',
+            }}>
+              That is where
             </div>
             <div style={{
-              fontSize:84, fontWeight:900, letterSpacing:'-0.04em', lineHeight:1.04,
+              fontSize:72, fontWeight:900, letterSpacing:'-0.04em', lineHeight:1.05,
+              textAlign:'center',
               animation:'scaleIn 0.9s ease 0.2s both',
-              background:'linear-gradient(135deg, #00C280 0%, #1A81AF 100%)',
+              background:'linear-gradient(135deg,#00C280 0%,#1A81AF 100%)',
               WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
             }}>
-              DDN Infinia<br />changes that metric.
+              Persistent KV Cache
+            </div>
+            <div style={{
+              fontSize:32, fontWeight:700, color:'#111827',
+              textAlign:'center',
+              animation:'fadeIn 0.8s ease 0.6s both',
+            }}>
+              changes the economics.
             </div>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════
-          SCENE 7–10 — WITH INFINIA
+          SCENE 7 — COMPUTE ONCE, REUSE
+          "Compute the reusable context once, preserve its KV state..."
       ══════════════════════════════ */}
-      {show(7,10) && (
+      {show(7,7) && (
         <div className="scene" style={{ animation:'fadeIn 0.8s ease both' }}>
-          <div className="center-col" style={{ gap:10 }}>
-
-            {/* Label */}
-            <div style={{ fontSize:12, fontWeight:700, letterSpacing:'0.18em', textTransform:'uppercase',
-              color:'#00C280', animation:'slideDown 0.6s ease both',
-              borderBottom:'2px solid rgba(0,194,128,0.2)', paddingBottom:10, width:'100%', textAlign:'center' }}>
-              ✦ With DDN Infinia — Persistent AI Memory
-            </div>
-
-            {/* Token rows — dimmed when intercepted */}
-            <div style={{ display:'flex', flexDirection:'column', gap:14, alignItems:'center', marginTop:8 }}>
-              <TokenRow color="#D97706" width="280px" label="System Prompt"  count="16,000 tokens" delay={0}    dimmed={show(8)} />
-              <TokenRow color="#EA580C" width="100px" label="Conversation"   count="1,600 tokens"  delay={0.1}  dimmed={show(8)} />
-              <TokenRow color="#F97316" width="60px"  label="Prior Turn"     count="400 tokens"    delay={0.2}  dimmed={show(8)} />
-              <TokenRow color="#374151" width="32px"  label="New Question"   count="12 tokens"     delay={0.3}  dimmed={false} />
-            </div>
-
-            {/* Infinia intercept + GPU */}
-            {show(8) && (
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'center', gap:48,
-                animation:'fadeIn 0.7s ease both', marginTop:12 }}>
-
-                {/* Infinia storage */}
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
-                  <div style={{ fontSize:11, fontWeight:600, color:'#9CA3AF', letterSpacing:'0.08em', textTransform:'uppercase' }}>Intercepted by</div>
-                  <div className="infinia-box">
-                    <div style={{ fontSize:26 }}>🗄️</div>
-                    <div style={{ fontSize:12, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', color:'#00C280' }}>DDN Infinia</div>
-                    <div style={{ fontSize:11, color:'#059669', textAlign:'center', lineHeight:1.5, marginTop:2 }}>
-                      16,000 tokens served ✓<br/>
-                      <span style={{ fontSize:10, color:'#6B7280' }}>Persistent AI Memory</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* GPU */}
-                {show(9) && (
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8,
-                    animation:'fadeIn 0.6s ease both' }}>
-                    <div style={{ fontSize:11, fontWeight:600, color:'#9CA3AF', letterSpacing:'0.08em', textTransform:'uppercase' }}>GPU only sees</div>
-                    <div className="gpu-chip gpu-cool">
-                      <div style={{ position:'relative', zIndex:1, fontSize:28 }}>💎</div>
-                      <div style={{ position:'relative', zIndex:1, fontSize:11, fontWeight:800, letterSpacing:'0.1em' }}>GPU</div>
-                      <div style={{ position:'relative', zIndex:1, fontSize:10, opacity:0.8 }}>12 tokens</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Savings callout */}
-            {show(10) && (
-              <div className="callout-green" style={{ animation:'scaleIn 0.5s ease both', textAlign:'center' }}>
-                <div style={{ fontSize:15, color:'#6B7280', marginBottom:6 }}>GPU processed 12 tokens. Infinia served the rest.</div>
-                <div style={{ fontSize:36, fontWeight:900, letterSpacing:'-0.02em' }} className="gradient-green">
-                  99.9% of GPU compute — freed.
-                </div>
-                <div style={{ fontSize:13, color:'#9CA3AF', marginTop:8, lineHeight:1.6 }}>
-                  At 250,000 queries/day — 4 billion tokens that never touch the GPU.
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════
-          SCENE 11 — CLOSE / CTA
-      ══════════════════════════════ */}
-      {show(11, 11) && (
-        <div className="scene" style={{ animation:'fadeIn 1s ease both' }}>
           <div className="center-col" style={{ gap:24 }}>
-            <div style={{ fontSize:14, fontWeight:700, letterSpacing:'0.22em', textTransform:'uppercase',
-              color:'#00C280', animation:'slideDown 0.7s ease both' }}>
-              DDN Infinia
+            <div style={{
+              fontSize:52, fontWeight:900, letterSpacing:'-0.03em', lineHeight:1.1,
+              textAlign:'center', color:'#111827',
+              animation:'slideUp 0.8s ease both',
+            }}>
+              Compute the reusable<br />context{' '}
+              <span style={{
+                background:'linear-gradient(135deg,#00C280 0%,#1A81AF 100%)',
+                WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
+              }}>once.</span>
             </div>
-            <div style={{ fontSize:88, fontWeight:900, letterSpacing:'-0.04em', lineHeight:1.02,
-              animation:'scaleIn 0.9s ease 0.2s both' }}
-              className="gradient-green">
-              You pay only for<br />the new tokens.
-            </div>
-            <div style={{ fontSize:22, fontWeight:500, color:'#374151', lineHeight:1.6, maxWidth:560,
-              animation:'fadeIn 0.8s ease 0.7s both' }}>
-              Persistent AI Memory that lives outside the GPU —<br />
-              shared across every node, every session, every user.
+            <div style={{
+              display:'flex', flexDirection:'column', gap:10, width:'100%', maxWidth:520,
+              animation:'fadeIn 0.8s ease 0.5s both',
+            }}>
+              {[
+                'Preserve its KV state in Persistent AI Memory.',
+                'Reuse it when that same context is needed again.',
+                'Any GPU. Any session. Zero recompute.',
+              ].map((line, i) => (
+                <div key={i} style={{
+                  display:'flex', alignItems:'center', gap:12,
+                  padding:'12px 18px', borderRadius:12,
+                  background: i === 2 ? 'rgba(0,194,128,0.08)' : 'rgba(17,24,39,0.03)',
+                  border: i === 2 ? '1.5px solid rgba(0,194,128,0.25)' : '1.5px solid rgba(17,24,39,0.07)',
+                }}>
+                  <div style={{
+                    width:22, height:22, borderRadius:'50%', flexShrink:0,
+                    background:'rgba(0,194,128,0.15)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:12, color:'#00C280', fontWeight:800,
+                  }}>✓</div>
+                  <div style={{
+                    fontSize:15, fontWeight: i === 2 ? 700 : 500,
+                    color: i === 2 ? '#00C280' : '#374151',
+                  }}>{line}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════
-          SCENE 12 — LIVE DEMO CTA
-          Left/right card reveal
+          SCENE 8 — SIDE-BY-SIDE CARDS
       ══════════════════════════════ */}
-      {show(12, 12) && (
+      {show(8,8) && (
         <div className="scene" style={{ animation:'fadeIn 0.8s ease both', gap:48 }}>
-
-          {/* Left / Right cards */}
           <div style={{ display:'flex', gap:32, alignItems:'stretch', justifyContent:'center', width:'100%', maxWidth:780 }}>
 
             {/* LEFT card — GPU HBM Only */}
@@ -369,13 +402,12 @@ export default function TokenAnimation() {
               display:'flex', flexDirection:'column', alignItems:'center', gap:14,
               animation:'slideFromLeft 0.7s cubic-bezier(0.22,1,0.36,1) both',
             }}>
-              <div style={{ fontSize:32 }}>🖥️</div>
               <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#DC2626' }}>GPU HBM Only</div>
               <div style={{ fontSize:44, fontWeight:900, color:'#DC2626', letterSpacing:'-0.03em', lineHeight:1 }}>16,012</div>
               <div style={{ fontSize:12, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:'0.08em' }}>tokens to GPU — every query</div>
               <div style={{ width:'100%', height:1, background:'rgba(220,38,38,0.15)', margin:'4px 0' }} />
               <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6, textAlign:'center' }}>
-                16,000 token system prompt recomputed<br />on every node, every session<br />all day, every day.
+                Reusable context recomputed<br />on every request, every session.
               </div>
             </div>
 
@@ -395,43 +427,25 @@ export default function TokenAnimation() {
               animation:'slideFromRight 0.7s cubic-bezier(0.22,1,0.36,1) both',
               boxShadow:'0 0 0 3px rgba(0,194,128,0.08), 0 16px 40px rgba(0,194,128,0.1)',
             }}>
-              <div style={{ fontSize:32 }}>✦</div>
               <div style={{ fontSize:13, fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#00C280' }}>DDN Infinia</div>
               <div style={{ fontSize:44, fontWeight:900, letterSpacing:'-0.03em', lineHeight:1 }} className="gradient-green">12</div>
               <div style={{ fontSize:12, color:'#9CA3AF', textTransform:'uppercase', letterSpacing:'0.08em' }}>new tokens to GPU only</div>
               <div style={{ width:'100%', height:1, background:'rgba(0,194,128,0.15)', margin:'4px 0' }} />
               <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6, textAlign:'center' }}>
-                16,000 tokens served from<br />Persistent AI Memory —<br />zero GPU recompute.
+                KV state preserved in Persistent AI Memory —<br />zero recompute, any GPU, any session.
               </div>
             </div>
           </div>
-
-          {/* CTA — rises up after cards land */}
-          <div style={{
-            display:'flex', flexDirection:'column', alignItems:'center', gap:10,
-            animation:'riseUp 0.8s cubic-bezier(0.22,1,0.36,1) 0.6s both',
-          }}>
-            <div style={{ width:48, height:2, background:'linear-gradient(90deg,transparent,#00C280,transparent)', borderRadius:2 }} />
-            <div style={{
-              fontSize:30, fontWeight:800, color:'#00C280',
-              letterSpacing:'-0.01em', display:'flex', alignItems:'center', gap:12,
-            }}>
-              Let's take a Live Demo of Infinia Persistent AI Memory
-              <span style={{ animation:'arrowBounce 1s ease-in-out infinite', display:'inline-block' }}>→</span>
-            </div>
-
-          </div>
-
         </div>
       )}
 
       {/* ══════════════════════════════
-          SCENE 13 — CINEMATIC CLOSE
+          SCENE 9 — CTA
+          "Now let me show you what that actually looks like."
       ══════════════════════════════ */}
-      {show(13) && (
-        <div className="scene" style={{ animation:'fadeIn 1.2s ease both' }}>
-          <div className="center-col" style={{ gap:24, maxWidth:760 }}>
-
+      {show(9) && (
+        <div className="scene" style={{ animation:'fadeIn 1s ease both' }}>
+          <div className="center-col" style={{ gap:24 }}>
             <div style={{
               fontSize:88, fontWeight:900, letterSpacing:'-0.04em', lineHeight:1.02,
               animation:'scaleIn 1s cubic-bezier(0.22,1,0.36,1) 0.1s both',
@@ -439,29 +453,27 @@ export default function TokenAnimation() {
               background:'linear-gradient(135deg,#00C280 0%,#1A81AF 55%,#00C280 100%)',
               WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
             }}>
-              Compute once,<br />reuse everywhere.
+              Now let me show you<br />what that looks like.
             </div>
-
             <div style={{
-              fontSize:20, fontWeight:500, color:'#6B7280', lineHeight:1.6,
-              animation:'fadeIn 0.8s ease 0.9s both', textAlign:'center',
+              fontSize:22, fontWeight:500, color:'#6B7280',
+              animation:'fadeIn 0.8s ease 0.8s both',
+              display:'flex', alignItems:'center', gap:12,
             }}>
-              That&apos;s the power of persistent AI memory with{' '}
-              <span style={{ fontWeight:800, color:'#00C280' }}>Infinia.</span>
+              Live demo — no slides
+              <span style={{ animation:'arrowBounce 1s ease-in-out infinite', display:'inline-block', color:'#00C280' }}>→</span>
             </div>
-
           </div>
         </div>
       )}
 
-
       {/* Progress dots — bottom center */}
       <div style={{ position:'absolute', bottom:28, left:'50%', transform:'translateX(-50%)',
         display:'flex', gap:8 }}>
-        {Array.from({length:7}).map((_,i) => (
+        {Array.from({length:9}).map((_,i) => (
           <div key={i} style={{
             width:7, height:7, borderRadius:'50%',
-            background: Math.floor(phase/1.6) > i ? '#00C280' : '#E5E7EB',
+            background: Math.floor(phase/1) > i ? '#00C280' : '#E5E7EB',
             transition:'background 0.4s ease',
           }} />
         ))}
@@ -475,3 +487,4 @@ export default function TokenAnimation() {
     </div>
   )
 }
+

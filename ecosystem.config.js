@@ -15,8 +15,8 @@ module.exports = {
       max_memory_restart: "2G",
       env: {
         PYTHONUNBUFFERED: "1",
-        INFINIA_ACCESS_KEY: "0099L39GNX7TBC76NTVV",
-        INFINIA_SECRET_KEY: "OXSzBP1TH5Pz0Hon2Ovn43b0gMZbKeoosZfFPO45",
+        INFINIA_ACCESS_KEY: "DJ1S7LSGEIT9AKYCWVL5",
+        INFINIA_SECRET_KEY: "wZ7WQPZyqePwBzhuoQeCQJFRheblRTjwF687KMKu",
         INFINIA_BUCKET: "ddn-kv-cache-01",
         INFINIA_ENDPOINT: "https://192.168.147.129:8111",
         INFINIA_REGION: "us-east-1",
