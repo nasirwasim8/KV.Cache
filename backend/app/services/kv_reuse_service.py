@@ -426,9 +426,22 @@ async def stream_reuse_comparison(
         # Compute deterministic prefix hash (what NIXL/LMCache uses as the cache key)
         prefix_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
 
-        # Approximate token count (tiktoken not available, use word*1.33 heuristic)
-        prefix_tokens = int(len(system_prompt.split()) * 1.33)
-        question_tokens = max(1, int(len(question.split()) * 1.33))
+        # Exact token count from vLLM /tokenize endpoint (same tokenizer LMCache uses)
+        async def _tokenize(text: str) -> int:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as c:
+                    r = await c.post(
+                        f"{endpoint_url.rstrip('/')}/tokenize",
+                        json={"model": model, "prompt": text},
+                    )
+                    data = r.json()
+                    return data.get("count", len(data.get("tokens", [])))
+            except Exception:
+                # Fallback to word heuristic if tokenizer call fails
+                return int(len(text.split()) * 1.33)
+
+        prefix_tokens   = await _tokenize(system_prompt)
+        question_tokens = max(1, await _tokenize(question))
 
         # Llama 3.1 8B KV tensor size per token (bfloat16, GQA: 8 KV heads, head_dim=128, 32 layers)
         # Per token = 2 (K+V) x 8 KV heads x 128 head_dim x 2 bytes x 32 layers = 131,072 bytes
