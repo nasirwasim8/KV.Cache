@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type TierKey = 'ncp_provider' | 'self_hosted_h100' | 'azure_a100' | 'openai_gpt4'
+type TierKey = 'ncp_provider' | 'self_hosted_h100' | 'cloud_api'
 type TierType = 'self_hosted' | 'cloud_api' | 'ncp'
 
 interface Preset {
@@ -39,25 +39,15 @@ const TIERS: Record<string, TierConfig> = {
     color: '#76B900',
     description: 'GPU already purchased. Value = throughput gain + CapEx avoidance + power savings.',
   },
-  azure_a100: {
-    label: 'Cloud (Azure / AWS A100)',
+  cloud_api: {
+    label: 'Pay-Per-Token Cloud API (OpenAI / Azure / Bedrock)',
     type: 'cloud_api',
-    costPer1kTokens: 0.0020,
+    costPer1kTokens: 0.0025,  // $2.50/1M input tokens baseline (GPT-4o / Claude 3.5 Sonnet class)
     gpuServerCostUSD: 0,
     gpuPowerWatts: 0,
     electricityCostPerKwh: 0,
     color: '#1A81AF',
-    description: 'Pay per token — every skipped prefill token is a direct dollar saving on your invoice.',
-  },
-  openai_gpt4: {
-    label: 'API (OpenAI GPT-4o)',
-    type: 'cloud_api',
-    costPer1kTokens: 0.0025,  // $2.50/1M input tokens (current GPT-4o pricing, mid-2025)
-    gpuServerCostUSD: 0,
-    gpuPowerWatts: 0,
-    electricityCostPerKwh: 0,
-    color: '#ED2738',
-    description: 'Pay per token — every skipped prefill token is a direct dollar saving on your invoice.',
+    description: 'Serverless model API. Value = Direct dollar savings on your monthly token consumption invoice.',
   },
 }
 
@@ -65,10 +55,10 @@ const TIERS: Record<string, TierConfig> = {
 const PRESETS: Preset[] = [
   { id: 'ncp_cloud',      icon: '☁️', label: 'Neocloud (NCP) Multi-Tenant', industry: 'AI Cloud / GPU Provider',   systemTokens: 60_000,  dailyRequests: 10_000_000, avgNewTokens: 250, hitRate: 92, tier: 'ncp_provider', color: '#00C280' },
   { id: 'contact_center', icon: '📞', label: 'Contact Center AI',      industry: 'Telecom / BPO',              systemTokens: 50_000,  dailyRequests: 500_000,   avgNewTokens: 200, hitRate: 85, tier: 'self_hosted_h100', color: '#ED2738' },
-  { id: 'legal_ai',       icon: '⚖️', label: 'Legal Document AI',      industry: 'Law Firm / LegalTech',       systemTokens: 120_000, dailyRequests: 50_000,    avgNewTokens: 500, hitRate: 70, tier: 'azure_a100',       color: '#1A81AF' },
-  { id: 'healthcare',     icon: '🏥', label: 'Clinical Decision AI',   industry: 'Hospital / Health System',   systemTokens: 80_000,  dailyRequests: 100_000,   avgNewTokens: 300, hitRate: 75, tier: 'azure_a100',       color: '#00C280' },
+  { id: 'legal_ai',       icon: '⚖️', label: 'Legal Document AI',      industry: 'Law Firm / LegalTech',       systemTokens: 120_000, dailyRequests: 50_000,    avgNewTokens: 500, hitRate: 70, tier: 'cloud_api',       color: '#1A81AF' },
+  { id: 'healthcare',     icon: '🏥', label: 'Clinical Decision AI',   industry: 'Hospital / Health System',   systemTokens: 80_000,  dailyRequests: 100_000,   avgNewTokens: 300, hitRate: 75, tier: 'cloud_api',       color: '#00C280' },
   { id: 'fintech',        icon: '🏦', label: 'Financial Analyst AI',   industry: 'Investment Bank / FinTech',  systemTokens: 200_000, dailyRequests: 25_000,    avgNewTokens: 800, hitRate: 60, tier: 'self_hosted_h100', color: '#f59e0b' },
-  { id: 'ecommerce',      icon: '🛒', label: 'Retail / E-commerce AI', industry: 'Retail / Marketplace',       systemTokens: 30_000,  dailyRequests: 2_000_000, avgNewTokens: 100, hitRate: 90, tier: 'openai_gpt4',      color: '#8b5cf6' },
+  { id: 'ecommerce',      icon: '🛒', label: 'Retail / E-commerce AI', industry: 'Retail / Marketplace',       systemTokens: 30_000,  dailyRequests: 2_000_000, avgNewTokens: 100, hitRate: 90, tier: 'cloud_api',      color: '#8b5cf6' },
   { id: 'custom',         icon: '⚙️', label: 'Custom Scenario',         industry: 'Your Organization',          systemTokens: 10_000,  dailyRequests: 100_000,   avgNewTokens: 250, hitRate: 70, tier: 'self_hosted_h100', color: '#6b7280' },
 ]
 
@@ -264,7 +254,7 @@ export default function ROICalculator() {
               {isNcp
                 ? '☁️ Neocloud Provider (NCP) — Fleet Yield & Gross Margin Model'
                 : isCloud
-                ? '☁️ Cloud / API Billing — Direct Cost Savings'
+                ? '☁️ Pay-Per-Token Cloud API — Direct Invoice Savings'
                 : '🖥️ Self-Hosted / On-Prem — Capacity & CapEx Model'
               }
             </div>
@@ -272,7 +262,7 @@ export default function ROICalculator() {
               {isNcp
                 ? 'You sell inference capacity and GPU compute to enterprise tenants. Every cache hit bypasses massive prefill recomputation, freeing your GPUs to serve more paying users simultaneously, collapsing your Cost Per Token (CPT), and expanding your gross margin from ~45% to over 87%.'
                 : isCloud
-                ? 'You pay per token. Every cache hit skips the system prompt tokens — that is a direct line-item reduction on your cloud invoice. The savings here are real, verifiable dollars.'
+                ? 'You consume foundation models via serverless APIs (OpenAI GPT-4o, Azure OpenAI, AWS Bedrock). Every cache hit skips the system prompt tokens — directly reducing your monthly cloud invoice with zero infrastructure management.'
                 : 'Your GPUs are already paid for — there is no per-token bill to reduce. The value comes from three sources: (1) the same hardware can serve far more users, (2) you avoid buying additional GPU servers as load grows (CapEx avoidance), and (3) GPUs consuming less power lowers your electricity bill (OpEx).'
               }
             </div>
