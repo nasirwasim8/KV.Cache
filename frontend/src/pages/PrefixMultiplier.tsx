@@ -15,8 +15,8 @@ interface RunResult {
 }
 
 // Animated counter
-function AnimatedNumber({ value, decimals = 0, prefix = '', suffix = '', className = '' }: {
-  value: number; decimals?: number; prefix?: string; suffix?: string; className?: string
+function AnimatedNumber({ value, decimals = 0, prefix = '', suffix = '', className = '', style }: {
+  value: number; decimals?: number; prefix?: string; suffix?: string; className?: string; style?: React.CSSProperties
 }) {
   const [displayed, setDisplayed] = useState(0)
   useEffect(() => {
@@ -32,7 +32,7 @@ function AnimatedNumber({ value, decimals = 0, prefix = '', suffix = '', classNa
     }
     requestAnimationFrame(step)
   }, [value])
-  return <span className={className}>{prefix}{displayed.toFixed(decimals)}{suffix}</span>
+  return <span className={className} style={style}>{prefix}{displayed.toFixed(decimals)}{suffix}</span>
 }
 
 // Waterfall bar

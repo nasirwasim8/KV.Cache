@@ -1704,7 +1704,311 @@ function ChatObservatoryArchitectureDetail() {
 
 
 
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION — Competitive Battlecard: Why Native KV vs. File/Object
+// ═══════════════════════════════════════════════════════════════════
+
+function CompetitiveBattlecardDetail() {
+  const comparisonRows = [
+    {
+      feature: "Fundamental storage architecture",
+      infinia: "Distributed KV store",
+      infiniaHighlight: true,
+      weka: "Distributed filesystem",
+      vast: "Element Store",
+      note: "Infinia is designed from the silicon up as a distributed key-value store, not a filesystem adapted for AI."
+    },
+    {
+      feature: "Public KV cache persistent interface",
+      infinia: "Native Infinia / KV oriented path",
+      infiniaHighlight: true,
+      weka: "WekaFS",
+      vast: "FS tier",
+      note: "Direct key-addressable protocol bypassing POSIX layers."
+    },
+    {
+      feature: "Filesystem required for documented KV path",
+      infinia: "No, for direct Infinia NIXL path",
+      infiniaHighlight: true,
+      weka: "Yes",
+      vast: "Yes in current documented implementations",
+      note: "Eliminates mount points, inode limits, and directory locking entirely."
+    },
+    {
+      feature: "LMCache support",
+      infinia: "Yes",
+      infiniaHighlight: false,
+      weka: "Yes",
+      vast: "Yes",
+      note: "All three vendors support the open-source LMCache interface."
+    },
+    {
+      feature: "Dynamo support",
+      infinia: "Yes",
+      infiniaHighlight: false,
+      weka: "Yes",
+      vast: "Yes",
+      note: "Integrated with NVIDIA Dynamo inference framework."
+    },
+    {
+      feature: "NIXL integration",
+      infinia: "Native Infinia plugin",
+      infiniaHighlight: true,
+      weka: "Custom WEKA NIXL plugin",
+      vast: "GDS / Dynamo paths documented",
+      note: "DDN ships native plugin inside the official NVIDIA Dynamo container."
+    },
+    {
+      feature: "GPU Direct Storage (GDS)",
+      infinia: "Architecture can bypass conventional FS path",
+      infiniaHighlight: true,
+      weka: "Yes",
+      vast: "Yes",
+      note: "Direct DMA transfer between GPU HBM and storage media without host memory copies."
+    },
+    {
+      feature: "RDMA transport",
+      infinia: "jRPC/RDMA",
+      infiniaHighlight: true,
+      weka: "RDMA",
+      vast: "NFS/RDMA",
+      note: "Ultra-low-latency remote procedure calls over InfiniBand and RoCE."
+    },
+    {
+      feature: "Persistent namespace model",
+      infinia: "KV / object centric",
+      infiniaHighlight: true,
+      weka: "File centric",
+      vast: "Unified Element Store exposed through FS for documented KV path",
+      note: "Flat O(1) hash namespace eliminates directory tree traversals."
+    },
+    {
+      feature: "Example access abstraction",
+      infinia: "key → value",
+      infiniaHighlight: true,
+      weka: "path/file → bytes",
+      vast: "path/file → bytes in documented KV implementations",
+      note: "Infinia retrieves tensors directly by token SHA-256 hash."
+    },
+    {
+      feature: "Current competitive differentiator",
+      infinia: "Direct KV substrate",
+      infiniaHighlight: true,
+      weka: "Extremely optimized filesystem",
+      vast: "Unified architecture with optimized NFS/RDMA",
+      note: "Zero POSIX metadata overhead + resilient to high-churn cache eviction."
+    },
+  ]
+
+  return (
+    <div className="space-y-8">
+      {/* Executive banner */}
+      <div className="p-5 rounded-2xl border"
+        style={{ background: 'linear-gradient(135deg, rgba(237,39,56,0.08) 0%, rgba(237,39,56,0.02) 100%)', borderColor: 'rgba(237,39,56,0.3)' }}>
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-bold"
+            style={{ background: 'var(--ddn-red)' }}>
+            <Trophy className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--ddn-red)' }}>
+                Competitive Architecture Battlecard
+              </span>
+              <Tag color="var(--ddn-red)">DDN Infinia vs WEKA vs VAST</Tag>
+            </div>
+            <h3 className="text-base font-bold text-[var(--text-primary)]">
+              Why Native Distributed KV Substrate Outperforms File &amp; Element Systems
+            </h3>
+            <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+              KV caching is not an archival storage problem—it is a high-velocity, ephemeral key-value workload.
+              While competitors adapt traditional distributed filesystems (WekaFS) or hierarchical element tiers (VAST)
+              behind POSIX path abstractions, <strong>DDN Infinia provides a direct, flat KV substrate</strong> that eliminates
+              the metadata serialization tax and handles extreme cache churn natively.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2 Core Technical Pillar Cards: POSIX Tax vs Churn */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Pillar 1: POSIX Metadata Tax */}
+        <div className="card p-5 border flex flex-col justify-between" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
+                style={{ background: 'rgba(237,39,56,0.15)', color: 'var(--ddn-red)' }}>
+                <Layers className="w-4 h-4" />
+              </div>
+              <h4 className="text-sm font-bold text-[var(--text-primary)]">1. The POSIX Metadata Tax</h4>
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+              Filesystems require every 256-token KV chunk to be addressed as a file path (e.g. <code>/tenant/model/prefix_hash/chunk_0.bin</code>).
+              Under thousands of concurrent GPU requests, POSIX semantics force <strong>directory locking, inode allocations, and metadata server (MDS) traversals</strong> ($O(\log N)$).
+            </p>
+            <div className="mt-3 p-3 rounded-xl text-xs font-mono leading-relaxed"
+              style={{ background: 'var(--surface-secondary)', border: '1px solid var(--border-subtle)' }}>
+              <div className="text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">Data Path Comparison:</div>
+              <div className="text-[#ED2738]">❌ WEKA / VAST: POSIX Path → Dir Lock → Inode → Blocks</div>
+              <div className="text-[#00C280] font-bold mt-1">✓ DDN Infinia: SHA256 Key → Raw Value Bytes (O(1))</div>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t text-[11px] text-[var(--text-muted)]" style={{ borderColor: 'var(--border-subtle)' }}>
+            <strong>Result:</strong> Zero inode contention, sub-millisecond lookup, no metadata bottleneck at scale.
+          </div>
+        </div>
+
+        {/* Pillar 2: High-Churn Cache Dynamics */}
+        <div className="card p-5 border flex flex-col justify-between" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
+                style={{ background: 'rgba(0,194,128,0.15)', color: '#00C280' }}>
+                <RefreshCw className="w-4 h-4" />
+              </div>
+              <h4 className="text-sm font-bold text-[var(--text-primary)]">2. High-Churn Cache Resilience</h4>
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+              KV caching is bursty: gigabytes of tensors are dumped immediately after prefill, and evicted rapidly as conversations expire.
+              Standard object stores generate <strong>tombstones on delete</strong>, causing catastrophic background garbage collection (GC) latency spikes.
+              Filesystems suffer from journal serialization and inode churn.
+            </p>
+            <div className="mt-3 p-3 rounded-xl text-xs font-mono leading-relaxed"
+              style={{ background: 'var(--surface-secondary)', border: '1px solid var(--border-subtle)' }}>
+              <div className="text-[10px] uppercase font-bold text-[var(--text-muted)] mb-1">Eviction &amp; Lifecycle Behavior:</div>
+              <div className="text-[#ED2738]">❌ Standard Stores: Delete → Tombstone → GC Storm → Latency Spike</div>
+              <div className="text-[#00C280] font-bold mt-1">✓ DDN Infinia: Atomic Key Deletion / Zero GC Jitter</div>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t text-[11px] text-[var(--text-muted)]" style={{ borderColor: 'var(--border-subtle)' }}>
+            <strong>Result:</strong> Deterministic sub-100ms retrieval even under 90%+ cache turnover.
+          </div>
+        </div>
+      </div>
+
+      {/* The Battlecard Table */}
+      <div>
+        <SectionTitle>
+          <Trophy className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} />
+          Architectural Comparison: DDN Infinia vs. WEKA vs. VAST
+        </SectionTitle>
+
+        <div className="overflow-x-auto rounded-2xl border shadow-sm"
+          style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-card)' }}>
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr style={{ background: 'var(--surface-secondary)', borderBottom: '2px solid var(--border-subtle)' }}>
+                <th className="p-3.5 font-bold uppercase tracking-wider text-[var(--text-muted)] w-1/4">
+                  Feature / Dimension
+                </th>
+                <th className="p-3.5 font-bold text-center w-1/4" style={{ background: 'rgba(237,39,56,0.08)' }}>
+                  <div className="text-sm font-extrabold text-[var(--ddn-red)]">DDN Infinia</div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--ddn-red)] text-white mt-1 inline-block">
+                    Native KV Substrate
+                  </span>
+                </th>
+                <th className="p-3.5 font-bold text-center w-1/4">
+                  <div className="text-sm font-bold text-[var(--text-primary)]">WEKA</div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface-secondary)] text-[var(--text-muted)] border mt-1 inline-block">
+                    Distributed Filesystem
+                  </span>
+                </th>
+                <th className="p-3.5 font-bold text-center w-1/4">
+                  <div className="text-sm font-bold text-[var(--text-primary)]">VAST Data</div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface-secondary)] text-[var(--text-muted)] border mt-1 inline-block">
+                    Element Store
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonRows.map((row, idx) => (
+                <tr key={row.feature}
+                  style={{
+                    borderTop: '1px solid var(--border-subtle)',
+                    background: idx % 2 === 0 ? 'transparent' : 'var(--surface-secondary)',
+                  }}>
+                  {/* Feature name */}
+                  <td className="p-3.5 font-semibold text-[var(--text-primary)] align-top">
+                    {row.feature}
+                    <div className="text-[10px] font-normal text-[var(--text-muted)] mt-0.5">{row.note}</div>
+                  </td>
+
+                  {/* DDN Infinia Column */}
+                  <td className="p-3.5 text-center align-top font-medium"
+                    style={{ background: 'rgba(237,39,56,0.04)', borderLeft: '1px solid var(--border-subtle)', borderRight: '1px solid var(--border-subtle)' }}>
+                    {row.infiniaHighlight ? (
+                      <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold text-[var(--ddn-red)] bg-[rgba(237,39,56,0.1)] border border-[rgba(237,39,56,0.25)]">
+                        {row.infinia}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--text-primary)]">{row.infinia}</span>
+                    )}
+                  </td>
+
+                  {/* WEKA Column */}
+                  <td className="p-3.5 text-center align-top text-[var(--text-secondary)] border-r"
+                    style={{ borderColor: 'var(--border-subtle)' }}>
+                    <span>{row.weka}</span>
+                  </td>
+
+                  {/* VAST Column */}
+                  <td className="p-3.5 text-center align-top text-[var(--text-secondary)]">
+                    <span>{row.vast}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Field Win Themes */}
+      <div>
+        <SectionTitle>
+          <Award className="w-4 h-4" style={{ color: '#00C280' }} />
+          Field Positioning &amp; Win Themes (How to Pitch Against Competitors)
+        </SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-4 rounded-xl border bg-[var(--surface-card)]" style={{ borderColor: 'var(--border-subtle)' }}>
+            <div className="text-xs font-bold text-[var(--ddn-red)] mb-1">1. "Don't Force a File System on a KV Workload"</div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              LLMs access KV cache strictly by cryptographic prefix hashes, not directory paths. Filesystem vendors have to wrap every chunk in file creation, metadata locks, and POSIX syscalls. Infinia provides native $O(1)$ key-to-value addressing.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl border bg-[var(--surface-card)]" style={{ borderColor: 'var(--border-subtle)' }}>
+            <div className="text-xs font-bold text-[#00C280] mb-1">2. "Zero-Tax Direct Infinia NIXL Path"</div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              DDN is the first partner shipping a native Infinia plugin directly inside the NVIDIA Dynamo container, bypassing conventional host filesystem bottlenecks with jRPC/RDMA GPU-Direct offload.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl border bg-[var(--surface-card)]" style={{ borderColor: 'var(--border-subtle)' }}>
+            <div className="text-xs font-bold text-[#1A81AF] mb-1">3. "Built for Ephemeral Churn, Not Archival"</div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Under multi-tenant cloud serving, thousands of contexts are written and evicted per second. Standard object stores choke on tombstone garbage collection storms; Infinia executes atomic key lifecycles natively at line rate.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 const CONCEPTS = [
+  {
+    id: 'competitive',
+    icon: <Trophy className="w-5 h-5" />,
+    label: 'Why Native KV vs File/Object',
+    subtitle: 'DDN vs WEKA vs VAST',
+    tag: 'Battlecard',
+    tagColor: '#ED2738',
+    summary: 'Architectural comparison: Distributed KV store vs POSIX file & element systems. Metadata tax, churn resilience, and NIXL integration.',
+    ready: true,
+  },
   {
     id: 'dynamo',
     icon: <Zap className="w-5 h-5" />,
@@ -1760,6 +2064,7 @@ const CONCEPTS = [
 
 function renderSection(id: string) {
   switch (id) {
+    case 'competitive': return <CompetitiveBattlecardDetail />
     case 'workflow':   return <DetailedWorkflowDetail />
     case 'dynamo':    return <DynamoNIXLArchitectureDetail />
     case 'observatory': return <ChatObservatoryArchitectureDetail />

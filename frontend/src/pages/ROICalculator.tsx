@@ -53,6 +53,7 @@ const TIERS: Record<string, TierConfig> = {
 
 // ─── Industry Presets ─────────────────────────────────────────────────────────
 const PRESETS: Preset[] = [
+  { id: 'ncp_cloud',      icon: '☁️', label: 'Neocloud (NCP) Multi-Tenant', industry: 'AI Cloud / GPU Provider',   systemTokens: 60_000,  dailyRequests: 10_000_000, avgNewTokens: 250, hitRate: 92, tier: 'self_hosted_h100', color: '#00C280' },
   { id: 'contact_center', icon: '📞', label: 'Contact Center AI',      industry: 'Telecom / BPO',              systemTokens: 50_000,  dailyRequests: 500_000,   avgNewTokens: 200, hitRate: 85, tier: 'self_hosted_h100', color: '#ED2738' },
   { id: 'legal_ai',       icon: '⚖️', label: 'Legal Document AI',      industry: 'Law Firm / LegalTech',       systemTokens: 120_000, dailyRequests: 50_000,    avgNewTokens: 500, hitRate: 70, tier: 'azure_a100',       color: '#1A81AF' },
   { id: 'healthcare',     icon: '🏥', label: 'Clinical Decision AI',   industry: 'Hospital / Health System',   systemTokens: 80_000,  dailyRequests: 100_000,   avgNewTokens: 300, hitRate: 75, tier: 'azure_a100',       color: '#00C280' },
