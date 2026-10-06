@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle } from 'lucide-react'
+import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle, Play, X, ExternalLink, Video, CheckCircle2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TierKey = 'ncp_provider' | 'self_hosted_h100' | 'cloud_api'
@@ -196,6 +196,13 @@ function KpiCard({ value, label, sublabel, color = '#00C280', suffix = '', fontS
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ROICalculator() {
+  const [showDemoModal, setShowDemoModal] = useState(false)
+  useEffect(() => {
+    const handleOpenDemo = () => setShowDemoModal(true)
+    window.addEventListener('open-demo-modal', handleOpenDemo)
+    return () => window.removeEventListener('open-demo-modal', handleOpenDemo)
+  }, [])
+  const YOUTUBE_DEMO_URL = '' // Drop in your YouTube embed URL here when available (e.g. https://www.youtube.com/embed/xxxxxx)
   const initial = PRESETS[0]
   const [activePreset, setActivePreset]   = useState(initial.id)
   const [systemTokens, setSystemTokens]   = useState(initial.systemTokens)
@@ -269,6 +276,51 @@ export default function ROICalculator() {
           </div>
         </motion.div>
       </AnimatePresence>
+
+      {/* ── LIVE BENCHMARK & DEMO SHOWCASE ── */}
+      <div
+        className="p-5 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(237,39,56,0.06) 0%, rgba(118,185,0,0.06) 100%)',
+          borderColor: 'var(--border-subtle)',
+        }}
+      >
+        <div className="flex items-start gap-3.5">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-bold shadow-sm"
+            style={{ background: 'var(--ddn-red)' }}
+          >
+            <Play className="w-5 h-5 ml-0.5" fill="#fff" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#ED2738]/15 text-[#ED2738] border border-[#ED2738]/30">
+                Live Testbed Telemetry
+              </span>
+              <span className="text-[10px] font-semibold text-[var(--text-muted)]">
+                vLLM v1 + LMCache + DDN Infinia S3/RDMA
+              </span>
+            </div>
+            <h4 className="text-sm font-bold text-[var(--text-primary)]">
+              Validated on Real GPU Silicon — Watch The Live Demonstration
+            </h4>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 max-w-2xl leading-relaxed">
+              Every TTFT drop and capacity multiplier in this calculator is measured on our live testbed. See 4,200ms cold prefill drop to 56ms warm retrieval with zero-copy GPU-Direct RDMA.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+          <button
+            onClick={() => setShowDemoModal(true)}
+            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
+            style={{ background: 'var(--ddn-red)' }}
+          >
+            <Play className="w-3.5 h-3.5" fill="#fff" />
+            <span>Watch Live Demonstration</span>
+          </button>
+        </div>
+      </div>
 
       {/* Presets */}
       <div className="card p-5">
@@ -745,6 +797,145 @@ export default function ROICalculator() {
 
         </div>
       </div>
+          {/* ── LIVE DEMO & VIDEO MODAL ── */}
+      <AnimatePresence>
+        {showDemoModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowDemoModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden"
+              style={{ background: 'var(--surface-primary)', borderColor: 'var(--border-subtle)' }}
+            >
+              {/* Modal Header */}
+              <div
+                className="px-6 py-4 flex items-center justify-between border-b"
+                style={{ borderColor: 'var(--border-subtle)', background: 'var(--surface-secondary)' }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white"
+                    style={{ background: 'var(--ddn-red)' }}
+                  >
+                    <Play className="w-4 h-4 ml-0.5" fill="#fff" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                      DDN Infinia KV Cache — Live Cluster Demonstration
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      Live Telemetry &amp; Small-Scale Benchmark Proof
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDemoModal(false)}
+                  className="p-1.5 rounded-lg hover:bg-[var(--surface-card)] transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-5">
+                {/* Video Player or Placeholder */}
+                {YOUTUBE_DEMO_URL ? (
+                  <div className="aspect-video w-full rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-subtle)' }}>
+                    <iframe
+                      src={YOUTUBE_DEMO_URL}
+                      title="DDN Infinia KV Cache Live Demo"
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="aspect-video w-full rounded-xl border flex flex-col items-center justify-center text-center p-6 relative overflow-hidden"
+                    style={{
+                      background: 'radial-gradient(circle at center, rgba(237,39,56,0.12) 0%, rgba(20,20,20,0.95) 100%)',
+                      borderColor: 'var(--border-subtle)',
+                    }}
+                  >
+                    <div
+                      className="w-16 h-16 rounded-full flex items-center justify-center mb-3 shadow-lg cursor-pointer transition-transform hover:scale-110 active:scale-95"
+                      style={{ background: 'var(--ddn-red)' }}
+                      onClick={() => alert('Full YouTube demonstration video link will be plugged in here shortly. Contact your DDN technical representative for live private cluster access.')}
+                    >
+                      <Play className="w-7 h-7 text-white ml-1" fill="#fff" />
+                    </div>
+                    <div className="font-bold text-sm text-white mb-1">
+                      Small-Scale Live Cluster Demonstration
+                    </div>
+                    <p className="text-xs text-neutral-300 max-w-md leading-relaxed">
+                      Video capture demonstrating cold prompt prefill vs warm prefix retrieval, GPU memory flush, and cross-node session resume with sub-100ms TTFT.
+                    </p>
+                    <span className="mt-3 text-[10px] font-mono px-2.5 py-1 rounded-full bg-white/10 text-neutral-300 border border-white/15">
+                      YouTube Video Link Slot Ready
+                    </span>
+                  </div>
+                )}
+
+                {/* Measured Telemetry Summary Box */}
+                <div
+                  className="p-4 rounded-xl border text-xs space-y-2.5"
+                  style={{ background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}
+                >
+                  <div className="font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-[#00C280]" />
+                    <span>Real-World Benchmark Telemetry:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="p-2.5 rounded-lg bg-[var(--surface-card)] border" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <div className="text-[10px] text-[var(--text-muted)] font-semibold uppercase">Cold Prefill</div>
+                      <div className="text-sm font-bold text-[#ED2738] mt-0.5">4,218 ms TTFT</div>
+                      <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">14,507 tokens computed</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-[var(--surface-card)] border" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <div className="text-[10px] text-[var(--text-muted)] font-semibold uppercase">Warm Infinia Hit</div>
+                      <div className="text-sm font-bold text-[#00C280] mt-0.5">56 ms TTFT</div>
+                      <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">75× latency reduction</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-[var(--surface-card)] border" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <div className="text-[10px] text-[var(--text-muted)] font-semibold uppercase">Concurrency Headroom</div>
+                      <div className="text-sm font-bold text-[#76B900] mt-0.5">4.8× Multiplier</div>
+                      <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">More active users / GPU</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <a
+                    href="https://www.ddn.com/company/contact-us/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-[var(--ddn-red)] hover:underline inline-flex items-center gap-1.5"
+                  >
+                    <span>Schedule 1-on-1 Live Testbed Demonstration</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <button
+                    onClick={() => setShowDemoModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold border bg-[var(--surface-card)] hover:bg-[var(--surface-secondary)] text-[var(--text-primary)] transition-colors"
+                    style={{ borderColor: 'var(--border-subtle)' }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   )
 }
