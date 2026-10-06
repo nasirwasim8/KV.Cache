@@ -185,17 +185,21 @@ function Slider({ label, value, min, max, step, onChange, format, hint, color = 
   )
 }
 
-function KpiCard({ value, label, sublabel, color = '#00C280', suffix = '' }: {
-  value: string; label: string; sublabel?: string; color?: string; suffix?: string
+function KpiCard({ value, label, sublabel, color = '#00C280', suffix = '', fontSize }: {
+  value: string; label: string; sublabel?: string; color?: string; suffix?: string; fontSize?: string
 }) {
+  const defaultSize = value.length > 7 ? 'clamp(0.95rem, 1.7vw, 1.35rem)' : 'clamp(1.2rem, 2.5vw, 1.8rem)'
   return (
     <motion.div key={value + label} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-      className="text-center p-4 rounded-2xl" style={{ background: `${color}0f`, border: `1px solid ${color}25` }}>
-      <div className="font-mono font-black leading-none mb-1" style={{ color, fontSize: 'clamp(1.2rem, 2.5vw, 1.8rem)' }}>
+      className="text-center p-4 rounded-2xl flex flex-col justify-between" style={{ background: `${color}0f`, border: `1px solid ${color}25` }}>
+      <div className="font-mono font-black leading-none mb-1 whitespace-nowrap flex items-center justify-center"
+        style={{ color, fontSize: fontSize || defaultSize }}>
         {value}{suffix}
       </div>
-      <div className="text-xs font-bold uppercase tracking-wide" style={{ color: `${color}bb` }}>{label}</div>
-      {sublabel && <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{sublabel}</div>}
+      <div>
+        <div className="text-xs font-bold uppercase tracking-wide" style={{ color: `${color}bb` }}>{label}</div>
+        {sublabel && <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{sublabel}</div>}
+      </div>
     </motion.div>
   )
 }
@@ -477,6 +481,7 @@ export default function ROICalculator() {
                   label="Gross Margin Expansion"
                   sublabel={`+${roi.ncpMarginExpansionPct.toFixed(0)}% margin on cached traffic`}
                   color="#00C280"
+                  fontSize="clamp(1.05rem, 1.8vw, 1.45rem)"
                 />
                 <KpiCard
                   value={`${roi.serversAvoided}`}
