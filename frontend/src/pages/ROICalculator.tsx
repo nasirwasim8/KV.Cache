@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type TierKey = 'self_hosted_h100' | 'azure_a100' | 'openai_gpt4'
-type TierType = 'self_hosted' | 'cloud_api'
+type TierKey = 'ncp_provider' | 'self_hosted_h100' | 'azure_a100' | 'openai_gpt4'
+type TierType = 'self_hosted' | 'cloud_api' | 'ncp'
 
 interface Preset {
   id: string; icon: string; label: string; industry: string
@@ -19,6 +19,16 @@ interface TierConfig {
 
 // ─── Pricing Tiers ────────────────────────────────────────────────────────────
 const TIERS: Record<string, TierConfig> = {
+  ncp_provider: {
+    label: 'Neocloud (NCP) Inference Provider',
+    type: 'ncp',
+    costPer1kTokens: 0.0006,     // Baseline market price: $0.60 per 1M input tokens
+    gpuServerCostUSD: 300_000,   // 8× H100 DGX server ≈ $300K
+    gpuPowerWatts: 6400,         // 8× H100 @ 700W each + chassis
+    electricityCostPerKwh: 0.10,
+    color: '#00C280',
+    description: 'AI Cloud / GPUaaS provider. Value = Concurrency Multiplier + Gross Margin Expansion (45% → 87%) + Revenue Yield per GPU.',
+  },
   self_hosted_h100: {
     label: 'Self-Hosted / On-Prem H100',
     type: 'self_hosted',
@@ -53,7 +63,7 @@ const TIERS: Record<string, TierConfig> = {
 
 // ─── Industry Presets ─────────────────────────────────────────────────────────
 const PRESETS: Preset[] = [
-  { id: 'ncp_cloud',      icon: '☁️', label: 'Neocloud (NCP) Multi-Tenant', industry: 'AI Cloud / GPU Provider',   systemTokens: 60_000,  dailyRequests: 10_000_000, avgNewTokens: 250, hitRate: 92, tier: 'self_hosted_h100', color: '#00C280' },
+  { id: 'ncp_cloud',      icon: '☁️', label: 'Neocloud (NCP) Multi-Tenant', industry: 'AI Cloud / GPU Provider',   systemTokens: 60_000,  dailyRequests: 10_000_000, avgNewTokens: 250, hitRate: 92, tier: 'ncp_provider', color: '#00C280' },
   { id: 'contact_center', icon: '📞', label: 'Contact Center AI',      industry: 'Telecom / BPO',              systemTokens: 50_000,  dailyRequests: 500_000,   avgNewTokens: 200, hitRate: 85, tier: 'self_hosted_h100', color: '#ED2738' },
   { id: 'legal_ai',       icon: '⚖️', label: 'Legal Document AI',      industry: 'Law Firm / LegalTech',       systemTokens: 120_000, dailyRequests: 50_000,    avgNewTokens: 500, hitRate: 70, tier: 'azure_a100',       color: '#1A81AF' },
   { id: 'healthcare',     icon: '🏥', label: 'Clinical Decision AI',   industry: 'Hospital / Health System',   systemTokens: 80_000,  dailyRequests: 100_000,   avgNewTokens: 300, hitRate: 75, tier: 'azure_a100',       color: '#00C280' },
@@ -140,6 +150,12 @@ function computeROI(p: { systemTokens: number; dailyRequests: number; avgNewToke
     serversAvoided, serversNeededWithout, serversNeededWith, capexAvoidance, annualCapexAmortised,
     powerSavedKWhAnnually, powerSavedUsdAnnually,
     totalSelfHostedAnnual, gpuUtilFreedPct,
+    // ── NCP Provider Specifics ──
+    hourlyGpuRate: 2.50, // Standard H100 SXM5 market rate ($2.00-$2.80/hr)
+    annualNcpReclaimedValue: gpuHoursSavedAnnually * 2.50,
+    ncpGrossMarginBefore: 45.0,
+    ncpGrossMarginAfter: 87.2,
+    ncpMarginExpansionPct: 87.2 - 45.0,
   }
 }
 
@@ -203,6 +219,7 @@ export default function ROICalculator() {
 
   const accent = PRESETS.find(p => p.id === activePreset)?.color ?? '#ED2738'
   const isCloud = TIERS[tier].type === 'cloud_api'
+  const isNcp   = TIERS[tier].type === 'ncp'
 
   return (
     <div className="space-y-6">
@@ -224,18 +241,31 @@ export default function ROICalculator() {
         <motion.div key={tier}
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-start gap-3 px-5 py-4 rounded-xl"
-          style={{ background: isCloud ? 'rgba(26,129,175,0.07)' : 'rgba(118,185,0,0.07)', border: `1px solid ${isCloud ? '#1A81AF' : '#76B900'}30` }}
+          style={{
+            background: isNcp ? 'rgba(0,194,128,0.08)' : isCloud ? 'rgba(26,129,175,0.07)' : 'rgba(118,185,0,0.07)',
+            border: `1px solid ${isNcp ? '#00C280' : isCloud ? '#1A81AF' : '#76B900'}30`
+          }}
         >
-          {isCloud
-            ? <Cloud className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#1A81AF' }} />
-            : <Server className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#76B900' }} />
-          }
+          {isNcp ? (
+            <Cloud className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#00C280' }} />
+          ) : isCloud ? (
+            <Cloud className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#1A81AF' }} />
+          ) : (
+            <Server className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#76B900' }} />
+          )}
           <div>
-            <div className="font-semibold text-sm" style={{ color: isCloud ? '#1A81AF' : '#76B900' }}>
-              {isCloud ? '☁️ Cloud / API Billing — Direct Cost Savings' : '🖥️ Self-Hosted / On-Prem — Capacity & CapEx Model'}
+            <div className="font-semibold text-sm" style={{ color: isNcp ? '#00C280' : isCloud ? '#1A81AF' : '#76B900' }}>
+              {isNcp
+                ? '☁️ Neocloud Provider (NCP) — Fleet Yield & Gross Margin Model'
+                : isCloud
+                ? '☁️ Cloud / API Billing — Direct Cost Savings'
+                : '🖥️ Self-Hosted / On-Prem — Capacity & CapEx Model'
+              }
             </div>
             <div className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              {isCloud
+              {isNcp
+                ? 'You sell inference capacity and GPU compute to enterprise tenants. Every cache hit bypasses massive prefill recomputation, freeing your GPUs to serve more paying users simultaneously, collapsing your Cost Per Token (CPT), and expanding your gross margin from ~45% to over 87%.'
+                : isCloud
                 ? 'You pay per token. Every cache hit skips the system prompt tokens — that is a direct line-item reduction on your cloud invoice. The savings here are real, verifiable dollars.'
                 : 'Your GPUs are already paid for — there is no per-token bill to reduce. The value comes from three sources: (1) the same hardware can serve far more users, (2) you avoid buying additional GPU servers as load grows (CapEx avoidance), and (3) GPUs consuming less power lowers your electricity bill (OpEx).'
               }
@@ -418,6 +448,83 @@ export default function ROICalculator() {
             </div>
           </motion.div>
 
+          {/* ── NCP PROVIDER Results ── */}
+          {isNcp && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated p-6" style={{ borderTop: `3px solid #00C280` }}>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                    <Cloud className="w-5 h-5" style={{ color: '#00C280' }} />
+                    Neocloud (NCP) Fleet Yield &amp; Margin Expansion
+                  </h3>
+                  <div className="text-xs text-[var(--text-muted)] mt-0.5">Commercial GPU inference cloud economics (CoreWeave / Lambda / Nebius model)</div>
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: '#00C28018', color: '#00C280' }}>
+                  NCP Tier
+                </span>
+              </div>
+
+              {/* 3 Primary KPIs */}
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <KpiCard
+                  value={fmt$(roi.annualNcpReclaimedValue)}
+                  label="Annual Fleet Value Reclaimed"
+                  sublabel={`${fmtNum(roi.gpuHoursSavedAnnually)} GPU-hrs freed @ $2.50/hr`}
+                  color="#00C280"
+                />
+                <KpiCard
+                  value="45% → 87%"
+                  label="Gross Margin Expansion"
+                  sublabel={`+${roi.ncpMarginExpansionPct.toFixed(0)}% margin on cached traffic`}
+                  color="#00C280"
+                />
+                <KpiCard
+                  value={`${roi.serversAvoided}`}
+                  label="DGX H100 Nodes Avoided"
+                  sublabel={`${fmt$(roi.capexAvoidance)} CapEx (@$300K/ea)`}
+                  color="#1A81AF"
+                />
+              </div>
+
+              {/* 2 Secondary KPIs */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <KpiCard
+                  value="$0.20 → $0.01"
+                  label="Input COGS / 1M Tokens"
+                  sublabel="95% compute cost eliminated on hits"
+                  color="#76B900"
+                />
+                <KpiCard
+                  value={`${roi.throughputMultiplier.toFixed(0)}×`}
+                  label="Concurrency Multiplier"
+                  sublabel="More active tenant streams per node"
+                  color="#ED2738"
+                />
+              </div>
+
+              {/* Defensible Formula & Proof Points */}
+              <div className="rounded-xl p-4 text-xs space-y-2" style={{ background: 'rgba(0,194,128,0.06)', border: '1px solid rgba(0,194,128,0.2)' }}>
+                <div className="font-semibold text-sm" style={{ color: '#00C280' }}>Defensible Economic Proof &amp; Methodology:</div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  1. Prefill Bottleneck: {fmtNum(systemTokens)} tokens ÷ 10,000 tok/s = <span style={{ color: '#ED2738' }}>{(systemTokens/10000).toFixed(2)}s GPU prefill saved per hit</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  2. Fleet Hours Freed: {(systemTokens/10000).toFixed(2)}s × {fmtNum(roi.dailyHits)} hits/day ÷ 3,600 = <span style={{ color: '#00C280' }}>{fmtNum(roi.gpuHoursSavedPerDay)} GPU-hours/day</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  3. Market Value: {fmtNum(roi.gpuHoursSavedPerDay)} hrs/day × $2.50/hr × 365 = <span style={{ color: '#00C280', fontWeight: 'bold' }}>{fmt$(roi.annualNcpReclaimedValue)}/yr in freed GPU time</span>
+                </div>
+                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  4. CapEx Equivalence: {fmtNum(roi.gpuHoursSavedPerDay)} hrs/day ÷ (24h × 8 GPUs/node) = <span style={{ color: '#1A81AF', fontWeight: 'bold' }}>{roi.serversAvoided} DGX H100 servers avoided ({fmt$(roi.capexAvoidance)})</span>
+                </div>
+                <div className="pt-2 mt-2 border-t text-xs leading-relaxed" style={{ borderColor: 'rgba(0,194,128,0.2)', color: 'var(--text-muted)' }}>
+                  <strong>Industry Reality:</strong> In multi-tenant inference clouds, prefill saturation is the primary cause of GPU queue latency and high COGS.
+                  Offloading KV tensors to DDN Infinia converts compute-bound prefill into low-latency memory retrieval, enabling NCPs to pack 3×–5× more tenant requests onto existing nodes while boosting operating margins above 85%.
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* ── CLOUD Results ── */}
           {isCloud && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated p-6" style={{ borderTop: `3px solid ${TIERS[tier].color}` }}>
@@ -460,7 +567,7 @@ export default function ROICalculator() {
           )}
 
           {/* ── SELF-HOSTED Results ── */}
-          {!isCloud && (
+          {!isCloud && !isNcp && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated p-6" style={{ borderTop: '3px solid #76B900' }}>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -621,10 +728,16 @@ export default function ROICalculator() {
               <Users className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: accent }} />
               <div>
                 <div className="font-semibold text-sm mb-1" style={{ color: 'var(--text-primary)' }}>
-                  {isCloud ? 'Why the invoice number is so large' : 'The right conversation to have with the CFO'}
+                  {isNcp
+                    ? 'The Neocloud (NCP) Business Case'
+                    : isCloud
+                    ? 'Why the invoice number is so large'
+                    : 'The right conversation to have with the CFO'}
                 </div>
                 <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                  {isCloud
+                  {isNcp
+                    ? <>For an AI Cloud Provider serving <strong>{fmtNum(dailyRequests)}</strong> queries/day, prefill recomputation burns <strong>{fmtNum(roi.gpuHoursSavedAnnually)} GPU-hours/year</strong>. DDN Infinia reclaims that compute, unlocking <strong style={{ color: '#00C280' }}>{fmt$(roi.annualNcpReclaimedValue)} in sellable capacity</strong> and avoiding <strong style={{ color: '#1A81AF' }}>{roi.serversAvoided} DGX H100 servers ({fmt$(roi.capexAvoidance)})</strong> in new CapEx.</>
+                    : isCloud
                     ? <>With a <strong>{fmtNum(systemTokens)}-token</strong> system prompt, every single cache hit eliminates <strong style={{ color: accent }}>${(systemTokens * TIERS[tier].costPer1kTokens / 1000).toFixed(4)}</strong> from your bill. At <strong>{fmtNum(roi.dailyHits)}</strong> hits/day that compounds to <strong style={{ color: accent }}>{fmt$(roi.annualSavingsCloud)}/year</strong> — a real line item you can verify on your next invoice.</>
                     : <>With the same {fmtNum(dailyRequests / 1000)}K-request-per-day workload, DDN Infinia lets your existing GPUs handle <strong style={{ color: accent }}>{roi.throughputMultiplier.toFixed(0)}× the load</strong>. When you're ready to scale, you buy <strong style={{ color: accent }}>{roi.serversAvoided} fewer DGX servers</strong> — that's <strong style={{ color: accent }}>{fmt$(roi.capexAvoidance)}</strong> in CapEx you keep in the budget. That's a CFO-level conversation.</>
                   }
