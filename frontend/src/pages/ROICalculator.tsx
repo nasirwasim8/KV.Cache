@@ -232,11 +232,13 @@ export default function ROICalculator() {
       <div className="section-header">
         <h2 className="section-title flex items-center gap-2">
           <Calculator className="w-6 h-6" style={{ color: 'var(--ddn-red)' }} />
-          Enterprise ROI Calculator
+          Enterprise &amp; Neocloud ROI Calculator
         </h2>
         <p className="section-description">
-          Plug in your real workload parameters. The calculator uses two separate economic models:
-          <strong> direct cost savings</strong> for cloud/API billing, and <strong>throughput gain + CapEx avoidance + power savings</strong> for self-hosted GPU infrastructure.
+          Plug in your real workload parameters. The calculator models three distinct economic frameworks:
+          <strong> fleet concurrency &amp; gross margin expansion</strong> for Neocloud (NCP) inference providers,
+          <strong> throughput gain, CapEx avoidance &amp; power savings</strong> for on-prem enterprise clusters,
+          and <strong> direct token invoice reduction</strong> for cloud/API consumption.
         </p>
       </div>
 
