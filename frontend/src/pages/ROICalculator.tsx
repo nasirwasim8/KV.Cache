@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle, Play, X, ExternalLink, Video, CheckCircle2 } from 'lucide-react'
+import { Calculator, TrendingUp, DollarSign, Zap, Users, Info, Server, Cloud, AlertTriangle, Play, X, ChevronDown, ExternalLink, Video, CheckCircle2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TierKey = 'ncp_provider' | 'self_hosted_h100' | 'cloud_api'
@@ -197,8 +197,9 @@ function KpiCard({ value, label, sublabel, color = '#00C280', suffix = '', fontS
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ROICalculator() {
   const [showDemoModal, setShowDemoModal] = useState(false)
+  const [demoBannerOpen, setDemoBannerOpen] = useState(false)
   useEffect(() => {
-    const handleOpenDemo = () => setShowDemoModal(true)
+    const handleOpenDemo = () => { setDemoBannerOpen(true); setShowDemoModal(true) }
     window.addEventListener('open-demo-modal', handleOpenDemo)
     return () => window.removeEventListener('open-demo-modal', handleOpenDemo)
   }, [])
@@ -277,49 +278,91 @@ export default function ROICalculator() {
         </motion.div>
       </AnimatePresence>
 
-      {/* ── LIVE BENCHMARK & DEMO SHOWCASE ── */}
+      {/* ── LIVE BENCHMARK & DEMO SHOWCASE (COLLAPSED BY DEFAULT) ── */}
       <div
-        className="p-5 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4"
+        className="rounded-2xl border overflow-hidden transition-all shadow-sm"
         style={{
-          background: 'linear-gradient(135deg, rgba(237,39,56,0.06) 0%, rgba(118,185,0,0.06) 100%)',
+          background: 'linear-gradient(135deg, rgba(237,39,56,0.05) 0%, rgba(118,185,0,0.04) 100%)',
           borderColor: 'var(--border-subtle)',
         }}
       >
-        <div className="flex items-start gap-3.5">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-bold shadow-sm"
-            style={{ background: 'var(--ddn-red)' }}
-          >
-            <Play className="w-5 h-5 ml-0.5" fill="#fff" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#ED2738]/15 text-[#ED2738] border border-[#ED2738]/30">
-                Live Testbed Telemetry
-              </span>
-              <span className="text-[10px] font-semibold text-[var(--text-muted)]">
-                vLLM v1 + LMCache + DDN Infinia S3/RDMA
-              </span>
+        <button
+          onClick={() => setDemoBannerOpen(o => !o)}
+          className="w-full p-4 flex items-center justify-between text-left transition-colors hover:bg-[var(--surface-secondary)]/50"
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white font-bold shadow-sm"
+              style={{ background: 'var(--ddn-red)' }}
+            >
+              <Play className="w-4 h-4 ml-0.5" fill="#fff" />
             </div>
-            <h4 className="text-sm font-bold text-[var(--text-primary)]">
-              Validated on Real GPU Silicon — Watch The Live Demonstration
-            </h4>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5 max-w-2xl leading-relaxed">
-              Every TTFT drop and capacity multiplier in this calculator is measured on our live testbed. See 4,200ms cold prefill drop to 56ms warm retrieval with zero-copy GPU-Direct RDMA.
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-bold text-[var(--text-primary)]">
+                  Validated on Real GPU Silicon — Watch The Live Demonstration
+                </h4>
+                <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#ED2738]/15 text-[#ED2738] border border-[#ED2738]/30">
+                  Live Testbed
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                {demoBannerOpen
+                  ? 'Click to collapse demonstration details'
+                  : 'Click to expand live vLLM + LMCache + DDN Infinia benchmark proof & video walkthrough'}
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
-          <button
-            onClick={() => setShowDemoModal(true)}
-            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
-            style={{ background: 'var(--ddn-red)' }}
-          >
-            <Play className="w-3.5 h-3.5" fill="#fff" />
-            <span>Watch Live Demonstration</span>
-          </button>
-        </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-semibold text-[var(--text-muted)] hidden md:inline">
+              {demoBannerOpen ? 'Collapse' : 'Expand Demo Proof'}
+            </span>
+            <ChevronDown
+              className="w-4 h-4 transition-transform duration-200"
+              style={{ color: 'var(--text-muted)', transform: demoBannerOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            />
+          </div>
+        </button>
+
+        <AnimatePresence>
+          {demoBannerOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div
+                className="px-5 pb-5 pt-2 border-t flex flex-col md:flex-row items-center justify-between gap-4"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
+                <div className="flex-1">
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed max-w-2xl">
+                    Every TTFT drop and capacity multiplier in this calculator is measured on our live testbed running <strong>vLLM v1 + LMCache + DDN Infinia S3/RDMA</strong>. See 4,200ms cold prefill drop to 56ms warm retrieval with zero-copy GPU-Direct RDMA.
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap gap-2 text-[10px] font-mono text-[var(--text-muted)]">
+                    <span className="px-2 py-0.5 rounded bg-[var(--surface-secondary)] border">Cold Prefill: 4,218ms</span>
+                    <span className="px-2 py-0.5 rounded bg-[var(--surface-secondary)] border text-[#00C280] font-bold">Warm Infinia Hit: 56ms</span>
+                    <span className="px-2 py-0.5 rounded bg-[var(--surface-secondary)] border text-[#76B900]">Concurrency: 4.8× Multiplier</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+                  <button
+                    onClick={() => setShowDemoModal(true)}
+                    className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
+                    style={{ background: 'var(--ddn-red)' }}
+                  >
+                    <Play className="w-3.5 h-3.5" fill="#fff" />
+                    <span>Watch Live Demonstration</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Presets */}
