@@ -207,7 +207,7 @@ function KpiCard({ value, label, sublabel, color = '#00C280', suffix = '', fontS
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ROICalculator() {
   const initial = PRESETS[0]
-  const [activePreset, setActivePreset]   = useState('contact_center')
+  const [activePreset, setActivePreset]   = useState(initial.id)
   const [systemTokens, setSystemTokens]   = useState(initial.systemTokens)
   const [dailyRequests, setDailyRequests] = useState(initial.dailyRequests)
   const [avgNewTokens, setAvgNewTokens]   = useState(initial.avgNewTokens)
