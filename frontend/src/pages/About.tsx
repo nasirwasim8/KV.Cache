@@ -533,29 +533,29 @@ function StorageComparisonDetail() {
 function ICPDetail() {
   const ICPS = [
     {
-      n: 1, label: 'MLOps / Infra Engineers', who: 'GPU utilization & cost per request', color: '#1A81AF',
+      n: 1, label: 'MLOps & Infrastructure Engineers', who: 'GPU Compute Efficiency, Prefill Tax, & Tokens/Sec/Watt', color: '#1A81AF',
       icon: <Server className="w-4 h-4" />,
-      detail: 'MLOps engineers care about GPU efficiency metrics: tokens/second, utilization%, cost/request. The demo shows concrete reduction in tokens processed per request and the before/after TTFT numbers. KV Cache directly reduces GPU cycles per turn — a metric they already track.',
+      detail: 'MLOps teams track GPU compute saturation: TTFT (Time-To-First-Token), prefill compute vs decode efficiency, and tokens/sec/watt. Without persistent KV caching, 80%+ of GPU compute is repeatedly burned re-computing attention tensors for shared system prompts, tool definitions, and multi-turn context. DDN Infinia transforms this O(N²) prefill penalty into an O(1) RDMA retrieval, slashing prefill times from seconds to sub-100ms and freeing GPU compute for useful generative decode turns.',
     },
     {
-      n: 2, label: 'CTOs / VP Engineering', who: 'Infrastructure budget & scale', color: '#ED2738',
+      n: 2, label: 'CTOs & VP of Engineering', who: 'Capacity Scaling, Cluster Deferral, & Power Envelope', color: '#ED2738',
       icon: <TrendingDown className="w-4 h-4" />,
-      detail: 'C-level executives need CapEx and OpEx numbers. The ROI Calculator translates token savings into DGX servers avoided ($300K each), power savings (kWh/year), and throughput multipliers (92× more users from same hardware). These are CFO-level conversations.',
+      detail: 'Engineering leaders face strict power, thermal, and capital ceilings. Expanding an AI cluster by adding 8-way GPU servers incurs substantial capital costs (typically $300K–$400K+ fully configured per node) plus megawatts of scarce data center power. The ROI Calculator models how offloading KV state to persistent Infinia storage yields 2×–5× concurrent stream capacity on existing nodes, deferring multimillion-dollar cluster expansions and keeping deployments within existing power and cooling budgets.',
     },
     {
-      n: 3, label: 'AI Product Managers', who: 'User experience & latency', color: '#00C280',
+      n: 3, label: 'AI Product Managers', who: 'Perceived Latency (TTFT), Long Contexts, & User Experience', color: '#00C280',
       icon: <Zap className="w-4 h-4" />,
-      detail: 'Product managers measure TTFT (time-to-first-token) as a core UX metric. Sub-100ms TTFT on repeated queries feels instant to users. The Chat Observatory shows this in real-time — same question, 10× faster response on the second ask.',
+      detail: 'Product managers optimize Time-To-First-Token (TTFT) and user retention. When users wait 3–6 seconds for an agent to re-ingest a 32K–128K document or system context, engagement drops. With Infinia KV caching, repeated turns and multi-agent workflows hit warm cache tensors in tens of milliseconds, providing immediate streaming response that feels conversational and responsive, while enabling richer, deeper context windows without UX penalties.',
     },
     {
-      n: 4, label: 'AI Platform Engineers', who: 'vLLM prefix caching at enterprise scale', color: '#76B900',
+      n: 4, label: 'AI Platform & Systems Architects', who: 'Distributed Prefix Caching, vLLM / Dynamo, & NIXL RDMA', color: '#76B900',
       icon: <Database className="w-4 h-4" />,
-      detail: 'Platform engineers building on vLLM or TensorRT-LLM already know about prefix caching. The DDN story is: "Infinia replaces ephemeral GPU HBM with a persistent, shared object store that survives scaling events and serves your entire GPU fleet." This is a direct architectural upgrade to what they\'re already building.',
+      detail: 'Platform architects running vLLM, TensorRT-LLM, or NVIDIA Dynamo recognize the ceiling of node-local VRAM: GPU memory is volatile, node-confined, and evicts rapidly under concurrency. DDN Infinia extends local PagedAttention into a cluster-wide, persistent key-value tier. Leveraging zero-copy GPU-Direct RDMA via NVIDIA NIXL v1.3, any GPU node in the cluster instantly reuses KV states cached by any other node with zero host CPU serialization.',
     },
     {
-      n: 5, label: 'Finance / Procurement', who: 'Cloud vs on-prem ROI', color: '#f59e0b',
+      n: 5, label: 'Finance & Procurement Executives', who: 'CapEx Avoidance, Payback Period, & Neocloud Gross Margin', color: '#f59e0b',
       icon: <Users className="w-4 h-4" />,
-      detail: 'Finance needs hard numbers with verifiable assumptions. The ROI Calculator shows the exact formula behind every KPI: servers avoided = ⌈requests/200K⌉ before caching minus after caching. Each assumption (DGX price, power draw, electricity rate) is visible and adjustable.',
+      detail: 'Finance teams require defensible, auditable math rather than fixed vendor claims. The ROI Calculator exposes every parameter: server node replacement cost, power draw per chassis, PUE, electricity tariff ($/kWh), or cloud GPU hourly rate ($/GPU-hr). For Neocloud inference providers, it models gross margin expansion from ~45% to ~87% by eliminating redundant GPU-hours, demonstrating cash-flow payback in under 6 months.',
     },
   ]
 
@@ -567,12 +567,12 @@ function ICPDetail() {
           <Users className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#1A81AF' }} />
           <div>
             <p className="font-bold text-sm mb-1" style={{ color: '#1A81AF' }}>
-              Core Principle — Every persona sees a different ROI, all from the same demo
+              Core Principle — Every persona sees a different ROI, all from the same architecture
             </p>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              The same Chat Observatory demo lands differently depending on who is watching.
+              The same DDN Infinia deployment delivers value across all tiers of the organization.
               Lead with the metric that resonates with each audience — then use the ROI Calculator
-              to translate it into their language. The technology is the same; the story changes.
+              to translate it into their operational language. The technology is unified; the business impact is multifaceted.
             </p>
           </div>
         </div>
@@ -580,7 +580,7 @@ function ICPDetail() {
 
       {/* ICP pipeline (clickable) */}
       <div>
-        <SectionTitle><Users className="w-4 h-4" style={{ color: '#1A81AF' }} /> Who Benefits Most — Ideal Customer Profiles</SectionTitle>
+        <SectionTitle><Users className="w-4 h-4" style={{ color: '#1A81AF' }} /> Who Benefits Most — Ideal Customer Profiles (Click to expand)</SectionTitle>
         <div className="flex flex-col gap-1">
           {ICPS.map((icp, i) => <StageRow key={icp.n} {...icp} last={i === ICPS.length - 1} />)}
         </div>
@@ -588,7 +588,7 @@ function ICPDetail() {
 
       {/* Demo route by persona */}
       <div>
-        <SectionTitle><ArrowRight className="w-4 h-4" style={{ color: '#76B900' }} /> Recommended Demo Route by Audience</SectionTitle>
+        <SectionTitle><ArrowRight className="w-4 h-4" style={{ color: '#76B900' }} /> Recommended Demo Route &amp; Proof Points by Audience</SectionTitle>
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border-subtle)' }}>
           <table className="w-full text-xs">
             <thead>
@@ -600,16 +600,16 @@ function ICPDetail() {
             </thead>
             <tbody>
               {[
-                { audience: 'MLOps / Infra', lead: 'Token count comparison (Chat Observatory)', close: 'GPU-hours freed/year (ROI Calculator)', color: '#1A81AF' },
-                { audience: 'CTO / VP Eng', lead: 'Throughput multiplier (92×)', close: 'CapEx avoided ($300K per DGX)', color: '#ED2738' },
-                { audience: 'AI Product', lead: 'TTFT difference on HIT vs MISS', close: 'Session Resume — GPU flush & restore', color: '#00C280' },
-                { audience: 'Platform Eng', lead: 'Session Resume flow (technical)', close: 'Prefix Multiplier (shared system prompt)', color: '#76B900' },
-                { audience: 'Finance', lead: 'ROI Calculator — Contact Center preset', close: 'Combined Annual Value formula', color: '#f59e0b' },
+                { audience: 'MLOps / Infra', lead: 'TTFT & Prefill Reduction (Cold vs Warm telemetry)', close: 'GPU-hours freed/year & decode compute density', color: '#1A81AF' },
+                { audience: 'CTO / VP Eng', lead: 'Concurrency Multiplier (2×–5× stream headroom)', close: 'CapEx avoided (deferred node purchases) & power limits', color: '#ED2738' },
+                { audience: 'AI Product', lead: 'Conversational Responsiveness (sub-100ms TTFT)', close: 'Long-context retention & multi-turn agent UX', color: '#00C280' },
+                { audience: 'Platform Eng', lead: 'NVIDIA Dynamo NIXL container integration & RDMA', close: 'Cluster-wide cross-node KV sharing (bypassing POSIX)', color: '#76B900' },
+                { audience: 'Finance / Neocloud', lead: 'Neocloud Gross Margin Expansion (45% → 87%)', close: 'Configurable TCO model & hardware payback timeline', color: '#f59e0b' },
               ].map((row, i) => (
                 <tr key={row.audience} style={{ background: i % 2 === 0 ? 'var(--surface-card)' : 'var(--surface-secondary)', borderTop: '1px solid var(--border-subtle)' }}>
                   <td className="px-3 py-2.5 font-semibold" style={{ color: row.color }}>{row.audience}</td>
                   <td className="px-3 py-2.5" style={{ color: 'var(--text-secondary)' }}>{row.lead}</td>
-                  <td className="px-3 py-2.5" style={{ color: 'var(--text-secondary)' }}>{row.close}</td>
+                  <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text-primary)' }}>{row.close}</td>
                 </tr>
               ))}
             </tbody>
@@ -619,19 +619,19 @@ function ICPDetail() {
 
       {/* Talking points */}
       <div>
-        <SectionTitle><ArrowRight className="w-4 h-4" style={{ color: '#00C280' }} /> Core Messaging</SectionTitle>
+        <SectionTitle><ArrowRight className="w-4 h-4" style={{ color: '#00C280' }} /> Core Executive Messaging</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-          <TalkingPoint icon="🎯" title="Lead with useful tokens/second" body="Not tokens/second — useful tokens/second. How much of your GPU's compute is generating new value vs re-reading context it already knows? That ratio is determined by your data architecture." />
-          <TalkingPoint icon="📊" title="Everything in this demo is live" body="Real S3 GET/PUT to DDN Infinia. Real Ollama inference. Real latency measurement. Every number on screen is measured — not simulated, not estimated." />
-          <TalkingPoint icon="🔢" title="The ROI Calculator is adjustable" body="Every assumption is visible and slider-controlled. Let the customer set their own numbers — the formula is transparent. This builds trust faster than a fixed slide." />
-          <TalkingPoint icon="🏢" title="Contact Center AI is the most relatable" body="50,000-token policy manual, 500K queries/day, 85% hit rate — every enterprise audience understands call center operations. Start here before moving to legal or healthcare." />
+          <TalkingPoint icon="🎯" title="Lead with useful tokens/second" body="Raw tokens/second is a deceptive vanity metric if 80% of the GPU compute is spent re-digesting the exact same system prompt or context window. What matters is useful generation tokens per second per dollar. Persistent KV cache maximizes this ratio by eliminating redundant prefill computation." />
+          <TalkingPoint icon="📊" title="Production Stack with Live vLLM &amp; Infinia" body="This demo is powered by a production-grade inference stack: vLLM v1 engine with LMCache and DDN Infinia S3/RDMA storage substrate. Cold vs warm latency, token counts, and hit rates are live telemetry measured directly from GPU and storage calls — not static estimates." />
+          <TalkingPoint icon="🔢" title="Completely Transparent &amp; Defensible Math" body="Every formula in the ROI Calculator is transparent and slider-controlled. Customers can adjust their exact hardware cost, cluster size, power tariffs, prompt lengths, and concurrency targets. Grounding the business case in their own numbers builds immediate confidence." />
+          <TalkingPoint icon="🏢" title="Neocloud &amp; Enterprise Scale Scenarios" body="Whether modeling an enterprise contact center saving megawatts of power or a Neocloud inference provider scaling gross margins from 45% to 87% at $2.50/GPU-hr, the model proves that data architecture — not just raw GPU silicon — dictates AI economics." />
         </div>
       </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════
+
 // ═══════════════════════════════════════════════════════════════════
 // SECTION — Detailed Workflow
 // ═══════════════════════════════════════════════════════════════════
