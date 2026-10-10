@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import DataPathRaceVisualizer from '../components/DataPathRaceVisualizer'
-import HighChurnEvictionSimulator from '../components/HighChurnEvictionSimulator'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ExternalLink,
@@ -1990,9 +1989,6 @@ function CompetitiveBattlecardDetail() {
 
       {/* Concept 1: The "Two Paths" Data Path Race Visualizer */}
       <DataPathRaceVisualizer />
-
-      {/* Concept 2: High-Churn Eviction Simulator */}
-      <HighChurnEvictionSimulator />
 
       {/* The Battlecard Table */}
       <div>
