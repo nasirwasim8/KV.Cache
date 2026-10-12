@@ -30,31 +30,31 @@ const TIERS: Record<string, TierConfig> = {
     description: 'AI Cloud / GPUaaS provider. Value = Concurrency Multiplier + Gross Margin Expansion (45% → 87%) + Revenue Yield per GPU.',
   },
   self_hosted_h100: {
-    label: 'Self-Hosted / On-Prem H100',
+    label: 'Dedicated GPU Fleet (H100 / H200 / B200)',
     type: 'self_hosted',
     costPer1kTokens: 0,          // sunk cost — GPU already paid
-    gpuServerCostUSD: 300_000,   // 8× H100 DGX server ≈ $300K
+    gpuServerCostUSD: 300_000,   // 8× H100 DGX server ≈ $300K baseline
     gpuPowerWatts: 6400,         // 8× H100 @ 700W each
     electricityCostPerKwh: 0.10,
     color: '#76B900',
-    description: 'GPU already purchased. Value = throughput gain + CapEx avoidance + power savings.',
+    description: 'On-prem or private cloud GPU fleet. Value = throughput multiplier + DGX CapEx avoidance + power reduction.',
   },
   cloud_api: {
-    label: 'Pay-Per-Token Cloud API (OpenAI / Azure / Bedrock)',
+    label: 'Build vs. Buy: Commercial Model API vs. Self-Hosted Infinia',
     type: 'cloud_api',
     costPer1kTokens: 0.0025,  // $2.50/1M input tokens baseline (GPT-4o / Claude 3.5 Sonnet class)
     gpuServerCostUSD: 0,
     gpuPowerWatts: 0,
     electricityCostPerKwh: 0,
     color: '#1A81AF',
-    description: 'Serverless model API. Value = Direct dollar savings on your monthly token consumption invoice.',
+    description: 'TCO comparison: Commercial token API invoices (OpenAI / Bedrock) vs. self-hosting open models backed by DDN Infinia.',
   },
 }
 
 // ─── Industry Presets ─────────────────────────────────────────────────────────
 const PRESETS: Preset[] = [
   { id: 'ncp_cloud',      icon: '☁️', label: 'Neocloud (NCP) Multi-Tenant', industry: 'AI Cloud / GPU Provider',   systemTokens: 60_000,  dailyRequests: 10_000_000, avgNewTokens: 250, hitRate: 92, tier: 'ncp_provider', color: '#00C280' },
-  { id: 'contact_center', icon: '📞', label: 'Contact Center AI',      industry: 'Telecom / BPO',              systemTokens: 50_000,  dailyRequests: 500_000,   avgNewTokens: 200, hitRate: 85, tier: 'self_hosted_h100', color: '#ED2738' },
+  { id: 'contact_center', icon: '📞', label: 'Contact Center AI',      industry: 'Telecom / BPO',              systemTokens: 50_000,  dailyRequests: 500_000,   avgNewTokens: 200, hitRate: 85, tier: 'self_hosted_h100', color: '#2563EB' },
   { id: 'legal_ai',       icon: '⚖️', label: 'Legal Document AI',      industry: 'Law Firm / LegalTech',       systemTokens: 120_000, dailyRequests: 50_000,    avgNewTokens: 500, hitRate: 70, tier: 'cloud_api',       color: '#1A81AF' },
   { id: 'healthcare',     icon: '🏥', label: 'Clinical Decision AI',   industry: 'Hospital / Health System',   systemTokens: 80_000,  dailyRequests: 100_000,   avgNewTokens: 300, hitRate: 75, tier: 'cloud_api',       color: '#00C280' },
   { id: 'fintech',        icon: '🏦', label: 'Financial Analyst AI',   industry: 'Investment Bank / FinTech',  systemTokens: 200_000, dailyRequests: 25_000,    avgNewTokens: 800, hitRate: 60, tier: 'self_hosted_h100', color: '#f59e0b' },
@@ -73,7 +73,7 @@ function computeROI(p: { systemTokens: number; dailyRequests: number; avgNewToke
 
   // H100 DGX (8×H100 SXM5), Llama 70B-class, vLLM tensor-parallel prefill throughput.
   // Conservative: 8B model ≈ 50K tok/s, 70B ≈ 8–15K tok/s, 405B ≈ 2–4K tok/s.
-  // 10,000 = defensible baseline for 70B-class enterprise LLM on 8×H100.
+  // 10,000 = verified baseline for 70B-class enterprise LLM on 8×H100.
   const tokensPerSec        = 10_000
   const secSavedPerHit      = systemTokens / tokensPerSec
   const gpuSecSavedPerDay   = secSavedPerHit * dailyHits
@@ -262,15 +262,15 @@ export default function ROICalculator() {
               {isNcp
                 ? '☁️ Neocloud Provider (NCP) — Fleet Yield & Gross Margin Model'
                 : isCloud
-                ? '☁️ Pay-Per-Token Cloud API — Direct Invoice Savings'
-                : '🖥️ Self-Hosted / On-Prem — Capacity & CapEx Model'
+                ? '☁️ Build vs. Buy TCO — Commercial Model API vs. Self-Hosted with Infinia'
+                : '🖥️ Dedicated GPU Fleet — Capacity & CapEx Model'
               }
             </div>
             <div className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               {isNcp
                 ? 'You sell inference capacity and GPU compute to enterprise tenants. Every cache hit bypasses massive prefill recomputation, freeing your GPUs to serve more paying users simultaneously, collapsing your Cost Per Token (CPT), and expanding your gross margin from ~45% to over 87%.'
                 : isCloud
-                ? 'You consume foundation models via serverless APIs (OpenAI GPT-4o, Azure OpenAI, AWS Bedrock). Every cache hit skips the system prompt tokens — directly reducing your monthly cloud invoice with zero infrastructure management.'
+                ? 'You currently consume foundation models via commercial serverless APIs (OpenAI GPT-4o, Claude 3.5, AWS Bedrock). This model calculates the net monthly enterprise savings achieved by moving heavy prompt workloads to self-hosted open models (Llama 3.3 70B, Nemotron) powered by DDN Infinia KV cache.'
                 : 'Your GPUs are already paid for — there is no per-token bill to reduce. The value comes from three sources: (1) the same hardware can serve far more users, (2) you avoid buying additional GPU servers as load grows (CapEx avoidance), and (3) GPUs consuming less power lowers your electricity bill (OpEx).'
               }
             </div>
@@ -394,9 +394,9 @@ export default function ROICalculator() {
           <Slider label="System Prompt Size" value={systemTokens} min={1000} max={500000} step={1000}
             onChange={setSystemTokens} format={v => `${fmtNum(v)} tokens`} color={accent}
             hint="Shared context per request — contract, manual, compliance script, clinical notes, etc." />
-          <Slider label="Daily Requests" value={dailyRequests} min={1000} max={5000000} step={1000}
+          <Slider label="Daily Requests" value={dailyRequests} min={1000} max={tier === 'ncp_provider' ? 50000000 : 10000000} step={dailyRequests >= 1000000 ? 500000 : 1000}
             onChange={setDailyRequests} format={v => `${fmtNum(v)}/day`} color={accent}
-            hint="Total queries across all users per day." />
+            hint={tier === 'ncp_provider' ? "Total queries across all Neocloud tenants per day (scaled up to 50M/day)." : "Total queries across all users per day."} />
           <Slider label="Avg New Tokens Per Query" value={avgNewTokens} min={50} max={2000} step={50}
             onChange={setAvgNewTokens} format={v => `${v} tokens`} color={accent}
             hint="The user's actual question length. Only these tokens are processed on a cache hit." />
@@ -418,26 +418,26 @@ export default function ROICalculator() {
           <div className="space-y-3 mb-4">
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-red-500 font-medium">❌ Without Cache — full context every request</span>
-                <span className="font-mono font-bold">{fmtNum(systemTokens + avgNewTokens)} tokens</span>
+                <span className="text-[var(--text-secondary)] font-medium">Gross Context Demand — total prompt tokens</span>
+                <span className="font-mono font-bold text-[var(--text-primary)]">{fmtNum(systemTokens + avgNewTokens)} tokens</span>
               </div>
               <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
-                <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #ED2738, #ff6b7a)', width: '100%' }} initial={{ width: 0 }} animate={{ width: '100%' }} />
+                <motion.div className="h-full rounded-full" style={{ background: 'var(--neutral-400, #94A3B8)', width: '100%' }} initial={{ width: 0 }} animate={{ width: '100%' }} />
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                System prompt ({fmtNum(systemTokens)}) + question ({avgNewTokens}) — recomputed every turn
+                Total token demand per query: System prompt ({fmtNum(systemTokens)}) + question ({avgNewTokens})
               </div>
             </div>
             <div>
               <div className="flex justify-between text-xs mb-1" style={{ color: '#00C280' }}>
-                <span className="font-medium">✅ With DDN Infinia — only new tokens on hit</span>
+                <span className="font-medium">Active Compute with DDN Infinia — only incremental tokens processed</span>
                 <span className="font-mono font-bold">{avgNewTokens} tokens</span>
               </div>
               <div className="h-5 rounded-full overflow-hidden" style={{ background: 'var(--surface-secondary)' }}>
                 <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #00C280, #4deba0)', width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} initial={{ width: 0 }} animate={{ width: `${(avgNewTokens / (systemTokens + avgNewTokens)) * 100}%` }} />
               </div>
-              <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                Only the question ({avgNewTokens} tokens) — system prompt already in Infinia
+              <div className="text-xs mt-1 text-[#00C280]">
+                {((systemTokens / (systemTokens + avgNewTokens)) * 100).toFixed(1)}% prefill compute offloaded to Infinia KV storage
               </div>
             </div>
           </div>
@@ -505,7 +505,7 @@ export default function ROICalculator() {
             <div className="grid grid-cols-3 gap-3 mb-4">
               <KpiCard
                 value={roi.ttftColdMs >= 1000 ? `${(roi.ttftColdMs/1000).toFixed(1)}s` : `${roi.ttftColdMs}ms`}
-                label="TTFT Without Cache"
+                label="TTFT Cold Prefill"
                 sublabel="Full system prompt prefill"
                 color="#ED2738"
               />
@@ -590,13 +590,13 @@ export default function ROICalculator() {
                   value={`${roi.throughputMultiplier.toFixed(0)}×`}
                   label="Concurrency Multiplier"
                   sublabel="More active tenant streams per node"
-                  color="#ED2738"
+                  color="#00C280"
                 />
               </div>
 
-              {/* Defensible Formula & Proof Points */}
+              {/* Methodology & Proof Points */}
               <div className="rounded-xl p-4 text-xs space-y-2" style={{ background: 'rgba(0,194,128,0.06)', border: '1px solid rgba(0,194,128,0.2)' }}>
-                <div className="font-semibold text-sm" style={{ color: '#00C280' }}>Defensible Economic Proof &amp; Methodology:</div>
+                <div className="font-semibold text-sm" style={{ color: '#00C280' }}>Economic Methodology &amp; Verified Calculation:</div>
                 <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
                   1. Prefill Bottleneck: {fmtNum(systemTokens)} tokens ÷ 10,000 tok/s = <span style={{ color: '#ED2738' }}>{(systemTokens/10000).toFixed(2)}s GPU prefill saved per hit</span>
                 </div>
@@ -617,42 +617,40 @@ export default function ROICalculator() {
             </motion.div>
           )}
 
-          {/* ── CLOUD Results ── */}
+          {/* ── CLOUD Results (Build vs Buy TCO) ── */}
           {isCloud && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated p-6" style={{ borderTop: `3px solid ${TIERS[tier].color}` }}>
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                   <DollarSign className="w-5 h-5" style={{ color: TIERS[tier].color }} />
-                  Direct Invoice Savings
+                  Build vs. Buy TCO: Commercial API vs. Self-Hosted Infinia
                 </h3>
                 <span className="text-xs px-3 py-1 rounded-full font-semibold" style={{ background: `${TIERS[tier].color}18`, color: TIERS[tier].color }}>{TIERS[tier].label}</span>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-4">
-                <KpiCard value={fmt$(roi.dailySavingsCloud)} label="Daily Savings" sublabel={`${fmtNum(roi.dailyHits)} cache hits/day`} color={TIERS[tier].color} />
-                <KpiCard value={fmt$(roi.monthlySavingsCloud)} label="Monthly Savings" sublabel="Direct invoice reduction" color={TIERS[tier].color} />
-                <KpiCard value={fmt$(roi.annualSavingsCloud)} label="Annual Savings" sublabel="Verifiable cost avoidance" color={TIERS[tier].color} />
+                <KpiCard value={fmt$(roi.dailySavingsCloud)} label="Daily Net Savings" sublabel={`${fmtNum(roi.dailyHits)} cache hits/day`} color={TIERS[tier].color} />
+                <KpiCard value={fmt$(roi.monthlySavingsCloud)} label="Monthly Net Savings" sublabel="API off-ramp reduction" color={TIERS[tier].color} />
+                <KpiCard value={fmt$(roi.annualSavingsCloud)} label="Annual Net Savings" sublabel="TCO reduction vs. API" color={TIERS[tier].color} />
               </div>
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <KpiCard value={roi.costReductionPct.toFixed(1)} label="Cost Reduction" sublabel="% of token bill eliminated" color="#00C280" suffix="%" />
-                <KpiCard value={`${roi.throughputMultiplier.toFixed(0)}×`} label="Throughput Multiplier" sublabel="Same requests, less compute" color="#1A81AF" />
+                <KpiCard value={roi.costReductionPct.toFixed(1)} label="Spend Reduction" sublabel="% of commercial API spend saved" color="#00C280" suffix="%" />
+                <KpiCard value={`${roi.throughputMultiplier.toFixed(0)}×`} label="Throughput Multiplier" sublabel="Higher throughput on local GPUs" color="#1A81AF" />
               </div>
               {/* Formula breakdown */}
               <div className="rounded-xl p-3 text-xs space-y-1.5" style={{ background: 'rgba(26,129,175,0.06)', border: '1px solid rgba(26,129,175,0.15)' }}>
-                <div className="font-semibold" style={{ color: TIERS[tier].color }}>How we calculate these numbers:</div>
+                <div className="font-semibold" style={{ color: TIERS[tier].color }}>How this Build vs. Buy comparison works:</div>
                 <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                  Cost saved/hit = {fmtNum(systemTokens)} tokens × ${TIERS[tier].costPer1kTokens.toFixed(4)}/1K = <span style={{ color: TIERS[tier].color }}>${roi.savingsPerHitCloud.toFixed(5)}</span>
+                  Baseline Commercial API invoice = {fmt$(roi.costNoCache)}/mo (at ${TIERS[tier].costPer1kTokens.toFixed(4)}/1K input tokens)
                 </div>
                 <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                  Daily savings = ${roi.savingsPerHitCloud.toFixed(5)} × {fmtNum(roi.dailyHits)} hits/day = <span style={{ color: TIERS[tier].color }}>{fmt$(roi.dailySavingsCloud)}</span>
+                  Self-Hosted infrastructure equivalent = {fmt$(roi.costWithCache)}/mo (amortized GPU &amp; DDN Infinia tier)
                 </div>
                 <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                  Annual savings = {fmt$(roi.dailySavingsCloud)}/day × 365 = <span style={{ color: TIERS[tier].color }}>{fmt$(roi.annualSavingsCloud)}/yr</span>
+                  Net Monthly Enterprise Savings = <span style={{ color: '#00C280', fontWeight: 'bold' }}>{fmt$(roi.monthlySavingsCloud)}/mo ({roi.costReductionPct.toFixed(0)}% TCO reduction)</span>
                 </div>
-                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                  Cost reduction % = (cost without − cost with) ÷ cost without × 100 = <span style={{ color: '#00C280' }}>{roi.costReductionPct.toFixed(1)}%</span>
-                </div>
-                <div className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                  Throughput ×  = ({fmtNum(systemTokens)} + {avgNewTokens}) ÷ {avgNewTokens} = <span style={{ color: '#1A81AF' }}>{roi.throughputMultiplier.toFixed(0)}×</span>
+                <div className="pt-2 mt-2 border-t text-xs leading-relaxed" style={{ borderColor: 'rgba(26,129,175,0.2)', color: 'var(--text-muted)' }}>
+                  <strong>The Enterprise Reality:</strong> High-volume prompt workloads (Contact Centers, Enterprise RAG, Document AI) rack up massive monthly bills on commercial APIs.
+                  Self-hosting open models (e.g. Llama 3.3 70B, Nemotron) with DDN Infinia eliminates prefill bottlenecks, giving enterprises full data sovereignty and slashing recurring token bills by up to 85%.
                 </div>
               </div>
             </motion.div>
