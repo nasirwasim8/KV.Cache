@@ -15,10 +15,10 @@ module.exports = {
       max_memory_restart: "2G",
       env: {
         PYTHONUNBUFFERED: "1",
-        INFINIA_ACCESS_KEY: "DJ1S7LSGEIT9AKYCWVL5",
-        INFINIA_SECRET_KEY: "wZ7WQPZyqePwBzhuoQeCQJFRheblRTjwF687KMKu",
+        INFINIA_ACCESS_KEY: process.env.INFINIA_ACCESS_KEY || "",
+        INFINIA_SECRET_KEY: process.env.INFINIA_SECRET_KEY || "",
         INFINIA_BUCKET: "ddn-kv-cache-01",
-        INFINIA_ENDPOINT: "https://192.168.147.129:8111",
+        INFINIA_ENDPOINT: process.env.INFINIA_ENDPOINT || "https://127.0.0.1:8111",
         INFINIA_REGION: "us-east-1",
         OLLAMA_URL: "http://localhost:11434",
         OLLAMA_MODEL: "llama3.2:3b"
