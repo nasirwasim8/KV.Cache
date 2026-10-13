@@ -530,7 +530,7 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function ChatObservatory() {
+export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?: () => void } = {}) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -830,38 +830,41 @@ export default function ChatObservatory() {
           </div>
         </div>
 
-        {/* Pricing info pill */}
+        {/* Valuation Archetype & Economics Pill */}
         <div className="mt-3 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
           {/* Main pill row */}
           <div className="flex items-center gap-2 text-xs px-3 py-2" style={{ background: 'var(--surface-secondary)', color: 'var(--text-secondary)' }}>
             <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: PRICING_TIERS[pricingTier].color }} />
             <span className="flex-1">
               <strong style={{ color: PRICING_TIERS[pricingTier].color }}>{PRICING_TIERS[pricingTier].label}</strong>
-              {pricingTier === 'self_hosted_h100'
-                ? <>{' '}— H100 compute cost: <strong>$0.70/1M</strong> input · <strong>$2.80/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
-                : <>{' '}— <strong>${PRICING_TIERS[pricingTier].input_per_1m}/1M</strong> input + <strong>${PRICING_TIERS[pricingTier].output_per_1m}/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
-              }
+              {pricingTier === 'self_hosted_h100' && (
+                <>{' '}— GPU compute rate: <strong>$0.70/1M</strong> input · <strong>$2.80/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
+              )}
+              {pricingTier === 'ncp_provider' && (
+                <>{' '}— AI Cloud COGS rate: <strong>$0.60/1M</strong> input · <strong>$2.40/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
+              )}
+              {pricingTier === 'cloud_api' && (
+                <>{' '}— Commercial token API baseline: <strong>$2.50/1M</strong> input · <strong>$10.00/1M</strong> output. {PRICING_TIERS[pricingTier].note}</>
+              )}
             </span>
-            {pricingTier === 'self_hosted_h100' && (
-              <button
-                onClick={() => setShowCostMath(m => !m)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono transition-all"
-                style={{
-                  background: showCostMath ? 'rgba(0,194,128,0.15)' : 'rgba(0,194,128,0.06)',
-                  color: '#00C280',
-                  border: '1px solid rgba(0,194,128,0.3)',
-                }}
-                title="Show how these rates are derived from H100 hardware cost"
-              >
-                {showCostMath ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                {showCostMath ? 'Hide math' : 'How?'}
-              </button>
-            )}
+            <button
+              onClick={() => setShowCostMath(m => !m)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono transition-all cursor-pointer"
+              style={{
+                background: showCostMath ? `${PRICING_TIERS[pricingTier].color}26` : `${PRICING_TIERS[pricingTier].color}12`,
+                color: PRICING_TIERS[pricingTier].color,
+                border: `1px solid ${PRICING_TIERS[pricingTier].color}40`,
+              }}
+              title="Show economic rationale and calculation math"
+            >
+              {showCostMath ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {showCostMath ? 'Hide math' : 'How?'}
+            </button>
           </div>
 
-          {/* Expandable math breakdown — self-hosted H100 only */}
+          {/* Expandable math breakdown — tailored for each archetype */}
           <AnimatePresence>
-            {showCostMath && pricingTier === 'self_hosted_h100' && (
+            {showCostMath && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
@@ -870,43 +873,132 @@ export default function ChatObservatory() {
                 style={{ overflow: 'hidden' }}
               >
                 <div className="px-4 py-3 font-mono text-xs space-y-2"
-                  style={{ background: 'rgba(0,194,128,0.04)', borderTop: '1px solid rgba(0,194,128,0.15)', color: 'var(--text-secondary)' }}>
+                  style={{ background: 'var(--surface-card)', borderTop: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
 
-                  <div className="text-xs font-semibold mb-2 font-sans" style={{ color: '#00C280', letterSpacing: '0.05em' }}>
-                    HOW THESE RATES ARE DERIVED — H100 HARDWARE COST ONLY (LLAMA IS FREE)
-                  </div>
-
-                  {/* Assumptions */}
-                  <div className="grid grid-cols-3 gap-x-6 gap-y-1 mb-3">
-                    {[
-                      ['H100 market rate', '~$3.00 / hr', 'cloud spot or on-prem amortized'],
-                      ['Input processing', '~1,500 tokens/s', 'Llama 3.x prefill on H100'],
-                      ['Output generation', '~400 tokens/s', 'autoregressive decode — slower'],
-                    ].map(([k, v, sub]) => (
-                      <div key={k}>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{k}</div>
-                        <div style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{sub}</div>
+                  {pricingTier === 'self_hosted_h100' && (
+                    <>
+                      <div className="text-xs font-semibold mb-2 font-sans" style={{ color: '#76B900', letterSpacing: '0.05em' }}>
+                        HOW THESE RATES ARE DERIVED — DEDICATED GPU HARDWARE COMPUTE AMORTIZATION
                       </div>
-                    ))}
-                  </div>
+                      <div className="grid grid-cols-3 gap-x-6 gap-y-1 mb-3">
+                        {[
+                          ['H100/H200 market rate', '~$3.00 / hr', 'cloud spot or on-prem amortized DGX'],
+                          ['Input processing', '~1,500 tokens/s', 'Llama 3.x prefill on single GPU'],
+                          ['Output generation', '~400 tokens/s', 'autoregressive decode — slower'],
+                        ].map(([k, v, sub]) => (
+                          <div key={k}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{k}</div>
+                            <div style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{sub}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded p-2" style={{ background: 'rgba(118,185,0,0.07)', border: '1px solid rgba(118,185,0,0.2)' }}>
+                          <div style={{ color: '#76B900', fontWeight: 700, marginBottom: '4px' }}>INPUT PREFILL COMPUTE</div>
+                          <div style={{ color: 'var(--text-secondary)' }}>1M tokens ÷ 1,500 tok/s = 667s = 0.185 GPU-hours</div>
+                          <div style={{ color: 'var(--text-secondary)' }}>0.185 × $3.00 = $0.56 ≈ <strong style={{ color: '#76B900' }}>$0.70 / 1M</strong> <span style={{ color: 'var(--text-muted)' }}>(+cooling & margin)</span></div>
+                        </div>
+                        <div className="rounded p-2" style={{ background: 'rgba(118,185,0,0.07)', border: '1px solid rgba(118,185,0,0.2)' }}>
+                          <div style={{ color: '#76B900', fontWeight: 700, marginBottom: '4px' }}>OUTPUT DECODE COMPUTE</div>
+                          <div style={{ color: 'var(--text-secondary)' }}>1M tokens ÷ 400 tok/s = 2,500s = 0.69 GPU-hours</div>
+                          <div style={{ color: 'var(--text-secondary)' }}>0.69 × $3.00 = $2.08 ≈ <strong style={{ color: '#76B900' }}>$2.80 / 1M</strong> <span style={{ color: 'var(--text-muted)' }}>(+cooling & margin)</span></div>
+                        </div>
+                      </div>
+                      <div className="text-xs font-sans pt-1" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(118,185,0,0.15)', paddingTop: '6px' }}>
+                        ✅ With DDN Infinia KV cache, cached input tokens bypass GPU prefill entirely — <strong style={{ color: '#76B900' }}>zero GPU time, zero compute cost</strong>. You only pay compute for new question tokens.
+                      </div>
+                    </>
+                  )}
 
-                  {/* Input math */}
-                  <div className="rounded p-2" style={{ background: 'rgba(0,194,128,0.07)' }}>
-                    <div style={{ color: '#00C280', fontWeight: 700, marginBottom: '4px' }}>INPUT COST</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>1,000,000 tokens ÷ 1,500 tok/s = 667 seconds = 0.185 H100-hours</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>0.185 × $3.00 = $0.56 ≈ <strong style={{ color: '#00C280' }}>$0.70 / 1M</strong> <span style={{ color: 'var(--text-muted)' }}>(+overhead & thermal margin)</span></div>
-                  </div>
+                  {pricingTier === 'ncp_provider' && (
+                    <>
+                      <div className="text-xs font-semibold mb-2 font-sans" style={{ color: '#00C280', letterSpacing: '0.05em' }}>
+                        HOW THESE RATES ARE DERIVED — NEOCLOUD (NCP) INFERENCE MARGIN EXPANSION
+                      </div>
+                      <div className="grid grid-cols-3 gap-x-6 gap-y-1 mb-3">
+                        {[
+                          ['Baseline market price', '$0.60 / 1M tokens', 'Competitive GPUaaS market rate'],
+                          ['Uncached gross margin', '~45%', 'High GPU prefill consumption limits tenant density'],
+                          ['Infinia cached margin', '~87%', 'Prefill offloaded to Infinia storage layer'],
+                        ].map(([k, v, sub]) => (
+                          <div key={k}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{k}</div>
+                            <div style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{sub}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded p-2" style={{ background: 'rgba(0,194,128,0.07)', border: '1px solid rgba(0,194,128,0.2)' }}>
+                        <div style={{ color: '#00C280', fontWeight: 700, marginBottom: '4px' }}>CONCURRENCY & REVENUE MULTIPLIER</div>
+                        <div style={{ color: 'var(--text-secondary)' }}>Without Infinia, multi-tenant conversational & agentic workloads saturate GPU HBM, triggering costly recomputes.</div>
+                        <div style={{ color: 'var(--text-secondary)' }}>With Infinia, KV cache is served over sub-15ms fabric. Each DGX server serves up to <strong style={{ color: '#00C280' }}>2.4× more concurrent streams</strong> at pure margin.</div>
+                      </div>
+                      <div className="text-xs font-sans pt-1" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(0,194,128,0.15)', paddingTop: '6px' }}>
+                        ✅ Neocloud providers turn raw GPU CapEx into scalable recurring gross margin without expanding physical data center footprint.
+                      </div>
+                    </>
+                  )}
 
-                  {/* Output math */}
-                  <div className="rounded p-2" style={{ background: 'rgba(0,194,128,0.07)' }}>
-                    <div style={{ color: '#00C280', fontWeight: 700, marginBottom: '4px' }}>OUTPUT COST</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>1,000,000 tokens ÷ 400 tok/s = 2,500 seconds = 0.69 H100-hours</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>0.69 × $3.00 = $2.08 ≈ <strong style={{ color: '#00C280' }}>$2.80 / 1M</strong> <span style={{ color: 'var(--text-muted)' }}>(+overhead & thermal margin)</span></div>
-                  </div>
+                  {pricingTier === 'cloud_api' && (
+                    <>
+                      <div className="text-xs font-semibold mb-2 font-sans" style={{ color: '#1A81AF', letterSpacing: '0.05em' }}>
+                        HOW THESE RATES ARE DERIVED — BUILD VS. BUY COMMERCIAL API REPLACEMENT
+                      </div>
+                      <div className="grid grid-cols-3 gap-x-6 gap-y-1 mb-3">
+                        {[
+                          ['Commercial API baseline', '$2.50 / 1M input', 'GPT-4o / Claude 3.5 Sonnet class baseline'],
+                          ['Commercial cache discount', 'Max 50% discount', 'Proprietary APIs still charge $1.25/1M for cached tokens'],
+                          ['Infinia self-hosted cost', '$0.00 / 1M cached', '100% free prefix retrieval from on-prem DDN storage'],
+                        ].map(([k, v, sub]) => (
+                          <div key={k}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{k}</div>
+                            <div style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>{sub}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded p-2" style={{ background: 'rgba(26,129,175,0.07)', border: '1px solid rgba(26,129,175,0.2)' }}>
+                        <div style={{ color: '#1A81AF', fontWeight: 700, marginBottom: '4px' }}>ENTERPRISE INVOICE ELIMINATION</div>
+                        <div style={{ color: 'var(--text-secondary)' }}>Processing a 50,000-token system context across 50,000 requests/day costs <strong style={{ color: '#ED2738' }}>$3,750/day ($112,500/mo)</strong> on commercial APIs.</div>
+                        <div style={{ color: 'var(--text-secondary)' }}>Moving the workload to self-hosted open models (Llama 3.3 70B / Nemotron) with DDN Infinia eliminates this recurring invoice completely.</div>
+                      </div>
+                      <div className="text-xs font-sans pt-1" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(26,129,175,0.15)', paddingTop: '6px' }}>
+                        ✅ High-volume enterprise context workloads achieve ROI on dedicated NVIDIA + DDN infrastructure in under 4 months.
+                      </div>
+                    </>
+                  )}
 
-                  <div className="text-xs font-sans pt-1" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(0,194,128,0.1)', paddingTop: '6px' }}>
-                    ✅ With DDN Infinia KV cache, cached input tokens skip prefill entirely — <strong style={{ color: '#00C280' }}>zero GPU time, zero cost</strong>. You only pay for new question tokens and the output.
+                  {/* Bridge link to ROI Calculator */}
+                  <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg mt-2 font-sans"
+                    style={{ background: 'rgba(26,129,175,0.08)', border: '1px solid rgba(26,129,175,0.25)' }}>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-[#1A81AF] flex-shrink-0" />
+                      <span style={{ color: 'var(--text-primary)' }}>
+                        Want to simulate these savings at enterprise scale (50K to 50M requests/day)?
+                      </span>
+                    </div>
+                    {onNavigateToRoi ? (
+                      <button
+                        onClick={onNavigateToRoi}
+                        className="font-bold text-xs flex items-center gap-1 hover:underline cursor-pointer"
+                        style={{ color: '#1A81AF' }}
+                      >
+                        Open Enterprise ROI Calculator →
+                      </button>
+                    ) : (
+                      <a
+                        href="#calculator"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          window.dispatchEvent(new CustomEvent('nav-tab', { detail: 'roi' }))
+                        }}
+                        className="font-bold text-xs flex items-center gap-1 hover:underline cursor-pointer"
+                        style={{ color: '#1A81AF' }}
+                      >
+                        Open Enterprise ROI Calculator →
+                      </a>
+                    )}
                   </div>
                 </div>
               </motion.div>

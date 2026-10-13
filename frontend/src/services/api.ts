@@ -12,7 +12,7 @@ export interface InfiniaConfig {
   ollama_model: string
 }
 
-export type PricingTier = 'self_hosted_h100' | 'cloud_openai' | 'cloud_anthropic'
+export type PricingTier = 'self_hosted_h100' | 'ncp_provider' | 'cloud_api'
 
 export const PRICING_TIERS: Record<PricingTier, {
   label: string; short: string; color: string
@@ -20,31 +20,31 @@ export const PRICING_TIERS: Record<PricingTier, {
   note: string
 }> = {
   self_hosted_h100: {
-    label: 'Self-hosted H100 — Llama (open source)',
-    short: 'H100',
-    color: '#00C280',
+    label: 'Dedicated GPU Fleet (H100 / H200 / B200)',
+    short: 'GPU Fleet',
+    color: '#76B900',
     input_per_1m: 0.70,
     output_per_1m: 2.80,
     cache_discount: 0.0,  // 100% FREE — skipped entirely
-    note: 'Llama is free. These rates reflect H100 GPU compute cost amortized at ~$3/hr. Cached tokens skip the GPU entirely — zero compute cost.',
+    note: 'Llama is free. Rates reflect GPU compute cost amortized at ~$3/hr. Cached tokens skip the GPU entirely — zero compute cost.',
   },
-  cloud_openai: {
-    label: 'Cloud API — GPT-4o rates',
-    short: 'GPT-4o',
+  ncp_provider: {
+    label: 'Neocloud (NCP) Provider',
+    short: 'Neocloud',
+    color: '#00C280',
+    input_per_1m: 0.60,
+    output_per_1m: 2.40,
+    cache_discount: 0.0,  // 100% FREE internal prefill
+    note: 'AI Cloud / GPUaaS baseline rate. Zero prefill compute expands gross margins (45% → 87%) and doubles tenant concurrency.',
+  },
+  cloud_api: {
+    label: 'Build vs. Buy (Commercial API Equivalence)',
+    short: 'Build vs Buy',
     color: '#1A81AF',
     input_per_1m: 2.50,
     output_per_1m: 10.00,
-    cache_discount: 0.50,  // 50% discount (OpenAI prompt caching)
-    note: 'OpenAI charges 50% for cached input tokens.',
-  },
-  cloud_anthropic: {
-    label: 'Cloud API — Claude 3.5 rates',
-    short: 'Claude 3.5',
-    color: '#7B61FF',
-    input_per_1m: 3.00,
-    output_per_1m: 15.00,
-    cache_discount: 0.10,  // 90% discount (Anthropic prompt caching)
-    note: 'Anthropic charges only 10% for cached input tokens.',
+    cache_discount: 0.50,  // 50% discount on typical commercial APIs
+    note: 'TCO benchmark vs. commercial model API invoices ($2.50/1M input). Infinia eliminates 100% of cached token compute cost.',
   },
 }
 

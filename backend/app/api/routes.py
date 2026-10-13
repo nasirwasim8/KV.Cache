@@ -2233,7 +2233,7 @@ class ChatRequest(BaseModel):
     message: str
     demo_mode: str = "business"      # "business" | "technical"
     audience_mode: str = "business"
-    pricing_tier: str = "self_hosted_h100"  # "self_hosted_h100" | "cloud_openai" | "cloud_anthropic"
+    pricing_tier: str = "self_hosted_h100"  # "self_hosted_h100" | "ncp_provider" | "cloud_api"
 
 
 class SeedRequest(BaseModel):

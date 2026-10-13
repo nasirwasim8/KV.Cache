@@ -82,43 +82,56 @@ class Settings:
         return self.gpu_cost_per_hour / 3_600_000
 
     # ── Token-based pricing tiers ───────────────────────────────────────────
-    # Standard industry model: $ per 1M tokens
-    # Source: real provider pricing (July 2026)
+    # Unified with Enterprise ROI Calculator archetypes
     PRICING_TIERS = {
-        "cloud_openai": {
-            "label": "Cloud API (GPT-4o equivalent)",
-            "input_per_1m": 2.50,    # $/1M input tokens
-            "output_per_1m": 10.00,  # $/1M output tokens
-            "cache_discount": 0.50,  # 50% discount on cached input (OpenAI style)
-        },
-        "cloud_anthropic": {
-            "label": "Cloud API (Claude 3.5 equivalent)",
-            "input_per_1m": 3.00,
-            "output_per_1m": 15.00,
-            "cache_discount": 0.10,  # 90% discount (pay only 10% for cached)
-        },
         "self_hosted_h100": {
-            "label": "Self-hosted H100 (Llama)",
+            "label": "Dedicated GPU Fleet (H100 / H200 / B200)",
+            "short": "GPU Fleet",
             "input_per_1m": 0.70,    # H100 amortized at $3/hr, ~1500 tok/s
-            "output_per_1m": 2.80,   # output is slower (autoregressive)
+            "output_per_1m": 2.80,   # output is slower (autoregressive decode)
             "cache_discount": 0.0,   # 100% free — cached tokens skipped entirely
+            "note": "Amortized GPU compute cost (~$3/hr). Cached tokens bypass GPU prefill entirely — zero compute cost.",
         },
+        "ncp_provider": {
+            "label": "Neocloud (NCP) Provider",
+            "short": "Neocloud",
+            "input_per_1m": 0.60,    # AI Cloud / GPUaaS provider baseline
+            "output_per_1m": 2.40,
+            "cache_discount": 0.0,   # 100% free internal prefill -> expands gross margins (45% -> 87%)
+            "note": "AI Cloud / GPUaaS provider rate. Cached tokens eliminate prefill compute, driving higher tenant density.",
+        },
+        "cloud_api": {
+            "label": "Build vs. Buy (Commercial API Equivalence)",
+            "short": "Build vs Buy",
+            "input_per_1m": 2.50,    # $2.50/1M input baseline (GPT-4o / Claude 3.5 Sonnet class)
+            "output_per_1m": 10.00,  # $10.00/1M output
+            "cache_discount": 0.50,  # 50% discount if proprietary cloud cache is used
+            "note": "TCO comparison against commercial token APIs ($2.50/1M input). Infinia eliminates 100% of cached token compute cost.",
+        },
+    }
+
+    # Backward compatibility aliases for legacy requests
+    TIER_ALIASES = {
+        "cloud_openai": "cloud_api",
+        "cloud_anthropic": "cloud_api",
     }
 
     def token_cost(self, input_tokens: int, output_tokens: int, tier: str = "self_hosted_h100") -> float:
         """Calculate cost for a request using token-based pricing."""
-        p = self.PRICING_TIERS.get(tier, self.PRICING_TIERS["self_hosted_h100"])
+        resolved_tier = self.TIER_ALIASES.get(tier, tier)
+        p = self.PRICING_TIERS.get(resolved_tier, self.PRICING_TIERS["self_hosted_h100"])
         return (input_tokens / 1_000_000 * p["input_per_1m"]
                 + output_tokens / 1_000_000 * p["output_per_1m"])
 
     def cached_token_cost(self, cached_tokens: int, new_tokens: int, output_tokens: int, tier: str = "self_hosted_h100") -> float:
         """
         Cost when KV cache is active:
-        - Cached prefix tokens: FREE (self-hosted) or discounted (cloud)
+        - Cached prefix tokens: FREE (self-hosted / NCP) or discounted (cloud)
         - New message tokens: full price
         - Output tokens: full price (generation is same regardless)
         """
-        p = self.PRICING_TIERS.get(tier, self.PRICING_TIERS["self_hosted_h100"])
+        resolved_tier = self.TIER_ALIASES.get(tier, tier)
+        p = self.PRICING_TIERS.get(resolved_tier, self.PRICING_TIERS["self_hosted_h100"])
         cached_cost = cached_tokens / 1_000_000 * p["input_per_1m"] * p["cache_discount"]
         new_cost    = new_tokens   / 1_000_000 * p["input_per_1m"]
         output_cost = output_tokens / 1_000_000 * p["output_per_1m"]

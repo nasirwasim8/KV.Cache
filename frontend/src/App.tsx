@@ -66,7 +66,7 @@ export default function App() {
 
             <main className="flex-1 min-w-0 pb-16">
               {activeTab === 'configuration' && <Configuration />}
-              {activeTab === 'observatory'   && <ChatObservatory />}
+              {activeTab === 'observatory'   && <ChatObservatory onNavigateToRoi={() => setActiveTab('roi')} />}
               {activeTab === 'prefix'        && <PrefixMultiplier />}
               {activeTab === 'roi'           && <ROICalculator />}
               {activeTab === 'aiperf'        && <AIperfBenchmark />}
