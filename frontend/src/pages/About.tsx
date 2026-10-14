@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import DataPathRaceVisualizer from '../components/DataPathRaceVisualizer'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ExternalLink,
@@ -1986,9 +1985,6 @@ function CompetitiveBattlecardDetail() {
           </div>
         </div>
       </div>
-
-      {/* Concept 1: The "Two Paths" Data Path Race Visualizer */}
-      <DataPathRaceVisualizer />
 
       {/* The Battlecard Table */}
       <div>
