@@ -1904,18 +1904,18 @@ function CompetitiveBattlecardDetail() {
     <div className="space-y-8">
       {/* Executive banner */}
       <div className="p-5 rounded-2xl border"
-        style={{ background: 'linear-gradient(135deg, rgba(237,39,56,0.08) 0%, rgba(237,39,56,0.02) 100%)', borderColor: 'rgba(237,39,56,0.3)' }}>
+        style={{ background: 'linear-gradient(135deg, rgba(118,185,0,0.08) 0%, rgba(118,185,0,0.02) 100%)', borderColor: 'rgba(118,185,0,0.3)' }}>
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-bold"
-            style={{ background: 'var(--ddn-red)' }}>
+            style={{ background: '#76B900' }}>
             <Trophy className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--ddn-red)' }}>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#76B900' }}>
                 Competitive Architecture Battlecard
               </span>
-              <Tag color="var(--ddn-red)">DDN Infinia vs WEKA vs VAST</Tag>
+              <Tag color="#76B900">DDN Infinia vs WEKA vs VAST</Tag>
             </div>
             <h3 className="text-base font-bold text-[var(--text-primary)]">
               Why Native Distributed KV Substrate Outperforms File &amp; Element Systems
@@ -1937,7 +1937,7 @@ function CompetitiveBattlecardDetail() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-                style={{ background: 'rgba(237,39,56,0.15)', color: 'var(--ddn-red)' }}>
+                style={{ background: 'rgba(118,185,0,0.15)', color: '#76B900' }}>
                 <Layers className="w-4 h-4" />
               </div>
               <h4 className="text-sm font-bold text-[var(--text-primary)]">1. The POSIX Metadata Tax</h4>
@@ -1989,7 +1989,7 @@ function CompetitiveBattlecardDetail() {
       {/* The Battlecard Table */}
       <div>
         <SectionTitle>
-          <Trophy className="w-4 h-4" style={{ color: 'var(--ddn-red)' }} />
+          <Trophy className="w-4 h-4" style={{ color: '#76B900' }} />
           Architectural Comparison: DDN Infinia vs. WEKA vs. VAST
         </SectionTitle>
 
@@ -2001,9 +2001,9 @@ function CompetitiveBattlecardDetail() {
                 <th className="p-3.5 font-bold uppercase tracking-wider text-[var(--text-muted)] w-1/4">
                   Feature / Dimension
                 </th>
-                <th className="p-3.5 font-bold text-center w-1/4" style={{ background: 'rgba(237,39,56,0.08)' }}>
-                  <div className="text-sm font-extrabold text-[var(--ddn-red)]">DDN Infinia</div>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--ddn-red)] text-white mt-1 inline-block">
+                <th className="p-3.5 font-bold text-center w-1/4" style={{ background: 'rgba(118,185,0,0.08)' }}>
+                  <div className="text-sm font-extrabold text-[#76B900]">DDN Infinia</div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#76B900] text-white mt-1 inline-block">
                     Native KV Substrate
                   </span>
                 </th>
@@ -2036,9 +2036,9 @@ function CompetitiveBattlecardDetail() {
 
                   {/* DDN Infinia Column */}
                   <td className="p-3.5 text-center align-top font-medium"
-                    style={{ background: 'rgba(237,39,56,0.04)', borderLeft: '1px solid var(--border-subtle)', borderRight: '1px solid var(--border-subtle)' }}>
+                    style={{ background: 'rgba(118,185,0,0.04)', borderLeft: '1px solid var(--border-subtle)', borderRight: '1px solid var(--border-subtle)' }}>
                     {row.infiniaHighlight ? (
-                      <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold text-[var(--ddn-red)] bg-[rgba(237,39,56,0.1)] border border-[rgba(237,39,56,0.25)]">
+                      <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold text-[#76B900] bg-[rgba(118,185,0,0.12)] border border-[rgba(118,185,0,0.3)]">
                         {row.infinia}
                       </span>
                     ) : (
@@ -2071,7 +2071,7 @@ function CompetitiveBattlecardDetail() {
         </SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="p-4 rounded-xl border bg-[var(--surface-card)]" style={{ borderColor: 'var(--border-subtle)' }}>
-            <div className="text-xs font-bold text-[var(--ddn-red)] mb-1">1. "Don't Force a File System on a KV Workload"</div>
+            <div className="text-xs font-bold text-[#76B900] mb-1">1. "Don't Force a File System on a KV Workload"</div>
             <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
               LLMs access KV cache strictly by cryptographic prefix hashes, not directory paths. Filesystem vendors have to wrap every chunk in file creation, metadata locks, and POSIX syscalls. Infinia provides native $O(1)$ key-to-value addressing.
             </p>
