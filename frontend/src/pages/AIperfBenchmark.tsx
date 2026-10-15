@@ -1094,19 +1094,18 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                   onMouseEnter={e => (e.currentTarget.style.borderColor = '#76B900')}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = showInfiniaAdvantage ? 'rgba(118,185,0,0.4)' : 'var(--border-subtle)')}
                 >
-                  <span className="flex items-center gap-2">
-                    <span>⚡</span>
-                    WHY DDN INFINIA? — NATIVE KV SUBSTRATE &amp; ARCHITECTURAL ADVANTAGE
+                  <span className="font-bold tracking-wide whitespace-nowrap text-left truncate mr-3">
+                    WHY DDN INFINIA? — ARCHITECTURAL ADVANTAGE
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span
-                      className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full"
+                      className="hidden sm:inline-block text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap"
                       style={{ background: 'rgba(118,185,0,0.15)', color: '#76B900', border: '1px solid rgba(118,185,0,0.3)' }}
                     >
                       Infinia Differentiator
                     </span>
                     <ChevronDown
-                      className="w-4 h-4 transition-transform duration-200"
+                      className="w-4 h-4 transition-transform duration-200 shrink-0"
                       style={{ transform: showInfiniaAdvantage ? 'rotate(180deg)' : 'rotate(0deg)' }}
                     />
                   </div>
