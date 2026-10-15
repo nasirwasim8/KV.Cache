@@ -112,7 +112,7 @@ function WaterfallRow({ result, maxTime, isCurrent }: { result: RunResult; maxTi
 
 export default function PrefixMultiplier() {
   const [scenarios, setScenarios] = useState<Record<string, ScenarioMeta>>({})
-  const [activeScenario, setActiveScenario] = useState<string>('contact_center')
+  const [activeScenario, setActiveScenario] = useState<string>('ncp')
   const [seeded, setSeeded] = useState<Record<string, boolean>>({})
   const [shuffledQueries, setShuffledQueries] = useState<string[]>([])
   const CHIPS_SHOWN = 5
@@ -123,7 +123,12 @@ export default function PrefixMultiplier() {
   const [customQuery, setCustomQuery] = useState('')
 
   useEffect(() => {
-    kvApi.getScenarios().then(d => setScenarios(d.scenarios)).catch(() => {})
+    kvApi.getScenarios().then(d => {
+      setScenarios(d.scenarios)
+      if (d.scenarios && d.scenarios['ncp']) {
+        setActiveScenario('ncp')
+      }
+    }).catch(() => {})
   }, [])
 
   const scenario = scenarios[activeScenario]
@@ -193,33 +198,52 @@ export default function PrefixMultiplier() {
       <div className="section-header">
         <h2 className="section-title">Prefix Cache Multiplier</h2>
         <p className="section-description">
-          Seed a long system prompt into DDN Infinia once. Every subsequent request retrieves the KV state from Infinia — never recomputes the prefix.
+          Demonstrate how Neocloud Providers (NCPs) and enterprises seed shared multi-tenant base prompts, tool definitions, and system contexts into DDN Infinia once. Every subsequent tenant request retrieves KV state directly from Infinia at sub-millisecond latency—eliminating redundant GPU prefill compute across millions of daily queries.
         </p>
       </div>
 
       {/* Scenario Selector */}
       <div className="card p-5">
-        <h3 className="text-sm font-semibold mb-4 text-neutral-700">Choose Industry Scenario</h3>
-        <div className="grid grid-cols-3 gap-3">
-          {Object.entries(scenarios).map(([key, sc]) => (
-            <button key={key}
-              onClick={() => { setActiveScenario(key); setResults([]) }}
-              className="p-4 rounded-xl border text-left transition-all"
-              style={{
-                borderColor: activeScenario === key ? 'var(--ddn-red)' : 'var(--border-subtle)',
-                background: activeScenario === key ? 'rgba(237,39,56,0.05)' : 'var(--surface-card)',
-                boxShadow: activeScenario === key ? '0 0 0 2px rgba(237,39,56,0.1)' : 'none',
-              }}
-            >
-              <div className="text-2xl mb-2">{sc.icon}</div>
-              <div className="font-semibold text-sm text-neutral-900">{sc.name}</div>
-              <div className="text-xs text-neutral-500 mt-1">{sc.description}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="badge badge-info text-xs">{sc.system_tokens.toLocaleString()} tokens</span>
-                <span className="text-xs text-neutral-400">{sc.daily_requests.toLocaleString()}/day</span>
-              </div>
-            </button>
-          ))}
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 className="text-sm font-semibold text-neutral-700">Choose Industry Scenario</h3>
+          <span className="text-xs text-neutral-400">Neocloud (NCP) is set as default for high-concurrency multi-tenant clusters</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Object.entries(scenarios).map(([key, sc]) => {
+            const isNcp = key === 'ncp'
+            const isSelected = activeScenario === key
+            return (
+              <button key={key}
+                onClick={() => { setActiveScenario(key); setResults([]) }}
+                className="p-4 rounded-xl border text-left transition-all relative overflow-hidden"
+                style={{
+                  borderColor: isSelected
+                    ? (isNcp ? '#00C280' : 'var(--ddn-red)')
+                    : (isNcp ? 'rgba(0,194,128,0.35)' : 'var(--border-subtle)'),
+                  background: isSelected
+                    ? (isNcp ? 'rgba(0,194,128,0.06)' : 'rgba(237,39,56,0.05)')
+                    : 'var(--surface-card)',
+                  boxShadow: isSelected
+                    ? (isNcp ? '0 0 0 2px rgba(0,194,128,0.2)' : '0 0 0 2px rgba(237,39,56,0.1)')
+                    : 'none',
+                }}
+              >
+                {isNcp && (
+                  <span className="absolute top-2.5 right-2.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(0,194,128,0.15)', color: '#00C280', border: '1px solid rgba(0,194,128,0.3)' }}>
+                    ⭐ NCP Default
+                  </span>
+                )}
+                <div className="text-2xl mb-2">{sc.icon}</div>
+                <div className="font-semibold text-sm text-neutral-900">{sc.name}</div>
+                <div className="text-xs text-neutral-500 mt-1 line-clamp-2">{sc.description}</div>
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  <span className="badge badge-info text-xs">{sc.system_tokens.toLocaleString()} tokens</span>
+                  <span className="text-xs text-neutral-400">{sc.daily_requests.toLocaleString()}/day</span>
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -389,6 +413,18 @@ export default function PrefixMultiplier() {
                   &nbsp;×&nbsp;{scaleProjection.daily_requests.toLocaleString()}/day&nbsp;×&nbsp;30 days
                 </div>
               </div>
+
+              {activeScenario === 'ncp' && (
+                <div className="mb-4 p-3 rounded-lg border text-xs" style={{ background: 'rgba(0,194,128,0.08)', borderColor: 'rgba(0,194,128,0.25)', color: 'var(--text-secondary)' }}>
+                  <div className="font-semibold text-neutral-900 flex items-center gap-1.5 mb-1" style={{ color: '#00C280' }}>
+                    <span>☁️</span> Neocloud Provider (NCP) Multi-Tenant Impact
+                  </div>
+                  <div>
+                    In a multi-tenant GPUaaS cluster serving 10M requests/day, thousands of enterprise tenants share identical foundational prompts, agent tool schemas, and zero-trust orchestration context. Storing KV tensors in DDN Infinia eliminates prefill bottlenecks across all GPU worker nodes, driving <strong>gross margins above 80%</strong> and unlocking millions in annual infrastructure recovery.
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-4">
                 {[
                   { label: 'Monthly Savings', value: `$${scaleProjection.monthly_savings_usd.toLocaleString()}` },
