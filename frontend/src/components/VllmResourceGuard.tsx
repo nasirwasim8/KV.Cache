@@ -46,22 +46,31 @@ export default function VllmResourceGuard({ pageName, vllmMemoryGb = 14 }: VllmR
       const r = await fetch('/api/vllm/stop', { method: 'POST' })
       if (r.ok) {
         setStatus('stopping')
-        // Poll until vLLM actually stops
+        let attempts = 0
+        // Poll until vLLM actually stops (max 15 attempts / 30 seconds)
         const poll = setInterval(async () => {
+          attempts++
           try {
             const s = await fetch('/api/vllm/status')
             const d = await s.json()
             setStatus(d.status)
-            if (d.status === 'stopped' || d.status === 'error') {
+            if (d.status === 'stopped' || d.status === 'error' || attempts >= 15) {
               clearInterval(poll)
               setStopping(false)
-              setJustStopped(true)
-              setTimeout(() => setJustStopped(false), 6000)
+              if (d.status === 'stopped') {
+                setJustStopped(true)
+                setTimeout(() => setJustStopped(false), 6000)
+              }
             }
           } catch {
-            clearInterval(poll)
+            if (attempts >= 15) {
+              clearInterval(poll)
+              setStopping(false)
+            }
           }
         }, 2000)
+      } else {
+        setStopping(false)
       }
     } catch {
       setStopping(false)
