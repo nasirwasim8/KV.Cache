@@ -128,19 +128,36 @@ class InfiniaKVCacheManager:
         for compound, expanded in _COMPOUNDS.items():
             q = re.sub(r'\b' + re.escape(compound) + r'\b', expanded, q)
 
-        # ── 3. Strip leading question / filler phrases ────────────────────────
+        # ── 2b. Stem common 3rd-person singular verbs in questions ────────────
+        _VERB_STEMS = {
+            'affects': 'affect',
+            'matters': 'matter',
+            'handles': 'handle',
+            'reduces': 'reduce',
+            'helps':   'help',
+        }
+        for v_from, v_to in _VERB_STEMS.items():
+            q = re.sub(r'\b' + re.escape(v_from) + r'\b', v_to, q)
+
+        # ── 3. Strip leading question / filler phrases (iterative) ────────────
         filler_patterns = [
             r'^(please\s+)?(can\s+you\s+)?(explain|describe|summarize|summarise|tell\s+me\s+(about|how|why|what))\s+',
             r'^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are|what\s+makes|what\s+happens\s+when|what\s+happens)\s+',
             r'^(who\s+won|who\s+are|who\s+were|who\s+is|who\s+was)\s+',
-            r'^(how\s+do(?:es)?|how\s+can|how\s+would)\s+',
-            r'^(why\s+is|why\s+does|why\s+would)\s+',
+            r'^(how\s+do(?:es)?|how\s+can|how\s+would|how)\s+',
+            r'^(why\s+is|why\s+does|why\s+would|why)\s+',
             r'^(is\s+there|are\s+there|does\s+it|do\s+they)\s+',
             r'^(please|kindly)\s+',
             r'^(tell\s+me|give\s+me|show\s+me)\s+(about\s+)?',
         ]
-        for pat in filler_patterns:
-            q = re.sub(pat, '', q)
+        changed = True
+        while changed:
+            changed = False
+            for pat in filler_patterns:
+                new_q = re.sub(pat, '', q)
+                if new_q != q:
+                    q = new_q
+                    changed = True
 
         # ── 4. Strip leading articles left behind after filler removal ─────────
         q = re.sub(r'^(the|a|an)\s+', '', q)

@@ -237,9 +237,132 @@ function PanelHeader({ title, subtitle, isCache, source, latency }: {
   )
 }
 
+// ─── Preset Question Variations (Guaranteed Cache Hit Matches) ────────────────
+
+export const PRESET_QUESTION_VARIATIONS: Record<string, string[]> = {
+  'What is DDN Infinia?': [
+    'What is DDN Infinia?',
+    'DDN Infinia',
+    'Explain DDN Infinia',
+    'Tell me about DDN Infinia',
+  ],
+  'Explain KV cache in LLMs': [
+    'Explain KV cache in LLMs',
+    'KV cache in LLMs',
+    'What is KV cache in LLMs?',
+    'Tell me about KV cache in LLMs',
+  ],
+  'How does Infinia compare to storing KV cache in RAM?': [
+    'How does Infinia compare to storing KV cache in RAM?',
+    'Infinia compare to storing KV cache in RAM',
+    'Explain Infinia compare to storing KV cache in RAM',
+    'Tell me about Infinia compare to storing KV cache in RAM',
+  ],
+  'What is the cost benefit of prefix caching?': [
+    'What is the cost benefit of prefix caching?',
+    'Cost benefit of prefix caching',
+    'Explain the cost benefit of prefix caching',
+    'Tell me about the cost benefit of prefix caching',
+  ],
+  'Summarize the key benefits for enterprise AI': [
+    'Summarize the key benefits for enterprise AI',
+    'Key benefits for enterprise AI',
+    'Explain the key benefits for enterprise AI',
+    'What are the key benefits for enterprise AI?',
+  ],
+  'How does GPU memory eviction affect AI inference?': [
+    'How does GPU memory eviction affect AI inference?',
+    'GPU memory eviction affect AI inference',
+    'Explain how GPU memory eviction affects AI inference',
+    'Tell me about GPU memory eviction affect AI inference',
+  ],
+  'What happens when KV cache is stored on NVMe vs object storage?': [
+    'What happens when KV cache is stored on NVMe vs object storage?',
+    'KV cache stored on NVMe vs object storage',
+    'Explain what happens when KV cache is stored on NVMe vs object storage',
+    'Tell me about KV cache stored on NVMe vs object storage',
+  ],
+  'Explain the difference between prefill and decode in LLM inference': [
+    'Explain the difference between prefill and decode in LLM inference',
+    'Difference between prefill and decode in LLM inference',
+    'What is the difference between prefill and decode in LLM inference?',
+    'Tell me about the difference between prefill and decode in LLM inference',
+  ],
+  'Why does token count matter for GPU compute cost?': [
+    'Why does token count matter for GPU compute cost?',
+    'Token count matter for GPU compute cost',
+    'Explain why token count matters for GPU compute cost',
+    'Tell me why token count matters for GPU compute cost',
+  ],
+  'How does DDN Infinia handle concurrent AI sessions?': [
+    'How does DDN Infinia handle concurrent AI sessions?',
+    'DDN Infinia handle concurrent AI sessions',
+    'Explain how DDN Infinia handles concurrent AI sessions',
+    'Tell me about DDN Infinia handling concurrent AI sessions',
+  ],
+  'What is time-to-first-token and why does it matter?': [
+    'What is time-to-first-token and why does it matter?',
+    'Time-to-first-token and why does it matter',
+    'What is TTFT and why does it matter?',
+    'Explain time-to-first-token and why does it matter',
+  ],
+  'How does prefix caching reduce inference cost at scale?': [
+    'How does prefix caching reduce inference cost at scale?',
+    'Prefix caching reduce inference cost at scale',
+    'Explain how prefix caching reduces inference cost at scale',
+    'Tell me about prefix caching reduce inference cost at scale',
+  ],
+  'What is the latency overhead of retrieving KV cache from Infinia?': [
+    'What is the latency overhead of retrieving KV cache from Infinia?',
+    'Latency overhead of retrieving KV cache from Infinia',
+    'Explain the latency overhead of retrieving KV cache from Infinia',
+    'Tell me about the latency overhead of retrieving KV cache from Infinia',
+  ],
+  'How does caching help with multi-tenant AI deployments?': [
+    'How does caching help with multi-tenant AI deployments?',
+    'Caching help with multi-tenant AI deployments',
+    'Explain how caching helps with multi-tenant AI deployments',
+    'Tell me about caching help with multi-tenant AI deployments',
+  ],
+  'What makes DDN Infinia better than Redis for KV cache storage?': [
+    'What makes DDN Infinia better than Redis for KV cache storage?',
+    'DDN Infinia better than Redis for KV cache storage',
+    'Explain what makes DDN Infinia better than Redis for KV cache storage',
+    'Why is DDN Infinia better than Redis for KV cache storage?',
+  ],
+}
+
+export function getQuestionVariations(query: string): string[] {
+  if (!query) return []
+  const clean = query.trim()
+  if (PRESET_QUESTION_VARIATIONS[clean]) return PRESET_QUESTION_VARIATIONS[clean]
+
+  const match = Object.keys(PRESET_QUESTION_VARIATIONS).find(k => k.toLowerCase() === clean.toLowerCase())
+  if (match) return PRESET_QUESTION_VARIATIONS[match]
+
+  const base = clean
+    .replace(/[?.!]+$/, '')
+    .replace(/^(please\s+)?(can\s+you\s+)?(explain|describe|summarize|summarise|tell\s+me\s+(about|how|why|what))\s+/i, '')
+    .replace(/^(what\s+is\s+the|what\s+are\s+the|what\s+is|what\s+are|what\s+makes|what\s+happens\s+when|what\s+happens)\s+/i, '')
+    .replace(/^(who\s+won|who\s+are|who\s+were|who\s+is|who\s+was)\s+/i, '')
+    .replace(/^(how\s+do(?:es)?|how\s+can|how\s+would|how)\s+/i, '')
+    .replace(/^(why\s+is|why\s+does|why\s+would|why)\s+/i, '')
+    .replace(/^(is\s+there|are\s+there|does\s+it|do\s+they)\s+/i, '')
+    .replace(/^(the|a|an)\s+/i, '')
+    .trim()
+
+  if (!base) return [clean]
+
+  const out = [clean]
+  if (base.toLowerCase() !== clean.toLowerCase()) out.push(base)
+  out.push(`Explain ${base}`)
+  out.push(`Tell me about ${base}`)
+  return Array.from(new Set(out))
+}
+
 // ─── TurnRow ──────────────────────────────────────────────────────────────────
 
-function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
+function TurnRow({ turn, idx, onSelectQuestion }: { turn: Turn; idx: number; onSelectQuestion?: (q: string) => void }) {
   const isHit  = turn.right?.source === 'INFINIA_CACHE'
   const isMiss = turn.right?.source === 'FIRST_MISS_STORED'
   const [expanded, setExpanded] = useState(false)
@@ -349,12 +472,37 @@ function TurnRow({ turn, idx }: { turn: Turn; idx: number }) {
                 </div>
               </div>
               {isMiss && (
-                <div className="mt-2 p-2 rounded-lg flex items-center gap-1.5 text-xs" style={{ background: 'rgba(26,129,175,0.08)', color: '#1A81AF' }}>
-                  <Database className="w-3 h-3 flex-shrink-0" />
-                  Computed & stored in Infinia — <strong>ask again to see the cache hit!</strong>
-                  {(turn.right?.store_latency_ms ?? 0) > 0 && (
-                    <span className="ml-1 opacity-60">({n(turn.right?.store_latency_ms)}ms write)</span>
-                  )}
+                <div className="mt-2.5 p-2.5 rounded-lg border text-xs" style={{ background: 'rgba(26,129,175,0.06)', borderColor: 'rgba(26,129,175,0.25)' }}>
+                  <div className="flex items-center justify-between gap-1.5 font-semibold mb-1" style={{ color: '#1A81AF' }}>
+                    <div className="flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>Stored in Infinia — ask again for guaranteed cache hit:</span>
+                    </div>
+                    {(turn.right?.store_latency_ms ?? 0) > 0 && (
+                      <span className="opacity-60 text-[10px] font-normal">({n(turn.right?.store_latency_ms)}ms write)</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-neutral-500 mb-2">
+                    Click any guaranteed variation below to test with 0ms prefill:
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {getQuestionVariations(turn.userMessage).map(v => (
+                      <button
+                        key={v}
+                        onClick={() => onSelectQuestion?.(v)}
+                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all flex items-center gap-1 hover:scale-105 active:scale-95 cursor-pointer"
+                        style={{
+                          background: 'rgba(0,194,128,0.12)',
+                          borderColor: 'rgba(0,194,128,0.35)',
+                          color: '#00875a',
+                        }}
+                        title={`Click to load "${v}" into input`}
+                      >
+                        <Zap className="w-2.5 h-2.5" />
+                        <span>{v}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               {turn.infinia_object && <InfiniaObjectCard obj={turn.infinia_object} />}
@@ -550,6 +698,7 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
     showDiagram: boolean
   }>({ cpuMetrics: null, reference: null, showDiagram: false })
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns])
@@ -559,6 +708,31 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  const handleSelectSuggestion = (q: string) => {
+    setInput(q)
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setTimeout(() => {
+      inputRef.current?.focus()
+    }, 50)
+  }
+
+  // Cached question analysis for smart typo-proof suggestions
+  const allDistinctCachedQuestions = Array.from(new Set(turns.map(t => t.userMessage)))
+  const latestQuestion = turns.length > 0 ? turns[turns.length - 1].userMessage : null
+  const latestVariations = latestQuestion ? getQuestionVariations(latestQuestion) : []
+  const allCachedVariations = Array.from(new Set(allDistinctCachedQuestions.flatMap(q => getQuestionVariations(q))))
+  
+  const matchingVariations = input.trim().length > 0
+    ? allCachedVariations.filter(v => 
+        v.toLowerCase().includes(input.trim().toLowerCase()) && v.toLowerCase() !== input.trim().toLowerCase()
+      )
+    : []
+
+  const inputIsCacheHitCandidate = Boolean(
+    input.trim().length > 0 &&
+    allCachedVariations.some(v => v.toLowerCase() === input.trim().toLowerCase())
+  )
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || loading) return
@@ -1265,31 +1439,122 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
             </button>
           </div>
         ) : (
-          turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} />)
+          turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} onSelectQuestion={handleSelectSuggestion} />)
         )}
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
-      <div className="card p-4">
+      <div className="card p-4 space-y-3">
+        {/* Guaranteed Cache Hit Options Panel — shown whenever turns exist */}
+        {turns.length > 0 && latestQuestion && (
+          <div className="p-3 rounded-xl border"
+            style={{
+              background: 'rgba(0,194,128,0.05)',
+              borderColor: 'rgba(0,194,128,0.25)',
+            }}>
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#00C280' }}>
+                <Zap className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Test Cache Hit (Guaranteed · Zero Typo Risk):</span>
+              </div>
+              <span className="text-[11px] text-neutral-400">
+                Click any option below to test with 0ms prefill
+              </span>
+            </div>
+
+            {/* Quick variation chips for the latest question */}
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {latestVariations.map(v => {
+                const isSelected = input.trim().toLowerCase() === v.trim().toLowerCase()
+                return (
+                  <button
+                    key={v}
+                    onClick={() => handleSelectSuggestion(v)}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95 cursor-pointer"
+                    style={{
+                      background: isSelected ? '#00C280' : 'var(--surface-card)',
+                      color: isSelected ? '#fff' : '#00875a',
+                      borderColor: isSelected ? '#00C280' : 'rgba(0,194,128,0.3)',
+                      boxShadow: isSelected ? '0 2px 6px rgba(0,194,128,0.35)' : 'none',
+                    }}
+                    title={`Click to load "${v}"`}
+                  >
+                    <span>⚡</span>
+                    <span>{v}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* If there were multiple previous turns with different questions, show quick links */}
+            {allDistinctCachedQuestions.length > 1 && (
+              <div className="mt-2.5 pt-2 border-t flex items-center gap-2 flex-wrap text-xs" style={{ borderColor: 'rgba(0,194,128,0.15)' }}>
+                <span className="text-neutral-400 text-[11px]">Earlier cached turns:</span>
+                {allDistinctCachedQuestions.slice(0, -1).map(q => (
+                  <button
+                    key={q}
+                    onClick={() => handleSelectSuggestion(q)}
+                    className="text-[11px] text-neutral-600 hover:text-[#00C280] underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    &ldquo;{q}&rdquo;
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Live Typeahead / Autocomplete as user types */}
+        {matchingVariations.length > 0 && (
+          <div className="p-2.5 rounded-xl border flex flex-col gap-1.5 text-xs"
+            style={{ background: 'var(--surface-secondary)', borderColor: 'rgba(0,194,128,0.35)' }}>
+            <div className="text-[11px] font-semibold text-neutral-500 flex items-center gap-1">
+              <Zap className="w-3 h-3 text-[#00C280]" />
+              <span>Matching Cached Variations (Click to select without typo):</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {matchingVariations.slice(0, 5).map(m => (
+                <button
+                  key={m}
+                  onClick={() => handleSelectSuggestion(m)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all text-left hover:scale-102 cursor-pointer"
+                  style={{
+                    background: input.trim().toLowerCase() === m.toLowerCase() ? '#00C280' : 'rgba(0,194,128,0.1)',
+                    color: input.trim().toLowerCase() === m.toLowerCase() ? '#fff' : '#00875a',
+                    borderColor: 'rgba(0,194,128,0.35)',
+                  }}
+                >
+                  ⚡ {m}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Textarea + Send */}
         <div className="flex gap-3 items-end">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything... (first ask = MISS stored in Infinia, repeat = HIT retrieved instantly)"
+            placeholder={turns.length > 0 
+              ? "Ask again or select an option above to test cache hit..." 
+              : "Ask anything... (first ask = MISS stored in Infinia, repeat = HIT retrieved instantly)"}
             className="flex-1 resize-none rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-all"
-            style={{ borderColor: 'var(--border-default)', background: 'var(--surface-secondary)', color: 'var(--text-primary)', minHeight: '52px', maxHeight: '120px', focusRingColor: '#ED2738' } as any}
+            style={{ borderColor: inputIsCacheHitCandidate ? '#00C280' : 'var(--border-default)', background: 'var(--surface-secondary)', color: 'var(--text-primary)', minHeight: '52px', maxHeight: '120px' }}
             rows={1}
             disabled={loading}
           />
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
             className="btn-primary flex items-center gap-2 px-4 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            style={inputIsCacheHitCandidate ? { background: '#00C280', boxShadow: '0 2px 8px rgba(0,194,128,0.35)' } : undefined}
           >
             {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
-            {loading ? 'Thinking...' : 'Send'}
+            {loading ? 'Thinking...' : inputIsCacheHitCandidate ? '⚡ Test Hit' : 'Send'}
           </button>
         </div>
       </div>
