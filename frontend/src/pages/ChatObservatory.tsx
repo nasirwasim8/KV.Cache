@@ -181,8 +181,8 @@ function InfiniaObjectCard({ obj }: { obj: InfiniaObject }) {
 
 // ─── MetricCard ───────────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, unit, highlight, icon: Icon }: {
-  label: string; value: string | number; unit?: string; highlight?: 'green' | 'red' | 'blue'; icon?: any
+function MetricCard({ label, value, unit, highlight, icon: Icon, subtext }: {
+  label: string; value: string | number; unit?: string; highlight?: 'green' | 'red' | 'blue'; icon?: any; subtext?: string
 }) {
   const colors = {
     green: { bg: 'rgba(0,194,128,0.08)', text: '#00C280', border: 'rgba(0,194,128,0.2)' },
@@ -197,6 +197,11 @@ function MetricCard({ label, value, unit, highlight, icon: Icon }: {
         {value}{unit && <span className="text-base font-normal ml-1" style={{ color: 'var(--text-muted)' }}>{unit}</span>}
       </div>
       <div className="metric-label">{label}</div>
+      {subtext && (
+        <div className="text-[10px] mt-0.5 truncate opacity-75 font-normal" style={{ color: c ? c.text : 'var(--text-muted)' }} title={subtext}>
+          {subtext}
+        </div>
+      )}
     </div>
   )
 }
@@ -360,9 +365,142 @@ export function getQuestionVariations(query: string): string[] {
   return Array.from(new Set(out))
 }
 
+// ─── CostInfoTooltip ──────────────────────────────────────────────────────────
+
+function CostInfoTooltip({ tier, isLeft, isHit }: { tier: PricingTier; isLeft?: boolean; isHit?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const p = PRICING_TIERS[tier]
+
+  const nativeTitle = tier === 'self_hosted_h100'
+    ? 'Self-Hosted Amortized Cost: Not an external API bill. Reflects GPU hardware & power ($3/hr). Cached tokens skip GPU prefill, freeing cluster capacity.'
+    : tier === 'ncp_provider'
+      ? 'Neocloud COGS: Direct infrastructure cost per inference stream. Offloading prefill expands tenant density and margins (45% → 87%).'
+      : 'Commercial API Equivalence: Direct token billing benchmark ($2.50/1M input). Infinia caching is 100% free.'
+
+  return (
+    <div ref={ref} className="relative inline-flex items-center" style={{ verticalAlign: 'middle' }}>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+        className="flex items-center justify-center rounded-full transition-opacity cursor-pointer p-0.5"
+        style={{ color: open ? p.color : 'var(--text-muted)' }}
+        title={nativeTitle}
+        aria-label="Cost model explanation"
+      >
+        <Info className="w-2.5 h-2.5 opacity-70 hover:opacity-100" />
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-50 rounded-xl shadow-2xl text-left pointer-events-auto select-text font-sans"
+          style={{
+            bottom: '135%',
+            right: isLeft ? 'auto' : '-10px',
+            left: isLeft ? '-10px' : 'auto',
+            width: 250,
+            padding: '10px 12px',
+            background: 'var(--surface-primary)',
+            border: `1px solid ${p.color}40`,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            color: 'var(--text-secondary)',
+            fontSize: '11px',
+            lineHeight: '1.4',
+            whiteSpace: 'normal',
+            textTransform: 'none',
+            letterSpacing: 'normal',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="font-bold flex items-center justify-between gap-1 mb-1.5 pb-1 border-b" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)' }}>
+            <span className="flex items-center gap-1">
+              <DollarSign className="w-3 h-3" style={{ color: p.color }} />
+              <span>Cost Origin & Model</span>
+            </span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-semibold" style={{ background: `${p.color}15`, color: p.color }}>
+              {p.short}
+            </span>
+          </div>
+
+          {tier === 'self_hosted_h100' && (
+            <div className="space-y-1.5 text-[10.5px]">
+              <div className="font-semibold" style={{ color: '#76B900' }}>
+                Self-Hosted / On-Prem Deployment
+              </div>
+              <p>
+                <strong>Not an external API bill.</strong> Software and token licenses are $0, but physical compute is not.
+              </p>
+              <p>
+                Reflects <strong>amortized GPU hardware & datacenter power (~$3.00/GPU-hr, ~700W)</strong>.
+              </p>
+              <p className="pt-1 border-t" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}>
+                {isLeft
+                  ? 'Without Infinia, every turn forces full recomputation, burning GPU execution time.'
+                  : isHit
+                    ? '⚡ Cached tokens skip GPU prefill completely ($0 compute), freeing GPU headroom for other users.'
+                    : 'Computed once and stored in Infinia — future requests skip GPU compute entirely.'}
+              </p>
+            </div>
+          )}
+
+          {tier === 'ncp_provider' && (
+            <div className="space-y-1.5 text-[10.5px]">
+              <div className="font-semibold" style={{ color: '#00C280' }}>
+                Neocloud (GPUaaS) Infrastructure COGS
+              </div>
+              <p>
+                Reflects direct infrastructure cost of serving inference requests.
+              </p>
+              <p>
+                Eliminating prompt recompute on shared GPU clusters increases tenant density and boosts gross margins from <strong>45% to 87%</strong>.
+              </p>
+            </div>
+          )}
+
+          {tier === 'cloud_api' && (
+            <div className="space-y-1.5 text-[10.5px]">
+              <div className="font-semibold" style={{ color: '#1A81AF' }}>
+                Commercial API Equivalence (Build vs Buy)
+              </div>
+              <p>
+                Direct token billing benchmark ($2.50/1M input).
+              </p>
+              <p>
+                While commercial APIs only offer 50% discount on cached tokens, Infinia on-prem prefix caching is <strong>100% free</strong>.
+              </p>
+            </div>
+          )}
+
+          {/* Little arrow */}
+          <span style={{
+            position: 'absolute', bottom: -5,
+            right: isLeft ? 'auto' : 16,
+            left: isLeft ? 16 : 'auto',
+            transform: 'rotate(45deg)',
+            width: 9, height: 9,
+            background: 'var(--surface-primary)',
+            border: `1px solid ${p.color}40`,
+            borderTop: 'none', borderLeft: 'none',
+          }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── TurnRow ──────────────────────────────────────────────────────────────────
 
-function TurnRow({ turn, idx, onSelectQuestion }: { turn: Turn; idx: number; onSelectQuestion?: (q: string) => void }) {
+function TurnRow({ turn, idx, onSelectQuestion, pricingTier = 'self_hosted_h100' }: { turn: Turn; idx: number; onSelectQuestion?: (q: string) => void; pricingTier?: PricingTier }) {
   const isHit  = turn.right?.source === 'INFINIA_CACHE'
   const isMiss = turn.right?.source === 'FIRST_MISS_STORED'
   const [expanded, setExpanded] = useState(false)
@@ -418,7 +556,10 @@ function TurnRow({ turn, idx, onSelectQuestion }: { turn: Turn; idx: number; onS
                 </div>
                 <div className="metric-card p-2" style={{ borderColor: 'rgba(237,39,56,0.2)', background: 'rgba(237,39,56,0.04)' }}>
                   <div className="font-mono text-sm font-bold" style={{ color: '#ED2738' }}>${n(turn.left?.cost_usd, 4)}</div>
-                  <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
+                  <div className="metric-label flex items-center justify-center gap-1" style={{ fontSize: '9px' }}>
+                    <span>{pricingTier === 'self_hosted_h100' ? 'COMPUTE COST' : 'COST'}</span>
+                    <CostInfoTooltip tier={pricingTier} isLeft={true} isHit={false} />
+                  </div>
                 </div>
               </div>
               {/* Token breakdown — what the GPU actually processed */}
@@ -468,7 +609,10 @@ function TurnRow({ turn, idx, onSelectQuestion }: { turn: Turn; idx: number; onS
                   <div className="font-mono text-sm font-bold" style={{ color: isHit ? '#00C280' : 'var(--text-primary)' }}>
                     ${n(turn.right?.cost_usd, isHit ? 7 : 4)}
                   </div>
-                  <div className="metric-label" style={{ fontSize: '9px' }}>COST</div>
+                  <div className="metric-label flex items-center justify-center gap-1" style={{ fontSize: '9px' }}>
+                    <span>{pricingTier === 'self_hosted_h100' ? 'COMPUTE COST' : 'COST'}</span>
+                    <CostInfoTooltip tier={pricingTier} isLeft={false} isHit={isHit} />
+                  </div>
                 </div>
               </div>
               {isMiss && (
@@ -1035,6 +1179,33 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
             </button>
           </div>
 
+          {/* Cost Origin & Deployment Model Disclaimer */}
+          <div className="px-3 py-1.5 flex items-center justify-between border-t text-[11px] leading-snug" style={{ background: 'var(--surface-card)', borderColor: 'var(--border-subtle)' }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold px-1.5 py-0.5 rounded text-[10px] tracking-wide uppercase inline-flex items-center gap-1" style={{ background: `${PRICING_TIERS[pricingTier].color}15`, color: PRICING_TIERS[pricingTier].color, border: `1px solid ${PRICING_TIERS[pricingTier].color}30` }}>
+                <span>💡</span>
+                <span>{pricingTier === 'self_hosted_h100' ? 'Self-Hosted Model' : pricingTier === 'ncp_provider' ? 'Neocloud Model' : 'Cloud API Benchmark'}</span>
+              </span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {pricingTier === 'self_hosted_h100' && (
+                  <>
+                    <strong style={{ color: 'var(--text-primary)' }}>Cost Origin:</strong> Not an external token invoice. Reflects <strong>amortized GPU hardware & power (~$3/GPU-hr, ~700W)</strong>. Cached tokens skip GPU prefill entirely, freeing physical cluster capacity to serve <strong>3–5× more concurrent users</strong> without buying extra GPUs.
+                  </>
+                )}
+                {pricingTier === 'ncp_provider' && (
+                  <>
+                    <strong style={{ color: 'var(--text-primary)' }}>Cost Origin:</strong> Direct AI Cloud infrastructure COGS per stream. Zero prefill on cached prefixes expands tenant density and boosts gross margins from <strong>45% to 87%</strong>.
+                  </>
+                )}
+                {pricingTier === 'cloud_api' && (
+                  <>
+                    <strong style={{ color: 'var(--text-primary)' }}>Cost Origin:</strong> Commercial model API billing equivalent ($2.50/1M input). Infinia provides <strong>100% free</strong> prefix retrieval vs paying commercial API fees.
+                  </>
+                )}
+              </span>
+            </div>
+          </div>
+
           {/* Expandable math breakdown — tailored for each archetype */}
           <AnimatePresence>
             {showCostMath && (
@@ -1080,6 +1251,15 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
                       </div>
                       <div className="text-xs font-sans pt-1" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(118,185,0,0.15)', paddingTop: '6px' }}>
                         ✅ With DDN Infinia KV cache, cached input tokens bypass GPU prefill entirely — <strong style={{ color: '#76B900' }}>zero GPU time, zero compute cost</strong>. You only pay compute for new question tokens.
+                      </div>
+                      <div className="rounded p-2 text-xs font-sans flex items-start gap-2 mt-2" style={{ background: 'rgba(118,185,0,0.06)', border: '1px solid rgba(118,185,0,0.2)' }}>
+                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#76B900' }} />
+                        <div>
+                          <strong style={{ color: '#76B900' }}>Audience FAQ: &ldquo;We already own self-hosted GPUs — why show a cost?&rdquo;</strong>
+                          <p className="mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                            Self-hosted clusters don't pay per-token software bills, but GPUs and datacenter power are finite and expensive (~$3/GPU-hr amortized, ~700W/H100). When prompt prefill is bypassed by DDN Infinia, physical GPU compute cycles and VRAM are preserved — allowing your existing cluster to handle <strong>3–5× more concurrent users</strong> without procuring additional GPU servers.
+                          </p>
+                        </div>
                       </div>
                     </>
                   )}
@@ -1182,7 +1362,13 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
 
       {/* Session Stats Bar */}
       <div className="grid grid-cols-4 gap-4">
-        <MetricCard label="Session Savings"   value={`$${n(cumulativeSavings, 4)}`} highlight="green" icon={DollarSign} />
+        <MetricCard
+          label={pricingTier === 'self_hosted_h100' ? "Amortized Savings" : "Session Savings"}
+          value={`$${n(cumulativeSavings, 4)}`}
+          highlight="green"
+          icon={DollarSign}
+          subtext={pricingTier === 'self_hosted_h100' ? "Amortized compute freed" : pricingTier === 'ncp_provider' ? "Inference COGS preserved" : "API billing eliminated"}
+        />
         <MetricCard label="Cache Hit Rate"    value={`${hitRate}%`}                 highlight={hitRate > 0 ? 'green' : undefined} icon={Zap} />
         <MetricCard label="Tokens Saved"      value={totalTokensSaved.toLocaleString()} icon={Hash} />
         <MetricCard label="Conversation Turns" value={turns.length}                 icon={Database} />
@@ -1438,7 +1624,7 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
             </button>
           </div>
         ) : (
-          turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} onSelectQuestion={handleSelectSuggestion} />)
+          turns.map((turn, i) => <TurnRow key={turn.id} turn={turn} idx={i} onSelectQuestion={handleSelectSuggestion} pricingTier={pricingTier} />)
         )}
         <div ref={bottomRef} />
       </div>
