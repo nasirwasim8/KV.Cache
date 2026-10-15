@@ -221,7 +221,7 @@ function PanelHeader({ title, subtitle, isCache, source, latency }: {
         <div className="flex items-center gap-2">
           {isCache && isHit && (
             <>
-              <div className="badge badge-success text-xs">⚡ INFINIA HIT</div>
+              <div className="badge badge-success text-xs">INFINIA HIT</div>
               {latency !== undefined && <div className="text-xs font-mono" style={{ color: '#00C280' }}>{n(latency)}ms</div>}
             </>
           )}
@@ -476,21 +476,21 @@ function TurnRow({ turn, idx, onSelectQuestion }: { turn: Turn; idx: number; onS
                   <div className="flex items-center justify-between gap-1.5 font-semibold mb-1" style={{ color: '#1A81AF' }}>
                     <div className="flex items-center gap-1.5">
                       <Database className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span>Stored in Infinia — ask again for guaranteed cache hit:</span>
+                      <span>Stored in Infinia — ask again for cache hit:</span>
                     </div>
                     {(turn.right?.store_latency_ms ?? 0) > 0 && (
                       <span className="opacity-60 text-[10px] font-normal">({n(turn.right?.store_latency_ms)}ms write)</span>
                     )}
                   </div>
                   <div className="text-[11px] text-neutral-500 mb-2">
-                    Click any guaranteed variation below to test with 0ms prefill:
+                    Click any variation below to test with 0ms prefill:
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {getQuestionVariations(turn.userMessage).map(v => (
                       <button
                         key={v}
                         onClick={() => onSelectQuestion?.(v)}
-                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all flex items-center gap-1 hover:scale-105 active:scale-95 cursor-pointer"
+                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all flex items-center hover:scale-105 active:scale-95 cursor-pointer"
                         style={{
                           background: 'rgba(0,194,128,0.12)',
                           borderColor: 'rgba(0,194,128,0.35)',
@@ -498,7 +498,6 @@ function TurnRow({ turn, idx, onSelectQuestion }: { turn: Turn; idx: number; onS
                         }}
                         title={`Click to load "${v}" into input`}
                       >
-                        <Zap className="w-2.5 h-2.5" />
                         <span>{v}</span>
                       </button>
                     ))}
@@ -760,8 +759,8 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
         setCumulativeSavings(p => p + (result.savings?.cost_usd || 0))
         setTotalHits(p => p + 1)
         toast.success(
-          `⚡ INFINIA HIT — ${result.savings?.speedup_x ?? '?'}x faster · ${n(result.savings?.pct)}% cheaper`,
-          { duration: 4000, icon: '🗄️' }
+          `INFINIA HIT — ${result.savings?.speedup_x ?? '?'}x faster · ${n(result.savings?.pct)}% cheaper`,
+          { duration: 4000 }
         )
       } else {
         toast('◯ Cache MISS — stored in Infinia. Ask again to see the hit!', { duration: 3000, icon: '💾' })
@@ -1454,9 +1453,8 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
               borderColor: 'rgba(0,194,128,0.25)',
             }}>
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#00C280' }}>
-                <Zap className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>Test Cache Hit (Guaranteed · Zero Typo Risk):</span>
+              <div className="text-xs font-bold" style={{ color: '#00C280' }}>
+                <span>Test Cache Hit:</span>
               </div>
               <span className="text-[11px] text-neutral-400">
                 Click any option below to test with 0ms prefill
@@ -1471,7 +1469,7 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
                   <button
                     key={v}
                     onClick={() => handleSelectSuggestion(v)}
-                    className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95 cursor-pointer"
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all flex items-center hover:scale-105 active:scale-95 cursor-pointer"
                     style={{
                       background: isSelected ? '#00C280' : 'var(--surface-card)',
                       color: isSelected ? '#fff' : '#00875a',
@@ -1480,7 +1478,6 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
                     }}
                     title={`Click to load "${v}"`}
                   >
-                    <span>⚡</span>
                     <span>{v}</span>
                   </button>
                 )
@@ -1509,9 +1506,8 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
         {matchingVariations.length > 0 && (
           <div className="p-2.5 rounded-xl border flex flex-col gap-1.5 text-xs"
             style={{ background: 'var(--surface-secondary)', borderColor: 'rgba(0,194,128,0.35)' }}>
-            <div className="text-[11px] font-semibold text-neutral-500 flex items-center gap-1">
-              <Zap className="w-3 h-3 text-[#00C280]" />
-              <span>Matching Cached Variations (Click to select without typo):</span>
+            <div className="text-[11px] font-semibold text-neutral-500">
+              Matching Cached Variations (Click to select):
             </div>
             <div className="flex flex-wrap gap-1.5">
               {matchingVariations.slice(0, 5).map(m => (
@@ -1525,7 +1521,7 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
                     borderColor: 'rgba(0,194,128,0.35)',
                   }}
                 >
-                  ⚡ {m}
+                  {m}
                 </button>
               ))}
             </div>
@@ -1554,7 +1550,7 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
             style={inputIsCacheHitCandidate ? { background: '#00C280', boxShadow: '0 2px 8px rgba(0,194,128,0.35)' } : undefined}
           >
             {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
-            {loading ? 'Thinking...' : inputIsCacheHitCandidate ? '⚡ Test Hit' : 'Send'}
+            {loading ? 'Thinking...' : inputIsCacheHitCandidate ? 'Test Hit' : 'Send'}
           </button>
         </div>
       </div>
