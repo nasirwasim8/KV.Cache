@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Header from './components/Header'
 import DemoSidebar from './components/DemoSidebar'
+import WhenToCache from './pages/WhenToCache'
 import Configuration from './pages/Configuration'
 import ChatObservatory from './pages/ChatObservatory'
 import PrefixMultiplier from './pages/PrefixMultiplier'
@@ -13,43 +14,46 @@ import AIperfBenchmark from './pages/AIperfBenchmark'
 import KVReuseProof from './pages/KVReuseProof'
 
 const TABS = [
-  { id: 'configuration', label: 'Configuration',      icon: 'settings'   },
+  { id: 'decision',      label: 'When to Cache?',     icon: 'help-circle'},
   { id: 'observatory',   label: 'Chat Observatory',   icon: 'message-sq' },
   { id: 'prefix',        label: 'Prefix Multiplier',  icon: 'bar-chart'  },
   { id: 'roi',           label: 'ROI Calculator',     icon: 'calculator' },
   { id: 'aiperf',        label: 'AIperf Benchmark',   icon: 'activity'   },
   { id: 'kv-reuse',      label: 'KV Reuse Proof',     icon: 'refresh-cw' },
+  { id: 'configuration', label: 'Configuration',      icon: 'settings'   },
   { id: 'about',         label: 'Architecture',       icon: 'info'       },
 ]
 
 const HEADER_TABS = [
-  { id: 'configuration', label: 'Configuration' },
+  { id: 'start',         label: 'When to Cache?' },
   { id: 'demo',          label: 'Live Demos' },
   { id: 'benchmark',     label: 'AIperf + KV Reuse' },
   { id: 'about',         label: 'Architecture' },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('observatory')
+  const [activeTab, setActiveTab] = useState('decision')
 
   const handleHeaderTab = (id: string) => {
-    if (id === 'demo') setActiveTab('observatory')
+    if (id === 'start') setActiveTab('decision')
+    else if (id === 'demo') setActiveTab('observatory')
     else if (id === 'benchmark') setActiveTab('aiperf')
     else setActiveTab(id)
   }
 
   const headerActiveTab =
-    activeTab === 'observatory' || activeTab === 'prefix' ? 'demo' :
+    activeTab === 'decision' ? 'start' :
+    activeTab === 'observatory' || activeTab === 'prefix' || activeTab === 'roi' ? 'demo' :
     activeTab === 'aiperf' || activeTab === 'kv-reuse' ? 'benchmark' :
     activeTab
 
   // Full-screen animation mode — no chrome
   if (activeTab === 'animate') return (
-    <div onDoubleClick={() => setActiveTab('observatory')}>
+    <div onDoubleClick={() => setActiveTab('decision')}>
       <TokenAnimation />
       <div style={{ position:'fixed', top:12, right:16, fontSize:10, color:'rgba(255,255,255,0.2)',
         fontFamily:'monospace', zIndex:9999, userSelect:'none', cursor:'pointer' }}
-        onClick={() => setActiveTab('observatory')}>
+        onClick={() => setActiveTab('decision')}>
         ✕ exit
       </div>
     </div>
@@ -65,8 +69,9 @@ export default function App() {
             <DemoSidebar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
             <main className="flex-1 min-w-0 pb-16">
+              {activeTab === 'decision'      && <WhenToCache onNavigate={setActiveTab} />}
               {activeTab === 'configuration' && <Configuration />}
-              {activeTab === 'observatory'   && <ChatObservatory onNavigateToRoi={() => setActiveTab('roi')} />}
+              {activeTab === 'observatory'   && <ChatObservatory onNavigateToRoi={() => setActiveTab('roi')} onNavigateToDecision={() => setActiveTab('decision')} />}
               {activeTab === 'prefix'        && <PrefixMultiplier />}
               {activeTab === 'roi'           && <ROICalculator />}
               {activeTab === 'aiperf'        && <AIperfBenchmark />}

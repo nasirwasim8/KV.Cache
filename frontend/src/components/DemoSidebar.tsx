@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw, Trash2 } from 'lucide-react'
+import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw, Trash2, HelpCircle } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 interface Tab { id: string; label: string; icon: string }
 interface DemoSidebarProps { tabs: Tab[]; activeTab: string; onTabChange: (id: string) => void }
 
 const iconMap: Record<string, React.ReactNode> = {
+  'help-circle': <HelpCircle   className="w-5 h-5" />,
   settings:     <Settings      className="w-5 h-5" />,
   'message-sq': <MessageSquare className="w-5 h-5" />,
   'bar-chart':  <BarChart3     className="w-5 h-5" />,

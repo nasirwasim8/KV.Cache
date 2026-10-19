@@ -821,7 +821,7 @@ function TurnRow({ turn, idx, onSelectQuestion, pricingTier = 'self_hosted_h100'
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?: () => void } = {}) {
+export default function ChatObservatory({ onNavigateToRoi, onNavigateToDecision }: { onNavigateToRoi?: () => void; onNavigateToDecision?: () => void } = {}) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1204,6 +1204,16 @@ export default function ChatObservatory({ onNavigateToRoi }: { onNavigateToRoi?:
                 )}
               </span>
             </div>
+            {onNavigateToDecision && (
+              <button
+                onClick={onNavigateToDecision}
+                className="font-bold text-[10.5px] hover:underline cursor-pointer flex items-center gap-1 whitespace-nowrap ml-3"
+                style={{ color: PRICING_TIERS[pricingTier].color }}
+                title="Open the When to Cache? decision calculator"
+              >
+                <span>When to Cache? Model →</span>
+              </button>
+            )}
           </div>
 
           {/* Expandable math breakdown — tailored for each archetype */}
