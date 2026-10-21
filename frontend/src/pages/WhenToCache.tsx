@@ -9,13 +9,15 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
+  Zap,
+  HardDrive,
 } from 'lucide-react'
 
 interface WhenToCacheProps {
   onNavigate?: (tabId: string) => void
 }
 
-// ── Baseline Workload Constants ──
+// ── Baseline & Preset Constants ──
 const BASELINE = {
   recomputeMs: 800,
   lookupMs: 20,
@@ -23,8 +25,32 @@ const BASELINE = {
   hitRatePct: 80,
 }
 
+const PRESETS = {
+  baseline: {
+    label: 'Standard Baseline',
+    recomputeMs: 800,
+    lookupMs: 20,
+    transferMs: 150,
+    hitRatePct: 80,
+  },
+  infinia: {
+    label: 'DDN Infinia + RoCE',
+    recomputeMs: 800,
+    lookupMs: 2,
+    transferMs: 14,
+    hitRatePct: 85,
+  },
+  bottleneck: {
+    label: 'Storage Bottleneck (No Gain)',
+    recomputeMs: 500,
+    lookupMs: 150,
+    transferMs: 650,
+    hitRatePct: 80,
+  },
+}
+
 export default function WhenToCache({ onNavigate }: WhenToCacheProps) {
-  // ── Core Sliders (Exact from user reference) ──
+  // ── Core Sliders & Inputs (Unsealed ranges up to 5,000 ms) ──
   const [recomputeMs, setRecomputeMs] = useState(BASELINE.recomputeMs)
   const [lookupMs, setLookupMs] = useState(BASELINE.lookupMs)
   const [transferMs, setTransferMs] = useState(BASELINE.transferMs)
@@ -38,12 +64,16 @@ export default function WhenToCache({ onNavigate }: WhenToCacheProps) {
   const timeSavedMs = recomputeMs - expectedTimeMs
   const isBeneficial = expectedTimeMs < recomputeMs
   const hitIsBeneficial = hitLatencyMs < recomputeMs
+  const latencyPenaltyMs = hitLatencyMs - recomputeMs
 
-  const resetToBaseline = () => {
-    setRecomputeMs(BASELINE.recomputeMs)
-    setLookupMs(BASELINE.lookupMs)
-    setTransferMs(BASELINE.transferMs)
-    setHitRatePct(BASELINE.hitRatePct)
+  // Scale bars relative to maximum observed latency
+  const maxScaleMs = Math.max(recomputeMs, hitLatencyMs, expectedTimeMs, 100)
+
+  const applyPreset = (preset: typeof BASELINE) => {
+    setRecomputeMs(preset.recomputeMs)
+    setLookupMs(preset.lookupMs)
+    setTransferMs(preset.transferMs)
+    setHitRatePct(preset.hitRatePct)
   }
 
   const isAtBaseline =
@@ -75,7 +105,7 @@ export default function WhenToCache({ onNavigate }: WhenToCacheProps) {
           <span className="font-mono text-neutral-400">NVIDIA Hopper / Blackwell + DDN Infinia</span>
           {!isAtBaseline && (
             <button
-              onClick={resetToBaseline}
+              onClick={() => applyPreset(BASELINE)}
               className="flex items-center gap-1 hover:underline cursor-pointer font-medium"
               style={{ color: '#00C280' }}
             >
@@ -98,146 +128,287 @@ export default function WhenToCache({ onNavigate }: WhenToCacheProps) {
           This is the economic question that matters most.
         </p>
         <p className="text-xs md:text-sm text-neutral-500 max-w-3xl leading-relaxed">
-          Modern GPUs (H100, H200, RTX 5090) prefill tokens at thousands of tokens per second. If storage or network retrieval is slow, fetching cached KV tensors can be slower than letting the GPU compute from scratch. Use the interactive model below to evaluate workload assumptions and discover the threshold where caching outperforms recomputation.
+          Modern GPUs (H100, H200, RTX 5090) prefill tokens at thousands of tokens per second. If G4 Shared Storage lookup and network transfer are slow, retrieving cached KV tensors can take longer than recomputing them directly on GPU Tensor Cores. Use this unsealed interactive model to test realistic, high-latency, or optimized scenarios.
         </p>
       </div>
 
-      {/* ── Main Interactive KV Reuse Example Card (Exact Layout from Reference Image) ── */}
+      {/* ── Main Interactive KV Reuse Example Card ── */}
       <div
         className="rounded-2xl border p-6 md:p-8 space-y-6"
         style={{
           background: 'var(--surface-card)',
-          borderColor: 'var(--border-default)',
+          borderColor: isBeneficial ? 'var(--border-default)' : 'rgba(237,39,56,0.4)',
           boxShadow: 'var(--shadow-md)',
         }}
       >
+        {/* Card Header & Status Badges */}
         <div className="flex items-start justify-between flex-wrap gap-4 border-b pb-4" style={{ borderColor: 'var(--border-subtle)' }}>
           <div>
-            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-              Interactive KV reuse example
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                Interactive KV Reuse Feasibility Model
+              </h2>
+            </div>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Adjust the hypothetical workload assumptions to see when reuse becomes beneficial.
+              Compare GPU prefill time against NVIDIA G4 Shared Storage lookup and fabric transfer latency.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className="px-2.5 py-1 rounded-full text-xs font-semibold font-mono flex items-center gap-1"
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Quick Scenario Buttons */}
+            <button
+              onClick={() => applyPreset(PRESETS.baseline)}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer"
               style={{
-                background: isBeneficial ? 'rgba(0,194,128,0.1)' : 'rgba(237,39,56,0.1)',
-                color: isBeneficial ? '#00C280' : '#ED2738',
-                border: `1px solid ${isBeneficial ? 'rgba(0,194,128,0.3)' : 'rgba(237,39,56,0.3)'}`,
+                background: isAtBaseline ? 'rgba(26,129,175,0.15)' : 'var(--surface-secondary)',
+                borderColor: isAtBaseline ? '#1A81AF' : 'var(--border-subtle)',
+                color: isAtBaseline ? '#1A81AF' : 'var(--text-secondary)',
               }}
             >
-              {isBeneficial ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-              {isBeneficial ? 'Reuse Beneficial' : 'Recompute Faster'}
+              Baseline (63% Gain)
+            </button>
+            <button
+              onClick={() => applyPreset(PRESETS.infinia)}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer flex items-center gap-1"
+              style={{
+                background:
+                  recomputeMs === PRESETS.infinia.recomputeMs &&
+                  lookupMs === PRESETS.infinia.lookupMs &&
+                  transferMs === PRESETS.infinia.transferMs
+                    ? 'rgba(0,194,128,0.15)'
+                    : 'var(--surface-secondary)',
+                borderColor:
+                  recomputeMs === PRESETS.infinia.recomputeMs &&
+                  lookupMs === PRESETS.infinia.lookupMs &&
+                  transferMs === PRESETS.infinia.transferMs
+                    ? '#00C280'
+                    : 'var(--border-subtle)',
+                color: '#00C280',
+              }}
+            >
+              <Zap className="w-3 h-3" /> DDN Infinia (98% Gain)
+            </button>
+            <button
+              onClick={() => applyPreset(PRESETS.bottleneck)}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer flex items-center gap-1"
+              style={{
+                background:
+                  recomputeMs === PRESETS.bottleneck.recomputeMs &&
+                  lookupMs === PRESETS.bottleneck.lookupMs &&
+                  transferMs === PRESETS.bottleneck.transferMs
+                    ? 'rgba(237,39,56,0.15)'
+                    : 'var(--surface-secondary)',
+                borderColor:
+                  recomputeMs === PRESETS.bottleneck.recomputeMs &&
+                  lookupMs === PRESETS.bottleneck.lookupMs &&
+                  transferMs === PRESETS.bottleneck.transferMs
+                    ? '#ED2738'
+                    : 'var(--border-subtle)',
+                color: '#ED2738',
+              }}
+            >
+              <AlertTriangle className="w-3 h-3" /> Storage Bottleneck (No Gain)
+            </button>
+
+            {/* Verdict Badge */}
+            <span
+              className="px-3 py-1 rounded-full text-xs font-bold font-mono flex items-center gap-1.5"
+              style={{
+                background: isBeneficial ? 'rgba(0,194,128,0.12)' : 'rgba(237,39,56,0.15)',
+                color: isBeneficial ? '#00C280' : '#ED2738',
+                border: `1px solid ${isBeneficial ? 'rgba(0,194,128,0.4)' : 'rgba(237,39,56,0.5)'}`,
+              }}
+            >
+              {isBeneficial ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+              {isBeneficial ? 'KV Cache Effective' : 'NO GAIN WITH KV CACHE'}
             </span>
           </div>
         </div>
 
-        {/* ── 4 Sliders (Exact from Image) ── */}
-        <div className="space-y-5">
+        {/* ── 4 Unsealed Sliders with Direct Numeric Inputs ── */}
+        <div className="space-y-6">
           {/* 1. GPU recompute time */}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                GPU recompute time
-              </label>
-              <div className="flex items-center gap-1 font-mono font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
-                <span>{recomputeMs}</span>
+              <div>
+                <label className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  GPU recompute time
+                </label>
+                <div className="text-[11px] text-neutral-400">
+                  Time for GPU Tensor Cores to compute KV tensors from scratch (prefill)
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={10}
+                  max={10000}
+                  step={10}
+                  value={recomputeMs}
+                  onChange={e => setRecomputeMs(Math.max(1, Number(e.target.value)))}
+                  className="w-20 px-2 py-1 text-right font-mono font-bold text-sm rounded-lg border focus:outline-none"
+                  style={{
+                    background: 'var(--surface-secondary)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
                 <span className="text-xs font-normal text-neutral-400">ms</span>
               </div>
             </div>
             <input
               type="range"
               min={50}
-              max={3000}
+              max={5000}
               step={10}
-              value={recomputeMs}
+              value={Math.min(recomputeMs, 5000)}
               onChange={e => setRecomputeMs(Number(e.target.value))}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #ED2738 ${((recomputeMs - 50) / (3000 - 50)) * 100}%, var(--surface-secondary) ${((recomputeMs - 50) / (3000 - 50)) * 100}%)`,
+                background: `linear-gradient(to right, #ED2738 ${((Math.min(recomputeMs, 5000) - 50) / (5000 - 50)) * 100}%, var(--surface-secondary) ${((Math.min(recomputeMs, 5000) - 50) / (5000 - 50)) * 100}%)`,
                 accentColor: '#ED2738',
               }}
             />
             <div className="flex justify-between text-[10px] text-neutral-400">
               <span>50 ms (Short prompt)</span>
-              <span>800 ms (Baseline)</span>
-              <span>3,000 ms (Heavy context)</span>
+              <span>800 ms (Baseline prefill)</span>
+              <span>5,000 ms (Deep 32k+ Agent context)</span>
             </div>
           </div>
 
-          {/* 2. Storage lookup time */}
-          <div className="space-y-1.5">
+          {/* 2. NVIDIA G4 Shared Storage lookup time */}
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                Storage lookup time
-              </label>
-              <div className="flex items-center gap-1 font-mono font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
-                <span>{lookupMs}</span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <label className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    G4 Shared Storage lookup time
+                  </label>
+                  <span
+                    className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
+                    style={{ background: 'rgba(26,129,175,0.15)', color: '#1A81AF' }}
+                  >
+                    NVIDIA G4 Hierarchy
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-400">
+                  Metadata query & index search across cluster shared storage (DDN Infinia, S3, NFS)
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={5000}
+                  step={1}
+                  value={lookupMs}
+                  onChange={e => setLookupMs(Math.max(1, Number(e.target.value)))}
+                  className="w-20 px-2 py-1 text-right font-mono font-bold text-sm rounded-lg border focus:outline-none"
+                  style={{
+                    background: 'var(--surface-secondary)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
                 <span className="text-xs font-normal text-neutral-400">ms</span>
               </div>
             </div>
             <input
               type="range"
               min={1}
-              max={100}
+              max={3000}
               step={1}
-              value={lookupMs}
+              value={Math.min(lookupMs, 3000)}
               onChange={e => setLookupMs(Number(e.target.value))}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #1A81AF ${((lookupMs - 1) / (100 - 1)) * 100}%, var(--surface-secondary) ${((lookupMs - 1) / (100 - 1)) * 100}%)`,
+                background: `linear-gradient(to right, #1A81AF ${((Math.min(lookupMs, 3000) - 1) / (3000 - 1)) * 100}%, var(--surface-secondary) ${((Math.min(lookupMs, 3000) - 1) / (3000 - 1)) * 100}%)`,
                 accentColor: '#1A81AF',
               }}
             />
             <div className="flex justify-between text-[10px] text-neutral-400">
-              <span>1 ms (Fast NVMe index)</span>
-              <span>20 ms (Baseline)</span>
-              <span>100 ms (High latency storage)</span>
+              <span>1 ms (DDN Infinia NVMe-oF)</span>
+              <span>20 ms (Baseline lookup)</span>
+              <span>3,000 ms (High-latency object store)</span>
             </div>
           </div>
 
           {/* 3. KV transfer and restore time */}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                KV transfer and restore time
-              </label>
-              <div className="flex items-center gap-1 font-mono font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
-                <span>{transferMs}</span>
+              <div>
+                <label className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  KV transfer and restore time
+                </label>
+                <div className="text-[11px] text-neutral-400">
+                  Network fabric transit from G4 Shared Storage into GPU HBM and tensor deserialization
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  step={2}
+                  value={transferMs}
+                  onChange={e => setTransferMs(Math.max(1, Number(e.target.value)))}
+                  className="w-20 px-2 py-1 text-right font-mono font-bold text-sm rounded-lg border focus:outline-none"
+                  style={{
+                    background: 'var(--surface-secondary)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
                 <span className="text-xs font-normal text-neutral-400">ms</span>
               </div>
             </div>
             <input
               type="range"
               min={2}
-              max={800}
+              max={5000}
               step={2}
-              value={transferMs}
+              value={Math.min(transferMs, 5000)}
               onChange={e => setTransferMs(Number(e.target.value))}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #1A81AF ${((transferMs - 2) / (800 - 2)) * 100}%, var(--surface-secondary) ${((transferMs - 2) / (800 - 2)) * 100}%)`,
+                background: `linear-gradient(to right, #1A81AF ${((Math.min(transferMs, 5000) - 2) / (5000 - 2)) * 100}%, var(--surface-secondary) ${((Math.min(transferMs, 5000) - 2) / (5000 - 2)) * 100}%)`,
                 accentColor: '#1A81AF',
               }}
             />
             <div className="flex justify-between text-[10px] text-neutral-400">
-              <span>8 ms (RoCE / GPU-Direct)</span>
-              <span>150 ms (Baseline)</span>
-              <span>800 ms (Slow TCP fabric)</span>
+              <span>8 ms (DDN GPU-Direct RoCE)</span>
+              <span>150 ms (Baseline network)</span>
+              <span>5,000 ms (Slow TCP fabric / WAN)</span>
             </div>
           </div>
 
           {/* 4. Cache hit rate */}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                Cache hit rate
-              </label>
-              <div className="flex items-center gap-1 font-mono font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
-                <span>{hitRatePct}%</span>
+              <div>
+                <label className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  Cache hit rate
+                </label>
+                <div className="text-[11px] text-neutral-400">
+                  Percentage of requests matching previously stored prompt prefixes or documents
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={hitRatePct}
+                  onChange={e => setHitRatePct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                  className="w-20 px-2 py-1 text-right font-mono font-bold text-sm rounded-lg border focus:outline-none"
+                  style={{
+                    background: 'var(--surface-secondary)',
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                <span className="text-xs font-normal text-neutral-400">%</span>
               </div>
             </div>
             <input
@@ -254,14 +425,14 @@ export default function WhenToCache({ onNavigate }: WhenToCacheProps) {
               }}
             />
             <div className="flex justify-between text-[10px] text-neutral-400">
-              <span>0% (Cold / No sharing)</span>
+              <span>0% (Cold / Zero sharing)</span>
               <span>80% (Baseline)</span>
-              <span>100% (Full reuse)</span>
+              <span>100% (Full reuse / Static system prompt)</span>
             </div>
           </div>
         </div>
 
-        {/* ── KPI Outputs (Exact from Reference Image) ── */}
+        {/* ── KPI Outputs ── */}
         <div className="pt-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Expected time */}
@@ -275,137 +446,182 @@ export default function WhenToCache({ onNavigate }: WhenToCacheProps) {
               </div>
             </div>
 
-            {/* Expected time saved */}
+            {/* Expected time saved / Penalty */}
             <div>
-              <div className="text-xs font-medium text-neutral-500 mb-1">Expected time saved</div>
+              <div className="text-xs font-medium text-neutral-500 mb-1">
+                {isBeneficial ? 'Expected time saved' : 'Latency impact'}
+              </div>
               <div
                 className="font-mono text-2xl md:text-3xl font-bold"
                 style={{ color: isBeneficial ? '#00C280' : '#ED2738' }}
               >
-                {timeSavedPct >= 0 ? `${timeSavedPct.toFixed(1)}%` : `${timeSavedPct.toFixed(1)}%`}
+                {isBeneficial ? `${timeSavedPct.toFixed(1)}%` : `NO GAIN (${timeSavedPct.toFixed(1)}%)`}
               </div>
               <div className="text-[11px] font-medium mt-0.5" style={{ color: isBeneficial ? '#00C280' : '#ED2738' }}>
-                {isBeneficial ? `-${timeSavedMs.toFixed(0)} ms reduction` : `+${Math.abs(timeSavedMs).toFixed(0)} ms penalty`}
+                {isBeneficial
+                  ? `-${timeSavedMs.toFixed(0)} ms reduction per query`
+                  : `+${Math.abs(timeSavedMs).toFixed(0)} ms penalty per query`}
               </div>
             </div>
 
             {/* Cache Hit Latency */}
             <div>
               <div className="text-xs font-medium text-neutral-500 mb-1">Hit Retrieval Latency</div>
-              <div className="font-mono text-2xl md:text-3xl font-bold" style={{ color: '#1A81AF' }}>
+              <div
+                className="font-mono text-2xl md:text-3xl font-bold"
+                style={{ color: hitIsBeneficial ? '#1A81AF' : '#ED2738' }}
+              >
                 {hitLatencyMs} ms
               </div>
-              <div className="text-[11px] text-neutral-400 mt-0.5">
-                Lookup {lookupMs}ms + Transfer {transferMs}ms
+              <div
+                className="text-[11px] mt-0.5"
+                style={{ color: hitIsBeneficial ? 'var(--text-secondary)' : '#ED2738' }}
+              >
+                {hitIsBeneficial
+                  ? `G4 (${lookupMs}ms) + Transfer (${transferMs}ms)`
+                  : `SLOWER than GPU (${hitLatencyMs}ms > ${recomputeMs}ms)`}
               </div>
             </div>
 
             {/* GPU Cycles Freed */}
             <div>
               <div className="text-xs font-medium text-neutral-500 mb-1">GPU Compute Avoided</div>
-              <div className="font-mono text-2xl md:text-3xl font-bold" style={{ color: '#76B900' }}>
+              <div
+                className="font-mono text-2xl md:text-3xl font-bold"
+                style={{ color: hitIsBeneficial ? '#76B900' : '#ED2738' }}
+              >
                 {hitRatePct}%
               </div>
               <div className="text-[11px] text-neutral-400 mt-0.5">
-                Prefill skipped on cache hit
+                {hitIsBeneficial ? 'Prefill skipped on cache hit' : 'Skipped, but storage delay cancels gain'}
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Dynamic Result Message (Exact phrasing from Reference image + adaptive) ── */}
-        <div
-          className="rounded-xl p-4 text-xs md:text-sm leading-relaxed border"
-          style={{
-            background: isBeneficial ? 'rgba(0,194,128,0.06)' : 'rgba(237,39,56,0.06)',
-            borderColor: isBeneficial ? 'rgba(0,194,128,0.25)' : 'rgba(237,39,56,0.25)',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          {isBeneficial ? (
-            <div className="flex items-start gap-2.5">
-              <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#00C280' }} />
-              <div>
-                <strong style={{ color: 'var(--text-primary)' }}>
-                  A successful cache hit is faster than recomputation under these assumptions.
-                </strong>{' '}
-                The expected result is a latency reduction of{' '}
-                <strong style={{ color: '#00C280' }}>{timeSavedPct.toFixed(1)}%</strong> ({recomputeMs} ms to {expectedTimeMs.toFixed(0)} ms average response). On pure hits, requests return in{' '}
-                <strong>{hitLatencyMs} ms</strong>, bypassing {(recomputeMs - hitLatencyMs).toFixed(0)} ms of heavy GPU prefill work.
-              </div>
+        {/* ── Dynamic Result & Architectural Verdict (Explicit NO GAIN callout) ── */}
+        {isBeneficial ? (
+          <div
+            className="rounded-xl p-4 md:p-5 border space-y-2"
+            style={{
+              background: 'rgba(0, 194, 128, 0.08)',
+              borderColor: 'rgba(0, 194, 128, 0.35)',
+            }}
+          >
+            <div className="flex items-center gap-2 text-emerald-400 font-extrabold text-sm md:text-base">
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-500" />
+              <span>KV CACHE IS EFFECTIVE ({timeSavedPct.toFixed(1)}% LATENCY REDUCTION)</span>
             </div>
-          ) : (
-            <div className="flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ED2738' }} />
-              <div>
-                <strong style={{ color: '#ED2738' }}>
-                  Recomputation is faster than retrieval under these assumptions.
-                </strong>{' '}
-                The expected result is a latency penalty of{' '}
-                <strong>{Math.abs(timeSavedPct).toFixed(1)}%</strong>. Because retrieval latency ({hitLatencyMs} ms) exceeds GPU recompute time ({recomputeMs} ms), storing KV cache on this infrastructure is counter-productive without lower latency storage fabric.
-              </div>
+            <p className="text-xs md:text-sm text-neutral-300 leading-relaxed">
+              G4 Shared Storage Lookup (<strong>{lookupMs} ms</strong>) + KV Transfer (<strong>{transferMs} ms</strong>) ={' '}
+              <strong className="text-emerald-400 font-mono text-sm">{hitLatencyMs} ms</strong> retrieval latency.
+              Cache hits return <strong>{(recomputeMs - hitLatencyMs).toFixed(0)} ms faster</strong> than GPU recomputing from scratch (<strong>{recomputeMs} ms</strong>).
+            </p>
+            <div className="text-xs text-neutral-400 leading-relaxed pt-2 border-t border-emerald-500/20">
+              With an assumed {hitRatePct}% hit rate, blended query response drops from <strong>{recomputeMs} ms</strong> to{' '}
+              <strong>{expectedTimeMs.toFixed(0)} ms</strong> (saving <strong className="text-emerald-400">{timeSavedPct.toFixed(1)}%</strong> overall latency). GPU prefill compute is bypassed on cache hits, directly freeing HBM and Tensor Cores for greater multi-tenant concurrency.
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div
+            className="rounded-xl p-4 md:p-5 border space-y-2.5"
+            style={{
+              background: 'rgba(237, 39, 56, 0.09)',
+              borderColor: 'rgba(237, 39, 56, 0.45)',
+            }}
+          >
+            <div className="flex items-center gap-2 text-red-500 font-extrabold text-sm md:text-base">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <span>NO GAIN WITH KV CACHE — RECOMPUTATION IS FASTER</span>
+            </div>
+            <p className="text-xs md:text-sm text-neutral-200 leading-relaxed">
+              G4 Shared Storage Lookup (<strong>{lookupMs} ms</strong>) + KV Transfer (<strong>{transferMs} ms</strong>) ={' '}
+              <strong className="text-red-400 font-mono text-base">{hitLatencyMs} ms</strong> retrieval latency.
+              This takes <strong className="text-red-400">+{latencyPenaltyMs > 0 ? latencyPenaltyMs : 0} ms longer</strong> than letting GPU Tensor Cores recompute tokens directly (<strong>{recomputeMs} ms</strong>).
+            </p>
+            <div className="text-xs text-neutral-300 leading-relaxed pt-2 border-t border-red-500/25">
+              <strong>Why there is NO GAIN:</strong> When storage retrieval ({hitLatencyMs} ms) is slower than GPU compute ({recomputeMs} ms), fetching cached KV tensors from storage causes a net latency penalty of{' '}
+              <strong className="text-red-400">+{Math.abs(timeSavedPct).toFixed(1)}% (+{Math.abs(timeSavedMs).toFixed(0)} ms)</strong>.
+              In this scenario, KV caching is counter-productive. To unlock KV cache benefits, storage and fabric latency must be reduced below GPU recompute time using high-speed fabric (such as DDN Infinia GPU-Direct RDMA / RoCE with sub-15ms transfer).
+            </div>
+          </div>
+        )}
 
-        {/* ── Visual Comparison Bar: Recompute vs Hit vs Expected ── */}
+        {/* ── Visual Latency Waterfall Breakdown (Dynamically Scaled) ── */}
         <div className="space-y-3 pt-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-            Latency Comparison Breakdown
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+              Latency Comparison Breakdown
+            </span>
+            <span className="text-[11px] text-neutral-400 font-mono">
+              Normalized against peak latency ({maxScaleMs.toFixed(0)} ms)
+            </span>
           </div>
-          <div className="space-y-2 text-xs">
+
+          <div className="space-y-2.5 text-xs">
             {/* 1. Baseline Recompute */}
             <div className="flex items-center gap-3">
-              <span className="w-32 truncate text-neutral-400 font-mono text-[11px]">Full Recompute:</span>
-              <div className="flex-1 h-5 rounded-lg overflow-hidden relative flex items-center" style={{ background: 'var(--surface-secondary)' }}>
+              <span className="w-36 truncate text-neutral-400 font-mono text-[11px]">Full Recompute:</span>
+              <div className="flex-1 h-6 rounded-lg overflow-hidden relative flex items-center" style={{ background: 'var(--surface-secondary)' }}>
                 <div
                   className="h-full rounded-lg transition-all duration-500 flex items-center px-2 text-[10px] font-mono text-white font-bold"
-                  style={{ width: '100%', background: '#ED2738' }}
+                  style={{
+                    width: `${Math.min((recomputeMs / maxScaleMs) * 100, 100)}%`,
+                    background: '#ED2738',
+                  }}
                 >
-                  {recomputeMs} ms (Baseline GPU Prefill)
+                  {recomputeMs} ms (GPU Prefill Baseline)
                 </div>
               </div>
             </div>
 
-            {/* 2. Cache Hit Latency */}
+            {/* 2. Cache Hit Retrieval */}
             <div className="flex items-center gap-3">
-              <span className="w-32 truncate text-neutral-400 font-mono text-[11px]">Cache Hit Retrieval:</span>
-              <div className="flex-1 h-5 rounded-lg overflow-hidden relative flex items-center" style={{ background: 'var(--surface-secondary)' }}>
+              <span className="w-36 truncate text-neutral-400 font-mono text-[11px]">Cache Hit Retrieval:</span>
+              <div className="flex-1 h-6 rounded-lg overflow-hidden relative flex items-center" style={{ background: 'var(--surface-secondary)' }}>
                 <div
                   className="h-full rounded-lg transition-all duration-500 flex items-center px-2 text-[10px] font-mono font-bold"
                   style={{
-                    width: `${Math.min((hitLatencyMs / recomputeMs) * 100, 100)}%`,
-                    background: hitIsBeneficial ? '#00C280' : '#FF7600',
+                    width: `${Math.min((hitLatencyMs / maxScaleMs) * 100, 100)}%`,
+                    background: hitIsBeneficial ? '#00C280' : '#ED2738',
                     color: '#fff',
                   }}
                 >
-                  {hitLatencyMs} ms ({hitIsBeneficial ? `${Math.round((1 - hitLatencyMs / recomputeMs) * 100)}% faster` : 'slower'})
+                  {hitLatencyMs} ms ({hitIsBeneficial ? `${Math.round((1 - hitLatencyMs / recomputeMs) * 100)}% faster than GPU` : `NO GAIN · ${latencyPenaltyMs} ms SLOWER than GPU`})
                 </div>
               </div>
             </div>
 
             {/* 3. Expected Time (Blended) */}
             <div className="flex items-center gap-3">
-              <span className="w-32 truncate text-neutral-400 font-mono text-[11px]">Expected Average:</span>
-              <div className="flex-1 h-5 rounded-lg overflow-hidden relative flex items-center" style={{ background: 'var(--surface-secondary)' }}>
+              <span className="w-36 truncate text-neutral-400 font-mono text-[11px]">Expected Average:</span>
+              <div className="flex-1 h-6 rounded-lg overflow-hidden relative flex items-center" style={{ background: 'var(--surface-secondary)' }}>
                 <div
                   className="h-full rounded-lg transition-all duration-500 flex items-center px-2 text-[10px] font-mono font-bold"
                   style={{
-                    width: `${Math.min((expectedTimeMs / recomputeMs) * 100, 100)}%`,
+                    width: `${Math.min((expectedTimeMs / maxScaleMs) * 100, 100)}%`,
                     background: isBeneficial ? 'linear-gradient(90deg, #1A81AF, #00C280)' : '#ED2738',
                     color: '#fff',
                   }}
                 >
-                  {expectedTimeMs.toFixed(0)} ms ({timeSavedPct >= 0 ? `${timeSavedPct.toFixed(1)}% saved` : 'penalty'})
+                  {expectedTimeMs.toFixed(0)} ms ({timeSavedPct >= 0 ? `${timeSavedPct.toFixed(1)}% saved` : `NO GAIN · ${Math.abs(timeSavedPct).toFixed(1)}% penalty`})
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Footnote (Exact from Reference Image) ── */}
-        <div className="text-[11px] text-neutral-400 border-t pt-3" style={{ borderColor: 'var(--border-subtle)' }}>
-          Simplified sequential latency model. Misses are assumed to fall back to recomputation without extra lookup penalty. Real systems may overlap transfers with compute and incur additional scheduling, lookup, and restoration costs.
+        {/* ── NVIDIA G4 Architecture Footnote ── */}
+        <div className="text-[11px] text-neutral-400 border-t pt-3 space-y-1.5" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="font-semibold text-neutral-300">
+            NVIDIA Inference Memory Hierarchy & Mathematical Rule:
+          </div>
+          <div>
+            In NVIDIA LLM inference architectures, memory is organized into distinct tiers: <span className="font-mono text-neutral-300">G1</span> = GPU HBM, <span className="font-mono text-neutral-300">G2</span> = Host CPU DRAM, <span className="font-mono text-neutral-300">G3</span> = Local NVMe Flash, and <span className="font-mono text-neutral-300">G4</span> = Enterprise Shared / Networked Storage.
+          </div>
+          <div>
+            <strong>The Fundamental Rule:</strong> Whenever <span className="font-mono text-neutral-300">T_lookup(G4) + T_transfer &ge; T_recompute(GPU)</span>, caching produces <strong>NO GAIN</strong>. High-performance storage fabric like DDN Infinia over RoCE/RDMA reduces G4 retrieval latency to &lt;16 ms, ensuring KV cache consistently wins.
+          </div>
         </div>
       </div>
 
