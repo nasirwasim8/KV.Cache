@@ -203,7 +203,8 @@ export default function ROICalculator() {
     window.addEventListener('open-demo-modal', handleOpenDemo)
     return () => window.removeEventListener('open-demo-modal', handleOpenDemo)
   }, [])
-  const YOUTUBE_DEMO_URL = '' // Drop in your YouTube embed URL here when available (e.g. https://www.youtube.com/embed/xxxxxx)
+  const YOUTUBE_DEMO_URL = 'https://www.youtube.com/embed/ix97_rhBs6A'
+  const YOUTUBE_WATCH_URL = 'https://www.youtube.com/watch?v=ix97_rhBs6A'
   const initial = PRESETS[0]
   const [activePreset, setActivePreset]   = useState(initial.id)
   const [systemTokens, setSystemTokens]   = useState(initial.systemTokens)
@@ -953,15 +954,26 @@ export default function ROICalculator() {
 
                 {/* Modal Footer Actions */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                  <a
-                    href="https://www.ddn.com/company/contact-us/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-[var(--ddn-red)] hover:underline inline-flex items-center gap-1.5"
-                  >
-                    <span>Schedule 1-on-1 Live Testbed Demonstration</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <a
+                      href="https://www.ddn.com/company/contact-us/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-bold text-[var(--ddn-red)] hover:underline inline-flex items-center gap-1.5"
+                    >
+                      <span>Schedule 1-on-1 Live Testbed Demonstration</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <a
+                      href={YOUTUBE_WATCH_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:underline inline-flex items-center gap-1.5"
+                    >
+                      <span>Watch on YouTube</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
 
                   <button
                     onClick={() => setShowDemoModal(false)}
