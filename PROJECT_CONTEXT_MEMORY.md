@@ -1,6 +1,7 @@
 # DDN Infinia KV Cache Observatory — Master Project Context & Memory
 > **Location:** `/home/nwasim/projects/ddn-kv-cache/PROJECT_CONTEXT_MEMORY.md`  
 > **Repository:** `https://github.com/nasirwasim8/KV.Cache.git` (Branch: `main`)  
+> **Standalone ROI Repository:** `/home/nwasim/projects/ddn-roi-standalone` (`https://github.com/nasirwasim8/ddn-roi-calculator.git`, Deployed to `https://ddn-kv-roi.vercel.app`)  
 > **Target Flagship Event:** NVIDIA GTC Berlin 2026 & Executive Customer Demos  
 > **Last Updated:** October 2026
 
@@ -77,7 +78,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server \
 
 ---
 
-## 3. Module-by-Module Application Breakdown
+## 3. Module-by-Module Application Breakdown (Full Suite)
 
 ### Tab 1: When to Cache? (`frontend/src/pages/WhenToCache.tsx`)
 - **Role:** Default Landing Page (`activeTab = 'decision'`) specifically crafted for GTC Berlin 2026.
@@ -145,7 +146,20 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server \
 
 ---
 
-## 4. Technical Architecture Audit & Realities
+## 4. Standalone Public ROI Calculator (`ddn-roi-standalone`)
+
+In addition to the internal full observatory, there is a dedicated standalone public repository deployed on Vercel:
+- **Local Directory:** `/home/nwasim/projects/ddn-roi-standalone`
+- **GitHub Repository:** `https://github.com/nasirwasim8/ddn-roi-calculator.git`
+- **Public URL:** `https://ddn-kv-roi.vercel.app` (Deployment managed automatically by Vercel on pushes to `main` and `master`).
+- **Core Capabilities:**
+  - **Standalone ROI Analysis:** Neocloud vs Enterprise Self-Hosted pricing models, customizable daily request volume, token sizes, hit rate.
+  - **Live YouTube Video Modal:** Embedded playback via `https://www.youtube.com/embed/ix97_rhBs6A` and direct watch link `https://www.youtube.com/watch?v=ix97_rhBs6A`.
+  - **Executive PDF Export:** Built-in PDF report generator (`html2canvas` + `jspdf`) allowing sales/field engineers to input customer names, capture cluster telemetry, and generate branded executive summaries with official DDN legal disclaimers.
+
+---
+
+## 5. Technical Architecture Audit & Realities
 
 During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, and `ecosystem.config.js`:
 1. **Where do 50ms warm hits come from?**
@@ -160,7 +174,7 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
 
 ---
 
-## 5. Development & Deployment Operational Rules
+## 6. Development & Deployment Operational Rules
 
 ### 1. Working Across Windows & WSL
 - Direct writing from Windows tools to `\\wsl$\...` can fail or hang.
@@ -173,12 +187,19 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
   3. Compile and verify with `npm run build`.
   4. Restart PM2: `wsl -e pm2 restart ddn-kvc-frontend`.
 
-### 2. Styling & Editorial Principles
+### 2. Updating Standalone ROI (`ddn-roi-standalone`)
+- When modifying the public ROI tool:
+  1. Apply changes to `/home/nwasim/projects/ddn-roi-standalone/src/...`.
+  2. Run `npm run build` in `/home/nwasim/projects/ddn-roi-standalone`.
+  3. Commit and push to both `origin main` and `origin master` (`git push origin main && git push origin main:master`).
+  4. Vercel will auto-deploy to `https://ddn-kv-roi.vercel.app` within ~30 seconds.
+
+### 3. Styling & Editorial Principles
 - **No Emojis on Presentation Pages:** Maintain clean, enterprise-grade presentation styling (use Lucide SVG icons instead).
 - **NVIDIA Alignment:** Always refer to shared cluster storage as **G4 Shared Storage** per NVIDIA's official inference memory hierarchy.
 - **Explicit Failure Modes:** If storage latency exceeds GPU recompute time, always display **NO GAIN WITH KV CACHE**.
 
-### 3. Git Workflow
+### 4. Git Workflow
 - Always verify `git status` and `git diff` before committing.
 - Commit messages must follow Conventional Commits (e.g., `feat:`, `refactor:`, `fix:`).
-- Always push to `origin main`.
+- Always push to remote tracking branches.
