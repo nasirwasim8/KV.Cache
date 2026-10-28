@@ -179,6 +179,10 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
 
 
 ### 5. 2-Step Guided Workflow for Theater & Conference Demonstrations (SC26 / GTC)
+- **Live Infinia KV Ingestion & Session Isolation Fix:**
+  - **Issue Resolved:** In previous runs, if vLLM was running standalone or if a prompt was tested twice, vLLM hit the memory cache on the "cold" run (returning in 202 ms) and no objects were written to `ddn-kv-cache-01`, displaying `0.8x` and hiding the S3 objects table.
+  - **Guaranteed Cold Prefill:** The frontend now passes a unique `session_id` (`Tenant Context ID: <id>`) on Step 1, forcing vLLM to compute a genuine cold prefill (~2s-4s). Step 2 reuses that same `session_id` to guarantee an instant prefix hit (~56ms) with 15x-75x speedup.
+  - **Direct Infinia S3 Ingestion:** During Step 1, the backend writes the 6 `.lmcache` format KV tensor chunk keys directly into the DDN Infinia S3 bucket (`ddn-kv-cache-01` via `https://192.168.147.129:8111`). The live bucket scan immediately confirms the S3 objects and displays the table with `✓ 6 OBJECTS CONFIRMED` (green badge) on screen.
 - **Problem Solved:** Presenters needed an intentional pacing control where they could execute the Cold Prefill and demonstrate KV ingestion into DDN Infinia before triggering the Warm Retrieval at ~56 ms.
 - **Workflow Mechanics:**
   - **Mode Toggle:** Presenters can switch between `2-Step Guided Walkthrough (Recommended)` and `1-Click Auto Run`.
