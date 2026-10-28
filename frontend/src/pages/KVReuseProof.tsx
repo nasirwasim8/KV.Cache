@@ -1039,7 +1039,7 @@ export default function KVReuseProof() {
 
           {/* Confirmed objects list — real S3 keys */}
           {activeConfirmedObjects && activeConfirmedObjects.length > 0 ? (
-            <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 380, overflowY: 'auto' }}>
               {activeConfirmedObjects.map((obj, i) => (
                 <div key={i} className="px-4 py-2.5 flex items-center gap-3"
                   style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,

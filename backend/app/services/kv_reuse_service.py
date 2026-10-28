@@ -33,69 +33,33 @@ def _make_s3_client():
         return None
 
 
-def _list_infinia_objects(limit: int = 12) -> list[dict]:
+def _list_infinia_objects(limit: int = 200) -> list[dict]:
     """
-    List objects from the Infinia bucket.
-    Returns list of {key, size_bytes, size_mb, last_modified}.
+    List all objects from the Infinia bucket, mirroring the live bucket contents.
+    Returns a list of dicts: {key, size_bytes, size_mb, last_modified}.
     """
     client = _make_s3_client()
     if not client:
         return []
     try:
-        resp = client.list_objects_v2(Bucket=settings.infinia_bucket)
+        paginator = client.get_paginator("list_objects_v2")
         found = []
-        for obj in resp.get("Contents", []):
-            lm = obj["LastModified"]
-            if lm.tzinfo is None:
-                lm = lm.replace(tzinfo=timezone.utc)
-            # Display real 32.5 MB tensor chunk size if descriptor probe
-            size_mb = 32.5 if obj["Size"] < 1024 else round(obj["Size"] / (1024 * 1024), 1)
-            found.append({
-                "key":           obj["Key"],
-                "size_bytes":    obj["Size"],
-                "size_mb":       size_mb,
-                "last_modified": lm.isoformat(),
-            })
+        for page in paginator.paginate(Bucket=settings.infinia_bucket):
+            for obj in page.get("Contents", []):
+                lm = obj["LastModified"]
+                if lm.tzinfo is None:
+                    lm = lm.replace(tzinfo=timezone.utc)
+                size_mb = round(obj["Size"] / (1024 * 1024), 1)
+                found.append({
+                    "key":           obj["Key"],
+                    "size_bytes":    obj["Size"],
+                    "size_mb":       size_mb,
+                    "last_modified": lm.isoformat(),
+                })
         return sorted(found, key=lambda x: x["last_modified"], reverse=True)[:limit]
     except Exception as e:
         logger.warning(f"Infinia object lookup failed: {e}")
         return []
-
-
-def _persist_kv_tensors_to_infinia(system_prompt: str, prefix_tokens: int) -> list[dict]:
-    """
-    Persist KV tensor chunks for this prompt into DDN Infinia S3 bucket.
-    Writes the chunk keys into ddn-kv-cache-01 and returns the confirmed object list.
-    """
-    client = _make_s3_client()
-    if not client:
-        return []
-
-    prefix_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
-    num_chunks = 6
-    bytes_per_token = 131072
-    total_kv_mb = round((prefix_tokens * bytes_per_token) / (1024 * 1024), 1)
-    chunk_mb = round(total_kv_mb / num_chunks, 1)
-
-    try:
-        for i in range(num_chunks):
-            chunk_hash = hashlib.sha256(f"{prefix_hash}_{i}".encode()).hexdigest()[:16]
-            key = f"_home_nwasim_models_Llama-3.1-8B-Instruct@1@0@{chunk_hash}@bfloat16"
-            client.put_object(
-                Bucket=settings.infinia_bucket,
-                Key=key,
-                Body=f"DDN-Infinia-KV-Tensor-Chunk-{i}-tokens-256".encode(),
-                Metadata={
-                    "tensor_mb": str(chunk_mb),
-                    "chunk_index": str(i),
-                    "model": "Llama-3.1-8B-Instruct",
-                    "dtype": "bfloat16"
-                }
-            )
-    except Exception as e:
-        logger.warning(f"Failed to write KV chunks to Infinia: {e}")
-
-    return _list_infinia_objects(limit=num_chunks)
 
 # ── Preset long-context documents ────────────────────────────────────────────
 PRESET_DOCUMENTS = {
@@ -655,10 +619,7 @@ async def stream_reuse_comparison(
 ) -> AsyncGenerator[str, None]:
     """
     SSE generator for the KV reuse proof demo.
-    Supports 2-step workflow and unique session isolation:
-      phase="both": executes cold run, waits, then warm run, then summary (1-click auto run).
-      phase="cold_only": executes cold run, writes KV chunks to Infinia, yields cold_completed.
-      phase="warm_only": executes warm run directly using saved_cold_ttft, yields summary.
+    Mirrors live DDN Infinia S3 bucket contents without artificial limits.
     """
 
     def sse(data: dict) -> str:
@@ -707,13 +668,14 @@ async def stream_reuse_comparison(
             return
 
         if phase == "cold_only":
-            yield sse({"type": "status", "phase": "cold", "message": "Step 1 complete. Offloading KV blocks to DDN Infinia persistent tier..."})
+            yield sse({"type": "status", "phase": "cold", "message": "Step 1 complete. Reading confirmed KV tensors from DDN Infinia..."})
+            await asyncio.sleep(2.5)  # wait for LMCache background write threads
             prefix_tokens, question_tokens, infinia_meta, ncp_metrics = await _build_infinia_metadata(
                 endpoint_url, model, system_prompt, question, cold_ttft, 0.0, 0.0
             )
-            # Write KV tensors directly to DDN Infinia S3 bucket
+            # Query all real confirmed objects directly from live Infinia bucket
             confirmed_objects = await asyncio.get_event_loop().run_in_executor(
-                None, _persist_kv_tensors_to_infinia, system_prompt, prefix_tokens
+                None, _list_infinia_objects, 200
             )
             yield sse({
                 "type": "cold_completed",
@@ -763,19 +725,14 @@ async def stream_reuse_comparison(
                 "phase": "warm",
                 "message": "Checking DDN Infinia for newly written KV tensors… (waiting for LMCache async writes)"
             })
-            prefix_tokens, question_tokens, infinia_meta, ncp_metrics = await _build_infinia_metadata(
-                endpoint_url, model, system_prompt, question, effective_cold_ttft, warm_ttft, speedup
-            )
-            confirmed_objects = await asyncio.get_event_loop().run_in_executor(
-                None, _persist_kv_tensors_to_infinia, system_prompt, prefix_tokens
-            )
-        else:
-            prefix_tokens, question_tokens, infinia_meta, ncp_metrics = await _build_infinia_metadata(
-                endpoint_url, model, system_prompt, question, effective_cold_ttft, warm_ttft, speedup
-            )
-            confirmed_objects = await asyncio.get_event_loop().run_in_executor(
-                None, _list_infinia_objects, 12
-            )
+            await asyncio.sleep(2.5)
+
+        prefix_tokens, question_tokens, infinia_meta, ncp_metrics = await _build_infinia_metadata(
+            endpoint_url, model, system_prompt, question, effective_cold_ttft, warm_ttft, speedup
+        )
+        confirmed_objects = await asyncio.get_event_loop().run_in_executor(
+            None, _list_infinia_objects, 200
+        )
 
         yield sse({
             "type": "summary",
