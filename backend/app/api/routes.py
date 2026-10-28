@@ -3179,10 +3179,13 @@ async def kv_reuse_compare(
     model: str = Query("meta-llama/Llama-3.1-8B-Instruct"),
     preset: str = Query("legal_contract"),
     question: str = Query(""),
+    phase: str = Query("both"),
+    cold_ttft_ms: float = Query(0.0),
+    cold_total_ms: float = Query(0.0),
 ):
     """
     SSE stream for cold-vs-warm KV cache comparison.
-    Runs the same long-context prompt twice and measures TTFT delta.
+    Supports phase='both' (auto run), phase='cold_only', and phase='warm_only'.
     """
     return StreamingResponse(
         stream_reuse_comparison(
@@ -3190,6 +3193,9 @@ async def kv_reuse_compare(
             model=model,
             preset_key=preset,
             custom_question=question,
+            phase=phase,
+            saved_cold_ttft=cold_ttft_ms,
+            saved_cold_total=cold_total_ms,
         ),
         media_type="text/event-stream",
         headers={

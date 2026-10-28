@@ -7,7 +7,7 @@ import hashlib
 import json
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import AsyncGenerator, Optional
 import httpx
 from app.core.config import settings
@@ -543,23 +543,94 @@ async def run_inference(
     return ttft_ms, total_ms, response_text
 
 
+async def _build_infinia_metadata(
+    endpoint_url: str,
+    model: str,
+    system_prompt: str,
+    question: str,
+    cold_ttft: float,
+    warm_ttft: float,
+    speedup: float,
+):
+    prefix_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
+
+    async def _tokenize(text: str) -> int:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as c:
+                r = await c.post(
+                    f"{endpoint_url.rstrip('/')}/tokenize",
+                    json={"model": model, "prompt": text},
+                )
+                data = r.json()
+                return data.get("count", len(data.get("tokens", [])))
+        except Exception:
+            return int(len(text.split()) * 1.33)
+
+    prefix_tokens = await _tokenize(system_prompt)
+    question_tokens = max(1, await _tokenize(question))
+    bytes_per_token = 2 * 8 * 128 * 2 * 32  # 131,072 bytes = 128 KB
+    kv_bytes = prefix_tokens * bytes_per_token
+    kv_mb = round(kv_bytes / (1024 * 1024), 1)
+    block_size = 16
+    block_count = (prefix_tokens + block_size - 1) // block_size
+
+    ncp_metrics = {
+        "gpu_seconds_saved": round(max(0.0, (cold_ttft - warm_ttft) / 1000.0), 2),
+        "concurrency_multiplier": speedup,
+        "cost_per_million_tokens_saved": round((prefix_tokens / 1_000_000.0) * 0.20, 4),
+        "gross_margin_boost_pct": round(min(88.0, speedup * 1.5), 1),
+        "security_boundary": "Cryptographic SHA-256 Isolation — Zero Cross-Tenant Token Bleed",
+    }
+
+    infinia_meta = {
+        "prefix_hash": prefix_hash[:24],
+        "prefix_hash_full": prefix_hash,
+        "prefix_tokens": prefix_tokens,
+        "question_tokens": question_tokens,
+        "kv_size_mb": kv_mb,
+        "kv_size_bytes": kv_bytes,
+        "block_count": block_count,
+        "block_size": block_size,
+        "layers": 32,
+        "kv_heads": 8,
+        "head_dim": 128,
+        "dtype": "bfloat16",
+        "model": "Llama-3.1-8B-Instruct",
+        "bucket": settings.infinia_bucket,
+        "endpoint": settings.infinia_endpoint or "192.168.147.129:8111",
+        "transfer_mode": "LMCache -> DDN Infinia S3",
+        "object_key": f"_home_nwasim_models_Llama-3.1-8B-Instruct@1@0@{prefix_hash[:16]}@bfloat16",
+        "gpu_compute_saved_pct": round(prefix_tokens / (prefix_tokens + question_tokens) * 100, 1),
+        "ncp_metrics": ncp_metrics,
+    }
+
+    return prefix_tokens, question_tokens, infinia_meta, ncp_metrics
+
+
 async def stream_reuse_comparison(
     endpoint_url: str,
     model: str,
     preset_key: str,
     custom_question: str = "",
     run_without_cache: bool = True,
+    phase: str = "both",
+    saved_cold_ttft: float = 0.0,
+    saved_cold_total: float = 0.0,
 ) -> AsyncGenerator[str, None]:
     """
     SSE generator for the KV reuse proof demo.
-    Runs cold (no cache) and warm (with cache) inference, yields events.
+    Supports 2-step workflow:
+      phase="both": executes cold run, waits, then warm run, then summary (1-click auto run).
+      phase="cold_only": executes cold run, waits for LMCache S3 async writes, yields cold_completed.
+      phase="warm_only": executes warm run directly using saved_cold_ttft, yields summary.
 
     Event types:
-      {"type": "status",   "phase": "cold"|"warm",  "message": "..."}
-      {"type": "token",    "phase": "cold"|"warm",  "text": "..."}
-      {"type": "ttft",     "phase": "cold"|"warm",  "ttft_ms": X, "total_ms": Y}
-      {"type": "summary",  "cold_ttft_ms": X, "warm_ttft_ms": Y, "speedup": Z}
-      {"type": "error",    "message": "..."}
+      {"type": "status",         "phase": "cold"|"warm",  "message": "..."}
+      {"type": "ttft",           "phase": "cold"|"warm",  "ttft_ms": X, "total_ms": Y}
+      {"type": "response",       "phase": "cold"|"warm",  "text": "..."}
+      {"type": "cold_completed", "cold_ttft_ms": X, "confirmed_infinia_objects": [...], ...}
+      {"type": "summary",        "cold_ttft_ms": X, "warm_ttft_ms": Y, "speedup": Z, ...}
+      {"type": "error",          "message": "..."}
     """
 
     def sse(data: dict) -> str:
@@ -573,139 +644,117 @@ async def stream_reuse_comparison(
     question = custom_question.strip() if custom_question.strip() else preset["sample_questions"][0]
     system_prompt = preset["system_prompt"]
 
-    # Record timestamp BEFORE cold run so we can find LMCache-written objects afterwards
     run_start = datetime.now(timezone.utc)
+    cold_ttft = 0.0
+    cold_total = 0.0
+    cold_text = ""
 
-    # ── COLD RUN ──────────────────────────────────────────────────────────────
-    yield sse({"type": "status", "phase": "cold", "message": "Starting cold inference (no cached KV)..."})
-    yield sse({"type": "status", "phase": "warm", "message": "Waiting for cold run to complete first..."})
+    # ── STEP 1: COLD RUN (if phase is 'both' or 'cold_only') ───────────────────
+    if phase in ("both", "cold_only"):
+        yield sse({"type": "status", "phase": "cold", "message": "Starting cold inference (full GPU prefill recompute)..."})
+        if phase == "both":
+            yield sse({"type": "status", "phase": "warm", "message": "Waiting for cold run to complete first..."})
 
-    try:
-        cold_ttft, cold_total, cold_text = await run_inference(
-            endpoint_url, model, system_prompt, question
-        )
-        yield sse({"type": "ttft", "phase": "cold", "ttft_ms": round(cold_ttft), "total_ms": round(cold_total)})
-        yield sse({"type": "response", "phase": "cold", "text": cold_text})
-    except (httpx.ConnectError, httpx.ConnectTimeout):
-        yield sse({
-            "type": "error",
-            "message": "vLLM is not running",
-            "detail": f"Cannot connect to vLLM at {endpoint_url}. Start vLLM with: VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server --model ~/models/Llama-3.1-8B-Instruct --enable-prefix-caching --port 11000",
-            "code": "VLLM_NOT_RUNNING"
-        })
-        return
-    except Exception as e:
-        yield sse({"type": "error", "message": f"Cold run failed: {e}"})
-        return
+        try:
+            cold_ttft, cold_total, cold_text = await run_inference(
+                endpoint_url, model, system_prompt, question
+            )
+            yield sse({"type": "ttft", "phase": "cold", "ttft_ms": round(cold_ttft), "total_ms": round(cold_total)})
+            yield sse({"type": "response", "phase": "cold", "text": cold_text})
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            yield sse({
+                "type": "error",
+                "message": "vLLM is not running",
+                "detail": f"Cannot connect to vLLM at {endpoint_url}. Start vLLM with: VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server --model ~/models/Llama-3.1-8B-Instruct --enable-prefix-caching --port 11000",
+                "code": "VLLM_NOT_RUNNING"
+            })
+            return
+        except Exception as e:
+            yield sse({"type": "error", "message": f"Cold run failed: {e}"})
+            return
 
-    # 3s gap: LMCache background threads are still writing KV chunks to CPU buffer
-    # after the cold run completes. Starting the warm run too quickly causes a race
-    # condition where those writes corrupt the HBM prefix cache lookup.
-    await asyncio.sleep(3.0)
+        if phase == "cold_only":
+            yield sse({"type": "status", "phase": "cold", "message": "Step 1 complete. Offloading KV blocks to DDN Infinia persistent tier..."})
+            await asyncio.sleep(2.5)
+            confirmed_objects = await asyncio.get_event_loop().run_in_executor(
+                None, _list_infinia_objects_since, run_start
+            )
+            prefix_tokens, question_tokens, infinia_meta, ncp_metrics = await _build_infinia_metadata(
+                endpoint_url, model, system_prompt, question, cold_ttft, 0.0, 0.0
+            )
+            yield sse({
+                "type": "cold_completed",
+                "cold_ttft_ms": round(cold_ttft),
+                "cold_total_ms": round(cold_total),
+                "cold_text": cold_text,
+                "tokens_in_context": prefix_tokens,
+                "preset": preset_key,
+                "confirmed_infinia_objects": confirmed_objects,
+                "infinia": infinia_meta,
+            })
+            return
 
-    # ── WARM RUN (same prefix — should hit KV cache) ──────────────────────────
-    yield sse({"type": "status", "phase": "warm", "message": "Starting warm inference (KV cache should hit)..."})
+        # Phase 'both': wait 3s before triggering warm run to prevent LMCache thread contention
+        await asyncio.sleep(3.0)
 
-    try:
-        warm_ttft, warm_total, warm_text = await run_inference(
-            endpoint_url, model, system_prompt, question
-        )
-        yield sse({"type": "ttft", "phase": "warm", "ttft_ms": round(warm_ttft), "total_ms": round(warm_total)})
-        yield sse({"type": "response", "phase": "warm", "text": warm_text})
-    except (httpx.ConnectError, httpx.ConnectTimeout):
-        yield sse({
-            "type": "error",
-            "message": "vLLM is not running",
-            "detail": f"Cannot connect to vLLM at {endpoint_url}. Start vLLM from your WSL terminal.",
-            "code": "VLLM_NOT_RUNNING"
-        })
-        return
-    except Exception as e:
-        yield sse({"type": "error", "message": f"Warm run failed: {e}"})
-        return
+    # ── STEP 2: WARM RUN (if phase is 'both' or 'warm_only') ───────────────────
+    if phase in ("both", "warm_only"):
+        yield sse({"type": "status", "phase": "warm", "message": "Starting warm inference (retrieving prefix cache)..."})
 
-    # ── SUMMARY ───────────────────────────────────────────────────────────────
-    if cold_ttft > 0 and warm_ttft > 0:
-        speedup = round(cold_ttft / warm_ttft, 1) if warm_ttft > 0 else 0
+        try:
+            warm_ttft, warm_total, warm_text = await run_inference(
+                endpoint_url, model, system_prompt, question
+            )
+            yield sse({"type": "ttft", "phase": "warm", "ttft_ms": round(warm_ttft), "total_ms": round(warm_total)})
+            yield sse({"type": "response", "phase": "warm", "text": warm_text})
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            yield sse({
+                "type": "error",
+                "message": "vLLM is not running",
+                "detail": f"Cannot connect to vLLM at {endpoint_url}. Start vLLM from your WSL terminal.",
+                "code": "VLLM_NOT_RUNNING"
+            })
+            return
+        except Exception as e:
+            yield sse({"type": "error", "message": f"Warm run failed: {e}"})
+            return
 
-        # ── KV / Infinia metadata ───────────────────────────────────────────
-        # Compute deterministic prefix hash (what NIXL/LMCache uses as the cache key)
-        prefix_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
+        # Determine effective baseline cold TTFT
+        effective_cold_ttft = cold_ttft if phase == "both" else saved_cold_ttft
+        effective_cold_total = cold_total if phase == "both" else saved_cold_total
+        speedup = round(effective_cold_ttft / warm_ttft, 1) if (warm_ttft > 0 and effective_cold_ttft > 0) else 0.0
 
-        # Exact token count from vLLM /tokenize endpoint (same tokenizer LMCache uses)
-        async def _tokenize(text: str) -> int:
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as c:
-                    r = await c.post(
-                        f"{endpoint_url.rstrip('/')}/tokenize",
-                        json={"model": model, "prompt": text},
-                    )
-                    data = r.json()
-                    return data.get("count", len(data.get("tokens", [])))
-            except Exception:
-                # Fallback to word heuristic if tokenizer call fails
-                return int(len(text.split()) * 1.33)
+        if phase == "both":
+            yield sse({
+                "type": "status",
+                "phase": "warm",
+                "message": "Checking DDN Infinia for newly written KV tensors… (waiting for LMCache async writes)"
+            })
+            await asyncio.sleep(4.0)
+            confirmed_objects = await asyncio.get_event_loop().run_in_executor(
+                None, _list_infinia_objects_since, run_start
+            )
+        else:
+            # For warm_only, query recent objects written in the past 10 minutes
+            ten_mins_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+            confirmed_objects = await asyncio.get_event_loop().run_in_executor(
+                None, _list_infinia_objects_since, ten_mins_ago
+            )
 
-        prefix_tokens   = await _tokenize(system_prompt)
-        question_tokens = max(1, await _tokenize(question))
-
-        # Llama 3.1 8B KV tensor size per token (bfloat16, GQA: 8 KV heads, head_dim=128, 32 layers)
-        # Per token = 2 (K+V) x 8 KV heads x 128 head_dim x 2 bytes x 32 layers = 131,072 bytes
-        bytes_per_token = 2 * 8 * 128 * 2 * 32   # 131,072 bytes = 128 KB
-        kv_bytes = prefix_tokens * bytes_per_token
-        kv_mb = round(kv_bytes / (1024 * 1024), 1)
-
-        # vLLM paged attention blocks: default block_size = 16 tokens
-        block_size = 16
-        block_count = (prefix_tokens + block_size - 1) // block_size
-
-        # Wait 5s — LMCache writes 24 chunks async (~650ms total write time).
-        # 5s gives a comfortable buffer before scanning Infinia for new objects.
-        yield sse({"type": "status", "phase": "warm",
-                   "message": "Checking DDN Infinia for newly written KV tensors… (waiting for LMCache async writes)"})
-        await asyncio.sleep(5.0)
-        confirmed_objects = await asyncio.get_event_loop().run_in_executor(
-            None, _list_infinia_objects_since, run_start
+        prefix_tokens, question_tokens, infinia_meta, ncp_metrics = await _build_infinia_metadata(
+            endpoint_url, model, system_prompt, question, effective_cold_ttft, warm_ttft, speedup
         )
 
         yield sse({
             "type": "summary",
-            "cold_ttft_ms":      round(cold_ttft),
-            "warm_ttft_ms":      round(warm_ttft),
-            "cold_total_ms":     round(cold_total),
-            "warm_total_ms":     round(warm_total),
-            "speedup":           speedup,
+            "cold_ttft_ms": round(effective_cold_ttft),
+            "warm_ttft_ms": round(warm_ttft),
+            "cold_total_ms": round(effective_cold_total),
+            "warm_total_ms": round(warm_total),
+            "speedup": speedup,
             "tokens_in_context": prefix_tokens,
-            "preset":            preset_key,
-            # Confirmed objects actually found in Infinia during this run
+            "preset": preset_key,
             "confirmed_infinia_objects": confirmed_objects,
-            "infinia": {
-                "prefix_hash":           prefix_hash[:24],
-                "prefix_hash_full":      prefix_hash,
-                "prefix_tokens":         prefix_tokens,
-                "question_tokens":        question_tokens,
-                "kv_size_mb":            kv_mb,
-                "kv_size_bytes":         kv_bytes,
-                "block_count":           block_count,
-                "block_size":            block_size,
-                "layers":                32,
-                "kv_heads":              8,
-                "head_dim":              128,
-                "dtype":                 "bfloat16",
-                "model":                 "Llama-3.1-8B-Instruct",
-                "bucket":                settings.infinia_bucket,
-                "endpoint":              settings.infinia_endpoint or "192.168.147.129:8111",
-                # Real architecture: vLLM -> LMCache (CPU staging) -> DDN Infinia S3
-                # LMCache object key format: _path_to_model@world_size@worker_id@prefix_hash@dtype
-                "transfer_mode":         "LMCache -> DDN Infinia S3",
-                "object_key":            f"_home_nwasim_models_Llama-3.1-8B-Instruct@1@0@{prefix_hash[:16]}@bfloat16",
-                "gpu_compute_saved_pct": round(prefix_tokens / (prefix_tokens + question_tokens) * 100, 1),
-                "ncp_metrics": {
-                    "gpu_seconds_saved": round(max(0.0, (cold_ttft - warm_ttft) / 1000.0), 2),
-                    "concurrency_multiplier": speedup,
-                    "cost_per_million_tokens_saved": round((prefix_tokens / 1_000_000.0) * 0.20, 4),
-                    "gross_margin_boost_pct": round(min(88.0, speedup * 1.5), 1),
-                    "security_boundary": "Cryptographic SHA-256 Isolation — Zero Cross-Tenant Token Bleed",
-                },
-            },
+            "infinia": infinia_meta,
+            "ncp_metrics": ncp_metrics,
         })

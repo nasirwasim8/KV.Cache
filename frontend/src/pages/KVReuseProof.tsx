@@ -10,6 +10,10 @@ import {
   HardDrive,
   Building2,
   Cloud,
+  RotateCcw,
+  Sparkles,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -43,6 +47,7 @@ interface InfiniaMeta {
   transfer_mode: string
   object_key: string
   gpu_compute_saved_pct: number
+  ncp_metrics?: NcpMetrics
 }
 
 interface ConfirmedObject {
@@ -190,6 +195,14 @@ export default function KVReuseProof() {
   const [showQDropdown, setShowQDropdown] = useState(false)
   const [audienceView, setAudienceView] = useState<'enterprise' | 'ncp'>('enterprise')
 
+  // Workflow modes: 'stepper' (2-step guided) or 'auto' (1-click auto run)
+  const [workflowMode, setWorkflowMode] = useState<'stepper' | 'auto'>('stepper')
+  const [stepState, setStepState] = useState<'idle' | 'cold_running' | 'cold_done' | 'warm_running' | 'completed'>('idle')
+  const [savedColdTtft, setSavedColdTtft] = useState<number | null>(null)
+  const [savedColdTotal, setSavedColdTotal] = useState<number | null>(null)
+  const [step1ConfirmedObjects, setStep1ConfirmedObjects] = useState<ConfirmedObject[]>([])
+  const [step1Infinia, setStep1Infinia] = useState<InfiniaMeta | null>(null)
+
   const [coldPhase, setColdPhase] = useState<PhaseState>(EMPTY_PHASE)
   const [warmPhase, setWarmPhase] = useState<PhaseState>(EMPTY_PHASE)
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -209,8 +222,153 @@ export default function KVReuseProof() {
 
   const currentPreset = presets.find(p => p.key === selectedPreset)
 
+  const resetWorkflow = () => {
+    if (esRef.current) {
+      esRef.current.close()
+    }
+    setColdPhase(EMPTY_PHASE)
+    setWarmPhase(EMPTY_PHASE)
+    setSummary(null)
+    setVllmError(null)
+    setSavedColdTtft(null)
+    setSavedColdTotal(null)
+    setStep1ConfirmedObjects([])
+    setStep1Infinia(null)
+    setStepState('idle')
+    setRunning(false)
+  }
+
+  // ── Step 1: Execute Cold Prefill ─────────────────────────────────────────────
+  const runStep1 = useCallback(() => {
+    if (stepState === 'cold_running' || stepState === 'warm_running' || running) return
+    setStepState('cold_running')
+    setColdPhase(EMPTY_PHASE)
+    setWarmPhase(EMPTY_PHASE)
+    setSummary(null)
+    setVllmError(null)
+    setSavedColdTtft(null)
+    setSavedColdTotal(null)
+    setStep1ConfirmedObjects([])
+    setStep1Infinia(null)
+
+    const question = customQuestion.trim() || selectedQuestion || ''
+    const params = new URLSearchParams({
+      endpoint_url: endpointUrl,
+      model,
+      preset: selectedPreset,
+      question,
+      phase: 'cold_only',
+    })
+
+    const es = new EventSource(`/api/kv-reuse/compare?${params}`)
+    esRef.current = es
+
+    es.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data)
+
+        if (event.type === 'status') {
+          setColdPhase(prev => ({ ...prev, status: 'running', message: event.message }))
+        } else if (event.type === 'ttft') {
+          setColdPhase(prev => ({ ...prev, ttft_ms: event.ttft_ms, total_ms: event.total_ms, status: 'done' }))
+        } else if (event.type === 'response') {
+          setColdPhase(prev => ({ ...prev, response: event.text }))
+        } else if (event.type === 'cold_completed') {
+          setSavedColdTtft(event.cold_ttft_ms)
+          setSavedColdTotal(event.cold_total_ms)
+          setStep1ConfirmedObjects(event.confirmed_infinia_objects || [])
+          setStep1Infinia(event.infinia || null)
+          setStepState('cold_done')
+          setColdPhase(prev => ({
+            ...prev,
+            status: 'done',
+            message: `Cold prefill complete (${event.cold_ttft_ms} ms). KV blocks vaulted to DDN Infinia.`,
+          }))
+          es.close()
+        } else if (event.type === 'error') {
+          if (event.code === 'VLLM_NOT_RUNNING') {
+            setVllmError({ message: event.message, detail: event.detail || '' })
+            setColdPhase(EMPTY_PHASE)
+          } else {
+            setColdPhase(prev => ({ ...prev, status: 'error', message: event.message }))
+          }
+          setStepState('idle')
+          es.close()
+        }
+      } catch {}
+    }
+
+    es.onerror = () => {
+      setStepState('idle')
+      es.close()
+    }
+  }, [stepState, running, endpointUrl, model, selectedPreset, customQuestion, selectedQuestion])
+
+  // ── Step 2: Execute Warm Prefix Retrieval ────────────────────────────────────
+  const runStep2 = useCallback(() => {
+    if (stepState !== 'cold_done' || savedColdTtft === null || running) return
+    setStepState('warm_running')
+    setWarmPhase(EMPTY_PHASE)
+    setVllmError(null)
+
+    const question = customQuestion.trim() || selectedQuestion || ''
+    const params = new URLSearchParams({
+      endpoint_url: endpointUrl,
+      model,
+      preset: selectedPreset,
+      question,
+      phase: 'warm_only',
+      cold_ttft_ms: String(savedColdTtft),
+      cold_total_ms: String(savedColdTotal || savedColdTtft),
+    })
+
+    const es = new EventSource(`/api/kv-reuse/compare?${params}`)
+    esRef.current = es
+
+    es.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data)
+
+        if (event.type === 'status') {
+          setWarmPhase(prev => ({ ...prev, status: 'running', message: event.message }))
+        } else if (event.type === 'ttft') {
+          setWarmPhase(prev => ({ ...prev, ttft_ms: event.ttft_ms, total_ms: event.total_ms, status: 'done' }))
+
+          const el = document.getElementById('warm-panel')
+          if (el) { el.classList.add('cache-hit-flash'); setTimeout(() => el.classList.remove('cache-hit-flash'), 600) }
+        } else if (event.type === 'response') {
+          setWarmPhase(prev => ({ ...prev, response: event.text }))
+        } else if (event.type === 'summary') {
+          setSummary(event)
+          setStepState('completed')
+          setSessionTotal(prev => ({
+            runs: prev.runs + 1,
+            savedMs: prev.savedMs + (event.cold_ttft_ms - event.warm_ttft_ms),
+            tokens: prev.tokens + (event.tokens_in_context || 0),
+          }))
+          es.close()
+        } else if (event.type === 'error') {
+          if (event.code === 'VLLM_NOT_RUNNING') {
+            setVllmError({ message: event.message, detail: event.detail || '' })
+            setWarmPhase(EMPTY_PHASE)
+          } else {
+            setWarmPhase(prev => ({ ...prev, status: 'error', message: event.message }))
+          }
+          setStepState('cold_done')
+          es.close()
+        }
+      } catch {}
+    }
+
+    es.onerror = () => {
+      setStepState('cold_done')
+      es.close()
+    }
+  }, [stepState, savedColdTtft, savedColdTotal, running, endpointUrl, model, selectedPreset, customQuestion, selectedQuestion])
+
+  // ── Auto Run: 1-Click Comparison ─────────────────────────────────────────────
   const runComparison = useCallback(async () => {
-    if (running) return
+    if (running || stepState === 'cold_running' || stepState === 'warm_running') return
     setRunning(true)
     setColdPhase(EMPTY_PHASE)
     setWarmPhase(EMPTY_PHASE)
@@ -223,6 +381,7 @@ export default function KVReuseProof() {
       model,
       preset: selectedPreset,
       question,
+      phase: 'both',
     })
 
     const es = new EventSource(`/api/kv-reuse/compare?${params}`)
@@ -235,25 +394,18 @@ export default function KVReuseProof() {
         if (event.type === 'status') {
           const setter = event.phase === 'cold' ? setColdPhase : setWarmPhase
           setter(prev => ({ ...prev, status: 'running', message: event.message }))
-        }
-
-        else if (event.type === 'ttft') {
+        } else if (event.type === 'ttft') {
           const setter = event.phase === 'cold' ? setColdPhase : setWarmPhase
           setter(prev => ({ ...prev, ttft_ms: event.ttft_ms, total_ms: event.total_ms, status: 'done' }))
 
-          // Cache hit flash on warm panel
           if (event.phase === 'warm') {
             const el = document.getElementById('warm-panel')
             if (el) { el.classList.add('cache-hit-flash'); setTimeout(() => el.classList.remove('cache-hit-flash'), 600) }
           }
-        }
-
-        else if (event.type === 'response') {
+        } else if (event.type === 'response') {
           const setter = event.phase === 'cold' ? setColdPhase : setWarmPhase
           setter(prev => ({ ...prev, response: event.text }))
-        }
-
-        else if (event.type === 'summary') {
+        } else if (event.type === 'summary') {
           setSummary(event)
           setSessionTotal(prev => ({
             runs: prev.runs + 1,
@@ -262,9 +414,7 @@ export default function KVReuseProof() {
           }))
           setRunning(false)
           es.close()
-        }
-
-        else if (event.type === 'error') {
+        } else if (event.type === 'error') {
           if (event.code === 'VLLM_NOT_RUNNING') {
             setVllmError({ message: event.message, detail: event.detail || '' })
             setColdPhase(EMPTY_PHASE)
@@ -283,9 +433,13 @@ export default function KVReuseProof() {
       setRunning(false)
       es.close()
     }
-  }, [running, endpointUrl, model, selectedPreset, customQuestion, selectedQuestion])
+  }, [running, stepState, endpointUrl, model, selectedPreset, customQuestion, selectedQuestion])
 
   const maxTTFT = Math.max(coldPhase.ttft_ms || 0, warmPhase.ttft_ms || 0, 1000)
+
+  // Determine active Infinia metadata to show (works both after Step 1 and in full Summary)
+  const activeInfinia = summary?.infinia || (stepState === 'cold_done' ? step1Infinia : null)
+  const activeConfirmedObjects = summary?.confirmed_infinia_objects || (stepState === 'cold_done' ? step1ConfirmedObjects : [])
 
   return (
     <div className="space-y-6 pb-8">
@@ -333,7 +487,7 @@ export default function KVReuseProof() {
               &nbsp;&nbsp;--max-model-len 16384
             </div>
             <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              vLLM takes 60–90 seconds to load. Once ready, click <strong>Run Comparison</strong> again.
+              vLLM takes 60–90 seconds to load. Once ready, click <strong>Run Comparison</strong> or <strong>Step 1</strong> again.
             </p>
           </div>
         </div>
@@ -361,18 +515,63 @@ export default function KVReuseProof() {
         </div>
       )}
 
-      {/* Config row */}
+      {/* Config & Execution Row */}
       <div className="card p-5">
+        {/* Mode Selector Header */}
+        <div className="flex items-center justify-between border-b pb-3 mb-4 flex-wrap gap-2" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setWorkflowMode('stepper'); resetWorkflow() }}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5"
+              style={{
+                background: workflowMode === 'stepper' ? 'var(--ddn-red-light)' : 'var(--surface-secondary)',
+                borderColor: workflowMode === 'stepper' ? 'var(--ddn-red)' : 'var(--border-subtle)',
+                color: workflowMode === 'stepper' ? 'var(--ddn-red)' : 'var(--text-muted)',
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>2-Step Guided Walkthrough (Recommended)</span>
+            </button>
+            <button
+              onClick={() => { setWorkflowMode('auto'); resetWorkflow() }}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5"
+              style={{
+                background: workflowMode === 'auto' ? 'var(--surface-card)' : 'transparent',
+                borderColor: workflowMode === 'auto' ? 'var(--border-default)' : 'transparent',
+                color: workflowMode === 'auto' ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>1-Click Auto Run</span>
+            </button>
+          </div>
+          {(coldPhase.status !== 'idle' || warmPhase.status !== 'idle' || summary || stepState !== 'idle') && (
+            <button
+              onClick={resetWorkflow}
+              className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all"
+              style={{
+                background: 'var(--surface-secondary)',
+                borderColor: 'var(--border-subtle)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Workflow</span>
+            </button>
+          )}
+        </div>
+
+        {/* Server & Model inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div className="space-y-1">
             <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>DYNAMO ENDPOINT</label>
             <input className="input-field text-sm font-mono" value={endpointUrl}
-              onChange={e => setEndpointUrl(e.target.value)} disabled={running} />
+              onChange={e => setEndpointUrl(e.target.value)} disabled={running || stepState === 'cold_running' || stepState === 'warm_running'} />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>MODEL</label>
             <input className="input-field text-sm" value={model}
-              onChange={e => setModel(e.target.value)} disabled={running} />
+              onChange={e => setModel(e.target.value)} disabled={running || stepState === 'cold_running' || stepState === 'warm_running'} />
           </div>
         </div>
 
@@ -380,7 +579,7 @@ export default function KVReuseProof() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
           {presets.map(p => (
             <button key={p.key} onClick={() => { setSelectedPreset(p.key); setSelectedQuestion(''); setCustomQuestion(''); if (p.key === 'ncp_multitenant') setAudienceView('ncp') }}
-              disabled={running}
+              disabled={running || stepState === 'cold_running' || stepState === 'warm_running'}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 border"
               style={{
                 background: selectedPreset === p.key ? 'var(--ddn-red-light)' : 'var(--surface-secondary)',
@@ -394,12 +593,12 @@ export default function KVReuseProof() {
 
         {/* Question selector */}
         {currentPreset && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
             <div className="relative space-y-1">
               <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>SAMPLE QUESTION</label>
               <button
                 onClick={() => setShowQDropdown(v => !v)}
-                disabled={running}
+                disabled={running || stepState === 'cold_running' || stepState === 'warm_running'}
                 className="w-full input-field text-sm text-left flex items-center justify-between gap-2"
                 style={{ padding: '10px 14px' }}>
                 <span className="truncate" style={{ color: selectedQuestion ? 'var(--text-primary)' : 'var(--text-muted)' }}>
@@ -425,34 +624,216 @@ export default function KVReuseProof() {
               <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>OR TYPE YOUR OWN</label>
               <input className="input-field text-sm" placeholder="Ask anything about the document…"
                 value={customQuestion} onChange={e => { setCustomQuestion(e.target.value); setSelectedQuestion('') }}
-                disabled={running} />
+                disabled={running || stepState === 'cold_running' || stepState === 'warm_running'} />
             </div>
           </div>
         )}
 
-        {/* Run button */}
-        <div className="mt-4">
-          <button onClick={runComparison} disabled={running}
-            className="btn-primary gap-2 w-full sm:w-auto">
-            {running ? (
-              <>
-                <span className="flex gap-1">
-                  {[0, 1, 2].map(i => <span key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s`, background: 'white' }} />)}
-                </span>
-                Running comparison…
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4" />
-                Run Comparison
-              </>
+        {/* Workflow Execution Area */}
+        {workflowMode === 'stepper' ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Step 1 Card */}
+              <div className="p-4 rounded-xl border flex flex-col justify-between"
+                style={{
+                  background: stepState === 'cold_done' || stepState === 'completed'
+                    ? 'rgba(237,39,56,0.04)'
+                    : 'var(--surface-card)',
+                  borderColor: stepState === 'cold_running'
+                    ? 'var(--ddn-red)'
+                    : stepState === 'cold_done' || stepState === 'completed'
+                    ? 'rgba(237,39,56,0.4)'
+                    : 'var(--border-subtle)',
+                }}>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--ddn-red)] flex items-center gap-1.5">
+                      <span>Step 1: Execute Cold Prefill</span>
+                    </span>
+                    {stepState === 'cold_done' || stepState === 'completed' ? (
+                      <span className="badge text-[10px] flex items-center gap-1"
+                        style={{ background: 'rgba(237,39,56,0.12)', color: 'var(--ddn-red)', border: '1px solid rgba(237,39,56,0.3)' }}>
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Vaulted to Infinia ({savedColdTtft} ms)</span>
+                      </span>
+                    ) : stepState === 'cold_running' ? (
+                      <span className="badge text-[10px] flex items-center gap-1 animate-pulse"
+                        style={{ background: 'rgba(237,39,56,0.12)', color: 'var(--ddn-red)' }}>
+                        <span>Computing Prefill…</span>
+                      </span>
+                    ) : (
+                      <span className="badge text-[10px]" style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
+                        Ready
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3">
+                    Forces full GPU token computation (~4s). KV tensors are stored in GPU HBM and asynchronously vaulted to DDN Infinia persistent storage.
+                  </p>
+                </div>
+                <button
+                  onClick={runStep1}
+                  disabled={stepState === 'cold_running' || stepState === 'warm_running'}
+                  className="btn-primary gap-2 w-full justify-center"
+                  style={{
+                    background: stepState === 'cold_done' || stepState === 'completed' ? 'var(--surface-secondary)' : 'var(--ddn-red)',
+                    color: stepState === 'cold_done' || stepState === 'completed' ? 'var(--text-secondary)' : 'white',
+                    border: stepState === 'cold_done' || stepState === 'completed' ? '1px solid var(--border-subtle)' : 'none',
+                  }}
+                >
+                  {stepState === 'cold_running' ? (
+                    <>
+                      <span className="flex gap-1">
+                        {[0, 1, 2].map(i => <span key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s`, background: 'white' }} />)}
+                      </span>
+                      Executing Step 1 Prefill…
+                    </>
+                  ) : stepState === 'cold_done' || stepState === 'completed' ? (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Re-run Step 1 (Cold)
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Run Step 1 (Cold Prefill &amp; Infinia Ingestion)
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Step 2 Card */}
+              <div className="p-4 rounded-xl border flex flex-col justify-between"
+                style={{
+                  background: stepState === 'completed'
+                    ? 'rgba(118,185,0,0.06)'
+                    : stepState === 'cold_done'
+                    ? 'rgba(118,185,0,0.03)'
+                    : 'var(--surface-card)',
+                  borderColor: stepState === 'warm_running'
+                    ? 'var(--nvidia-green)'
+                    : stepState === 'completed'
+                    ? 'var(--nvidia-green)'
+                    : stepState === 'cold_done'
+                    ? 'rgba(118,185,0,0.5)'
+                    : 'var(--border-subtle)',
+                  opacity: stepState === 'idle' || stepState === 'cold_running' ? 0.6 : 1,
+                }}>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--nvidia-green)] flex items-center gap-1.5">
+                      <span>Step 2: Execute Warm Prefix Retrieval</span>
+                    </span>
+                    {stepState === 'completed' ? (
+                      <span className="badge text-[10px] flex items-center gap-1"
+                        style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)', border: '1px solid rgba(118,185,0,0.4)' }}>
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Prefix Hit ({summary?.warm_ttft_ms} ms · {summary?.speedup}×)</span>
+                      </span>
+                    ) : stepState === 'warm_running' ? (
+                      <span className="badge text-[10px] flex items-center gap-1 animate-pulse"
+                        style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)' }}>
+                        <span>Retrieving Cache…</span>
+                      </span>
+                    ) : stepState === 'cold_done' ? (
+                      <span className="badge text-[10px]" style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)', border: '1px solid rgba(118,185,0,0.3)' }}>
+                        Unlocked · Ready
+                      </span>
+                    ) : (
+                      <span className="badge text-[10px] flex items-center gap-1" style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>Complete Step 1 First</span>
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3">
+                    Submits the same question. Reuses the precomputed prefix, skipping token computation to respond in ~56 ms.
+                  </p>
+                </div>
+                <button
+                  onClick={runStep2}
+                  disabled={stepState !== 'cold_done'}
+                  className="btn-primary gap-2 w-full justify-center"
+                  style={{
+                    background: stepState === 'cold_done'
+                      ? 'var(--nvidia-green)'
+                      : stepState === 'completed'
+                      ? 'var(--surface-secondary)'
+                      : 'var(--surface-tertiary)',
+                    color: stepState === 'cold_done'
+                      ? '#000000'
+                      : stepState === 'completed'
+                      ? 'var(--text-secondary)'
+                      : 'var(--text-muted)',
+                    border: stepState === 'completed' ? '1px solid var(--border-subtle)' : 'none',
+                    fontWeight: 600,
+                    cursor: stepState === 'cold_done' ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {stepState === 'warm_running' ? (
+                    <>
+                      <span className="flex gap-1">
+                        {[0, 1, 2].map(i => <span key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s`, background: '#000' }} />)}
+                      </span>
+                      Retrieving Prefix Cache…
+                    </>
+                  ) : stepState === 'completed' ? (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Re-run Step 2 (Warm)
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Run Step 2 (Warm Prefix Retrieval)
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Presenter Bridge Note after Step 1 */}
+            {stepState === 'cold_done' && (
+              <div className="p-3.5 rounded-xl border flex items-start gap-3 text-xs leading-relaxed transition-all"
+                style={{ background: 'rgba(237,39,56,0.05)', borderColor: 'rgba(237,39,56,0.3)' }}>
+                <ShieldCheck className="w-4 h-4 text-[var(--ddn-red)] shrink-0 mt-0.5" />
+                <div style={{ color: 'var(--text-secondary)' }}>
+                  <strong className="text-[var(--text-primary)]">Presenter Note — Step 1 Ingestion Confirmed:</strong>{' '}
+                  <span>
+                    Initial cold prefill completed in <strong className="font-mono text-[var(--text-primary)]">{savedColdTtft} ms</strong>.
+                    GPU VRAM computation has concluded, and KV tensors have been vaulted to <strong className="text-[var(--text-primary)]">DDN Infinia S3</strong>.
+                    In multi-node SuperPOD deployments, any sister node can now retrieve these KV blocks via GPU-Direct RDMA over RoCE (DDN Infinia NIXL plugin).
+                    Click <strong>Step 2</strong> to execute the warm query and show instant prefix retrieval at ~56 ms.
+                  </span>
+                </div>
+              </div>
             )}
-          </button>
-          <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Runs the same document + question twice — first cold (GPU recomputes tokens), then warm (prefix KV blocks
-            served from GPU HBM, while LMCache asynchronously vaults KV tensors to DDN Infinia G4 shared storage).
-          </p>
-        </div>
+          </div>
+        ) : (
+          /* 1-Click Auto Run Mode */
+          <div className="mt-2">
+            <button onClick={runComparison} disabled={running}
+              className="btn-primary gap-2 w-full sm:w-auto">
+              {running ? (
+                <>
+                  <span className="flex gap-1">
+                    {[0, 1, 2].map(i => <span key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s`, background: 'white' }} />)}
+                  </span>
+                  Running comparison…
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  Run Comparison (1-Click Auto)
+                </>
+              )}
+            </button>
+            <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              Runs the same document + question twice — first cold (GPU recomputes tokens), then warm (prefix KV blocks
+              served from GPU HBM, while LMCache asynchronously vaults KV tensors to DDN Infinia G4 shared storage).
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Side-by-side comparison */}
@@ -617,8 +998,8 @@ export default function KVReuseProof() {
         </div>
       )}
 
-      {/* Infinia KV Inspector */}
-      {summary?.infinia && (
+      {/* Infinia KV Inspector (Active either after Step 1 or after Summary) */}
+      {activeInfinia && (
         <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--nvidia-green)', borderWidth: 1 }}>
 
           {/* ── Section 1: Real Infinia Confirmation ── */}
@@ -628,11 +1009,11 @@ export default function KVReuseProof() {
             <span className="text-sm font-bold" style={{ color: 'var(--nvidia-green)' }}>
               DDN Infinia — Live Bucket Scan
             </span>
-            {summary.confirmed_infinia_objects && summary.confirmed_infinia_objects.length > 0 ? (
+            {activeConfirmedObjects && activeConfirmedObjects.length > 0 ? (
               <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1"
                 style={{ background: 'rgba(118,185,0,0.2)', color: 'var(--nvidia-green)', border: '1px solid rgba(118,185,0,0.4)' }}>
                 <CheckCircle2 className="w-3 h-3" />
-                <span>{summary.confirmed_infinia_objects.length} OBJECT{summary.confirmed_infinia_objects.length > 1 ? 'S' : ''} CONFIRMED</span>
+                <span>{activeConfirmedObjects.length} OBJECT{activeConfirmedObjects.length > 1 ? 'S' : ''} CONFIRMED</span>
               </span>
             ) : (
               <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1"
@@ -644,9 +1025,9 @@ export default function KVReuseProof() {
           </div>
 
           {/* Confirmed objects list — real S3 keys */}
-          {summary.confirmed_infinia_objects && summary.confirmed_infinia_objects.length > 0 ? (
+          {activeConfirmedObjects && activeConfirmedObjects.length > 0 ? (
             <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              {summary.confirmed_infinia_objects.map((obj, i) => (
+              {activeConfirmedObjects.map((obj, i) => (
                 <div key={i} className="px-4 py-2.5 flex items-center gap-3"
                   style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,
                            background: 'rgba(118,185,0,0.03)' }}>
@@ -691,24 +1072,24 @@ export default function KVReuseProof() {
           {/* Subheader: bucket + estimated key */}
           <div className="px-4 py-1.5 text-xs font-mono flex items-center gap-2"
             style={{ background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>{summary.infinia.bucket}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{activeInfinia.bucket}</span>
             <span>/</span>
-            <span>{summary.infinia.object_key}</span>
+            <span>{activeInfinia.object_key}</span>
           </div>
 
           {/* Grid of details */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-0 divide-y sm:divide-y-0"
             style={{ borderTop: '1px solid var(--border-subtle)' }}>
             {[
-              { label: 'BUCKET',             val: summary.infinia.bucket },
-              { label: 'OBJECT KEY',         val: summary.infinia.object_key },
-              { label: 'ENDPOINT',           val: summary.infinia.endpoint },
-              { label: 'KV SIZE',            val: `${summary.infinia.kv_size_mb.toLocaleString()} MB (${(summary.infinia.kv_size_bytes / 1e9).toFixed(2)} GB)` },
-              { label: 'BLOCKS CACHED',      val: `${summary.infinia.block_count.toLocaleString()} blocks × ${summary.infinia.block_size} tokens` },
-              { label: 'LAYERS STORED',      val: `${summary.infinia.layers} transformer layers` },
-              { label: 'PREFIX TOKENS',      val: `${summary.infinia.prefix_tokens.toLocaleString()} token IDs` },
-              { label: 'NEW GPU TOKENS',     val: `${summary.infinia.question_tokens} tokens only` },
-              { label: 'GPU COMPUTE SAVED',  val: `${summary.infinia.gpu_compute_saved_pct}% of prefill` },
+              { label: 'BUCKET',             val: activeInfinia.bucket },
+              { label: 'OBJECT KEY',         val: activeInfinia.object_key },
+              { label: 'ENDPOINT',           val: activeInfinia.endpoint },
+              { label: 'KV SIZE',            val: `${activeInfinia.kv_size_mb.toLocaleString()} MB (${(activeInfinia.kv_size_bytes / 1e9).toFixed(2)} GB)` },
+              { label: 'BLOCKS CACHED',      val: `${activeInfinia.block_count.toLocaleString()} blocks × ${activeInfinia.block_size} tokens` },
+              { label: 'LAYERS STORED',      val: `${activeInfinia.layers} transformer layers` },
+              { label: 'PREFIX TOKENS',      val: `${activeInfinia.prefix_tokens.toLocaleString()} token IDs` },
+              { label: 'NEW GPU TOKENS',     val: `${activeInfinia.question_tokens} tokens only` },
+              { label: 'GPU COMPUTE SAVED',  val: `${activeInfinia.gpu_compute_saved_pct}% of prefill` },
             ].map(({ label, val }) => (
               <div key={label} className="px-4 py-3"
                 style={{ borderBottom: '1px solid var(--border-subtle)' }}>
@@ -723,17 +1104,17 @@ export default function KVReuseProof() {
           <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--surface-secondary)' }}>
             <div className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>KV PREFIX HASH (SHA-256)</div>
             <div className="font-mono text-xs break-all" style={{ color: 'var(--nvidia-green)' }}>
-              {summary.infinia.prefix_hash_full}
+              {activeInfinia.prefix_hash_full}
             </div>
           </div>
 
           {/* Footer explainer */}
           <div className="px-4 py-3 text-xs leading-relaxed" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)' }}>
             <strong style={{ color: 'var(--text-secondary)' }}>What is the KV state?</strong>{' '}
-            {summary.infinia.prefix_tokens.toLocaleString()} token IDs — the Key+Value attention matrices across {summary.infinia.layers} transformer layers
-            ({summary.infinia.kv_heads} KV heads × {summary.infinia.head_dim} head_dim, {summary.infinia.dtype}).
+            {activeInfinia.prefix_tokens.toLocaleString()} token IDs — the Key+Value attention matrices across {activeInfinia.layers} transformer layers
+            ({activeInfinia.kv_heads} KV heads × {activeInfinia.head_dim} head_dim, {activeInfinia.dtype}).
             On a cache hit, these are loaded directly into GPU HBM — skipping GPU re-computation of all{' '}
-            {summary.infinia.prefix_tokens.toLocaleString()} prefix tokens.
+            {activeInfinia.prefix_tokens.toLocaleString()} prefix tokens.
           </div>
         </div>
       )}
