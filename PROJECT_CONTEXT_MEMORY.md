@@ -177,6 +177,28 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
 
 ---
 
+
+### 5. 2-Step Guided Workflow for Theater & Conference Demonstrations (SC26 / GTC)
+- **Problem Solved:** Presenters needed an intentional pacing control where they could execute the Cold Prefill and demonstrate KV ingestion into DDN Infinia before triggering the Warm Retrieval at ~56 ms.
+- **Workflow Mechanics:**
+  - **Mode Toggle:** Presenters can switch between `2-Step Guided Walkthrough (Recommended)` and `1-Click Auto Run`.
+  - **Step 1 (Cold Prefill & Infinia Ingestion):**
+    - Calls `/api/kv-reuse/compare?phase=cold_only`.
+    - Forces full GPU prefill recompute (~4,218 ms).
+    - Asynchronously offloads KV tensors to DDN Infinia S3.
+    - Yields `cold_completed` event with live confirmed S3 object keys and model metadata.
+    - Unlocks the DDN Infinia Bucket Scan and Object Keys immediately on screen.
+    - Displays Presenter Bridge Note explaining that GPU compute has ended and blocks are vaulted in Infinia.
+  - **Step 2 (Warm Prefix Retrieval):**
+    - Calls `/api/kv-reuse/compare?phase=warm_only&cold_ttft_ms=...&cold_total_ms=...`.
+    - Reuses the prefix in vLLM to deliver the response in ~56 ms with 100% clean, non-garbage tokens.
+    - Yields `summary` event calculating the exact speedup ($75\times$), Concurrency Multiplier, and Neocloud (NCP) unit economics.
+  - **Architectural Transparency:**
+    - Explicitly labeled: `Tier 1: GPU HBM Radix Hit (Active Session) · Tier 4: DDN Infinia Persistent Vault`.
+    - Explains that single-node active sessions reuse Tier 1 GPU HBM, while DDN Infinia serves as the Tier 4 persistent vault for cross-node sharing, container failover, and cold node spin-up via GPU-Direct RDMA / NIXL over 200/400Gbps RoCE.
+
+---
+
 ## 6. Development & Deployment Operational Rules
 
 ### 1. Working Across Windows & WSL
