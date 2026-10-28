@@ -2,7 +2,6 @@
 > **Location:** `/home/nwasim/projects/ddn-kv-cache/PROJECT_CONTEXT_MEMORY.md`  
 > **Repository:** `https://github.com/nasirwasim8/KV.Cache.git` (Branch: `main`)  
 > **Standalone ROI Repository:** `/home/nwasim/projects/ddn-roi-standalone` (`https://github.com/nasirwasim8/ddn-roi-calculator.git`, Deployed to `https://ddn-kv-roi.vercel.app`)  
-> **Target Flagship Events:** SC 2026 (Supercomputing 2026) & NVIDIA GTC Berlin 2026\n> **SC26 Presentation Guide:** /home/nwasim/projects/ddn-kv-cache/SC26_THEATER_PRESENTATION.md  
 > **Last Updated:** October 2026
 
 ---
