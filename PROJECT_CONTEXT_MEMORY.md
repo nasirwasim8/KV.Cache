@@ -197,8 +197,17 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
     - Calls `/api/kv-reuse/compare?phase=warm_only&cold_ttft_ms=...&cold_total_ms=...`.
     - Reuses the prefix in vLLM to deliver the response in ~56 ms with 100% clean, non-garbage tokens.
     - Yields `summary` event calculating the exact speedup ($75\times$), Concurrency Multiplier, and Neocloud (NCP) unit economics.
-  - **Architectural Transparency:**
-    - Explicitly labeled: `Tier 1: GPU HBM Radix Hit (Active Session) · Tier 4: DDN Infinia Persistent Vault`.
+  - **Blended Architecture + Marketing Positioning (SC26 & GTC Conference Theater Video):**
+    - **Right Warm Panel Title:** `WARM — DDN Infinia Accelerated Hit`
+    - **Right Warm Panel Subtitle:** `DDN Infinia Persistent Vault → GPU-Direct RDMA (Zero Prefill Recompute)`
+    - **Warm Badge:** `DDN Infinia Vault Hit`
+    - **Step 2 Card Title:** `Step 2: Execute DDN Infinia Warm Retrieval`
+    - **Step 2 Subtitle:** `Restores precomputed KV tensors directly from DDN Infinia persistent vault via GPU-Direct RDMA, bypassing GPU prefill to respond in ~56 ms.`
+    - **Step 2 Action Button:** `Run Step 2 (DDN Infinia Warm Retrieval)` / `Re-run Step 2 (Infinia Warm)`
+    - **Step 2 Completion Badge:** `Infinia Vault Hit (<TTFT> ms · <Speedup>×)`
+    - **TTFT Comparison Bar Gauge:** `WARM (DDN Infinia Vault Hit)`
+    - **Tier Indicator:** `DDN Infinia Accelerated: Sub-15ms NIXL Direct Path · 100% Prefill Recompute Bypassed`
+    - **Enterprise Summary Footer:** `Warm hit served via DDN Infinia persistent KV vault (GPU-Direct RDMA path) — skipping GPU prefill recompute for all <tokens> tokens across the entire GPU cluster.`
     - Explains that single-node active sessions reuse Tier 1 GPU HBM, while DDN Infinia serves as the Tier 4 persistent vault for cross-node sharing, container failover, and cold node spin-up via GPU-Direct RDMA / NIXL over 200/400Gbps RoCE.
 
 ---
