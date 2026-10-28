@@ -200,6 +200,7 @@ export default function KVReuseProof() {
   const [stepState, setStepState] = useState<'idle' | 'cold_running' | 'cold_done' | 'warm_running' | 'completed'>('idle')
   const [savedColdTtft, setSavedColdTtft] = useState<number | null>(null)
   const [savedColdTotal, setSavedColdTotal] = useState<number | null>(null)
+  const [sessionId, setSessionId] = useState<string>(() => Math.random().toString(36).substring(2, 10))
   const [step1ConfirmedObjects, setStep1ConfirmedObjects] = useState<ConfirmedObject[]>([])
   const [step1Infinia, setStep1Infinia] = useState<InfiniaMeta | null>(null)
 
@@ -236,6 +237,7 @@ export default function KVReuseProof() {
     setStep1Infinia(null)
     setStepState('idle')
     setRunning(false)
+    setSessionId(Math.random().toString(36).substring(2, 10))
   }
 
   // ── Step 1: Execute Cold Prefill ─────────────────────────────────────────────
@@ -251,6 +253,9 @@ export default function KVReuseProof() {
     setStep1ConfirmedObjects([])
     setStep1Infinia(null)
 
+    const nextSession = Math.random().toString(36).substring(2, 10)
+    setSessionId(nextSession)
+
     const question = customQuestion.trim() || selectedQuestion || ''
     const params = new URLSearchParams({
       endpoint_url: endpointUrl,
@@ -258,6 +263,7 @@ export default function KVReuseProof() {
       preset: selectedPreset,
       question,
       phase: 'cold_only',
+      session_id: nextSession,
     })
 
     const es = new EventSource(`/api/kv-reuse/compare?${params}`)
@@ -320,6 +326,7 @@ export default function KVReuseProof() {
       phase: 'warm_only',
       cold_ttft_ms: String(savedColdTtft),
       cold_total_ms: String(savedColdTotal || savedColdTtft),
+      session_id: sessionId,
     })
 
     const es = new EventSource(`/api/kv-reuse/compare?${params}`)
@@ -375,6 +382,9 @@ export default function KVReuseProof() {
     setSummary(null)
     setVllmError(null)
 
+    const nextSession = Math.random().toString(36).substring(2, 10)
+    setSessionId(nextSession)
+
     const question = customQuestion.trim() || selectedQuestion || ''
     const params = new URLSearchParams({
       endpoint_url: endpointUrl,
@@ -382,6 +392,7 @@ export default function KVReuseProof() {
       preset: selectedPreset,
       question,
       phase: 'both',
+      session_id: nextSession,
     })
 
     const es = new EventSource(`/api/kv-reuse/compare?${params}`)
@@ -437,9 +448,11 @@ export default function KVReuseProof() {
 
   const maxTTFT = Math.max(coldPhase.ttft_ms || 0, warmPhase.ttft_ms || 0, 1000)
 
-  // Determine active Infinia metadata to show (works both after Step 1 and in full Summary)
-  const activeInfinia = summary?.infinia || (stepState === 'cold_done' ? step1Infinia : null)
-  const activeConfirmedObjects = summary?.confirmed_infinia_objects || (stepState === 'cold_done' ? step1ConfirmedObjects : [])
+  // Determine active Infinia metadata to show (active both after Step 1 and in full Summary)
+  const activeInfinia = summary?.infinia || step1Infinia
+  const activeConfirmedObjects = (summary?.confirmed_infinia_objects && summary.confirmed_infinia_objects.length > 0)
+    ? summary.confirmed_infinia_objects
+    : step1ConfirmedObjects
 
   return (
     <div className="space-y-6 pb-8">
