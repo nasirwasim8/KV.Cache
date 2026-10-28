@@ -7,10 +7,7 @@ import {
   ChevronDown,
   CheckCircle2,
   AlertTriangle,
-  Cpu,
   HardDrive,
-  Network,
-  Server,
   Building2,
   Cloud,
 } from 'lucide-react'
@@ -192,7 +189,6 @@ export default function KVReuseProof() {
   const [model, setModel] = useState('meta-llama/Llama-3.1-8B-Instruct')
   const [showQDropdown, setShowQDropdown] = useState(false)
   const [audienceView, setAudienceView] = useState<'enterprise' | 'ncp'>('enterprise')
-  const [showG4Simulation, setShowG4Simulation] = useState(true)
 
   const [coldPhase, setColdPhase] = useState<PhaseState>(EMPTY_PHASE)
   const [warmPhase, setWarmPhase] = useState<PhaseState>(EMPTY_PHASE)
@@ -489,182 +485,6 @@ export default function KVReuseProof() {
           <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="WARM (GPU HBM Hit)" color="var(--nvidia-green)" />
         </div>
       )}
-
-      {/* ── Approach A & B: Architectural Clarity & Disaggregated G4 Retrieval Simulation ── */}
-      <div
-        className="rounded-2xl border p-5 md:p-6 space-y-5"
-        style={{
-          background: 'var(--surface-card)',
-          borderColor: 'var(--border-subtle)',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4" style={{ borderColor: 'var(--border-subtle)' }}>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold" style={{ background: 'rgba(26,129,175,0.15)', color: '#1A81AF' }}>
-                ARCHITECTURAL CLARITY FOR ENGINEERING
-              </span>
-              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-                Memory Tier Realities: Intra-Node HBM vs. Inter-Node Infinia G4
-              </h3>
-            </div>
-            <p className="text-xs text-neutral-500 mt-1">
-              Distinguishing local GPU memory hits from disaggregated cluster storage retrieval across nodes.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowG4Simulation(v => !v)}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer"
-              style={{
-                background: showG4Simulation ? 'rgba(0,194,128,0.15)' : 'var(--surface-secondary)',
-                borderColor: showG4Simulation ? '#00C280' : 'var(--border-subtle)',
-                color: showG4Simulation ? '#00C280' : 'var(--text-secondary)',
-              }}
-            >
-              <Network className="w-3.5 h-3.5" />
-              <span>{showG4Simulation ? 'Hide Cross-Node G4 Model' : 'Simulate Cross-Node G4 Fetch'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 2-Tier Explanation Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          {/* Tier 1: Intra-Node HBM Hit */}
-          <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}>
-            <div className="flex items-center justify-between">
-              <span className="font-bold flex items-center gap-1.5" style={{ color: '#00C280' }}>
-                <Cpu className="w-4 h-4" />
-                <span>Tier 1: Intra-Node GPU HBM Hit (~50 ms)</span>
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400">
-                ACTIVE TESTBED
-              </span>
-            </div>
-            <p className="text-neutral-400 leading-relaxed">
-              When a query hits the <em>same GPU node</em> immediately, vLLM's internal Radix Tree serves the prefix directly from GPU High Bandwidth Memory (HBM).
-              Zero storage I/O occurs on this query. This delivers peak instant latency (<strong className="text-emerald-400 font-mono">~56 ms TTFT</strong>).
-            </p>
-          </div>
-
-          {/* Tier 4: Inter-Node Infinia G4 Persistence */}
-          <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--surface-secondary)', borderColor: 'var(--border-subtle)' }}>
-            <div className="flex items-center justify-between">
-              <span className="font-bold flex items-center gap-1.5" style={{ color: '#1A81AF' }}>
-                <HardDrive className="w-4 h-4" />
-                <span>Tier 4: Inter-Node Infinia G4 Persistence</span>
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/10 text-blue-400">
-                DISAGGREGATED VAULT
-              </span>
-            </div>
-            <p className="text-neutral-400 leading-relaxed">
-              While the GPU computes, LMCache asynchronously vaults full KV tensors into DDN Infinia (<span className="font-mono text-neutral-300">ddn-kv-cache-01</span>).
-              If this GPU restarts, crashes, or evicts memory under multi-tenant load, or if <em>Node B</em> receives the follow-up prompt, KV blocks are restored from Infinia rather than recomputed from scratch.
-            </p>
-          </div>
-        </div>
-
-        {/* ── Approach B: When Disaggregated G4 Fetch Is Toggled ── */}
-        {showG4Simulation && (
-          <div
-            className="p-5 rounded-xl border space-y-4 animate-fade-in"
-            style={{
-              background: 'linear-gradient(180deg, rgba(26,129,175,0.06) 0%, rgba(0,0,0,0) 100%)',
-              borderColor: 'rgba(26,129,175,0.3)',
-            }}
-          >
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-[#1A81AF]" />
-                <span className="text-xs font-bold uppercase tracking-wider text-[#1A81AF]">
-                  Simulated Inter-Node Retrieval: GPU HBM Evicted / Cross-Node Fetch
-                </span>
-              </div>
-              <span className="text-[11px] text-neutral-400 font-mono">
-                Context: {summary?.infinia?.prefix_tokens?.toLocaleString() || '6,600'} tokens (~750 MB KV)
-              </span>
-            </div>
-
-            <p className="text-xs text-neutral-300 leading-relaxed">
-              What happens when <strong>User B hits a different DGX node</strong> in a supercomputing cluster, or after a container restart where GPU HBM is 100% cold?
-              The supercomputer must pull the pre-computed KV tensors across cluster shared storage (G4 Tier).
-            </p>
-
-            {/* Comparison of Storage Fabrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              {/* DDN Infinia NIXL Path */}
-              <div className="p-4 rounded-xl border space-y-2.5" style={{ background: 'rgba(0,194,128,0.06)', borderColor: 'rgba(0,194,128,0.3)' }}>
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>DDN Infinia + RoCE (NIXL GPU-Direct RDMA)</span>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-emerald-400">~72 ms TTFT</span>
-                </div>
-                <div className="text-[11px] text-neutral-300 space-y-1 font-mono">
-                  <div className="flex justify-between">
-                    <span>G4 Storage Metadata Lookup:</span>
-                    <span className="font-bold text-emerald-400">2 ms</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Line-Rate 200/400Gbps RDMA Transfer:</span>
-                    <span className="font-bold text-emerald-400">14 ms</span>
-                  </div>
-                  <div className="flex justify-between border-t border-emerald-500/20 pt-1">
-                    <span>Total Storage Retrieval Latency:</span>
-                    <span className="font-bold text-emerald-400">16 ms (sub-18ms)</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-neutral-400 leading-relaxed pt-1">
-                  <strong>Outcome:</strong> 16 ms retrieval + 56 ms decode = <strong>~72 ms TTFT</strong>. Bypasses 4,146 ms of heavy GPU prefill work (<strong className="text-emerald-400">98.3% compute saved</strong>).
-                </p>
-              </div>
-
-              {/* Standard Storage Path */}
-              <div className="p-4 rounded-xl border space-y-2.5" style={{ background: 'rgba(237,39,56,0.06)', borderColor: 'rgba(237,39,56,0.3)' }}>
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-xs text-red-400 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>Standard Cloud S3 / NFS (TCP / 10GbE)</span>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-red-400">~541 ms TTFT</span>
-                </div>
-                <div className="text-[11px] text-neutral-300 space-y-1 font-mono">
-                  <div className="flex justify-between">
-                    <span>Standard Storage Lookup (HTTP HEAD):</span>
-                    <span className="font-bold text-red-400">35 ms</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Standard TCP Network Transfer (750 MB):</span>
-                    <span className="font-bold text-red-400">450 ms</span>
-                  </div>
-                  <div className="flex justify-between border-t border-red-500/20 pt-1">
-                    <span>Total Storage Retrieval Latency:</span>
-                    <span className="font-bold text-red-400">485 ms</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-neutral-400 leading-relaxed pt-1">
-                  <strong>Outcome:</strong> 485 ms retrieval creates severe latency bottlenecks and CPU memory serialization stalls, limiting concurrent supercomputing scaling.
-                </p>
-              </div>
-            </div>
-
-            {/* Note on NIXL vs Dev Testbed */}
-            <div className="text-[11px] text-neutral-400 border-t pt-2 space-y-1" style={{ borderColor: 'var(--border-subtle)' }}>
-              <div className="font-semibold text-neutral-300">
-                Production Architecture Note (NVIDIA Dynamo &amp; DDN NIXL):
-              </div>
-              <p>
-                In production deployments, DDN Infinia is integrated into the <strong>NVIDIA Dynamo container via the official DDN NIXL plugin</strong>.
-                Rather than using Python-based HTTP/S3 REST APIs (which can incur deserialization striding issues if restarted), the NIXL plugin transfers KV memory blocks directly from Infinia NVMe-oF into GPU HBM at line rate over RoCE fabrics.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Summary with Audience View Toggle */}
       {summary && (
