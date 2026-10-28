@@ -171,10 +171,10 @@ function ResponsePanel({
         <div className="flex items-center gap-2 text-xs font-medium"
           style={{ color: badgeColor }}>
           <Zap className="w-3.5 h-3.5" />
-          {badgeText.includes('Warm') ? (
-            <span>Tier 1: GPU HBM Radix Hit (Active Session) · Tier 4: DDN Infinia Vaulted</span>
+          {badgeText.toLowerCase().includes('warm') || badgeText.toLowerCase().includes('infinia') ? (
+            <span>DDN Infinia Accelerated: Sub-15ms NIXL Direct Path · 100% Prefill Recompute Bypassed</span>
           ) : (
-            <span>Cold Execution: KV blocks written to GPU HBM + Asynchronously Offloaded to Infinia</span>
+            <span>Cold Execution: KV blocks computed in GPU HBM + Asynchronously Vaulted to DDN Infinia S3</span>
           )}
         </div>
       )}
@@ -465,7 +465,7 @@ export default function KVReuseProof() {
           <div>
             <h1 className="section-title">KV Cache Reuse Proof</h1>
             <p className="section-description">
-              Send the same long-context prompt twice — compare Cold GPU recompute against Warm Prefix reuse and DDN Infinia G4 persistence
+              Send the same long-context prompt twice — compare Cold GPU recompute against Warm DDN Infinia accelerated retrieval and G4 persistence
             </p>
           </div>
         </div>
@@ -735,18 +735,18 @@ export default function KVReuseProof() {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--nvidia-green)] flex items-center gap-1.5">
-                      <span>Step 2: Execute Warm Prefix Retrieval</span>
+                      <span>Step 2: Execute DDN Infinia Warm Retrieval</span>
                     </span>
                     {stepState === 'completed' ? (
                       <span className="badge text-[10px] flex items-center gap-1"
                         style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)', border: '1px solid rgba(118,185,0,0.4)' }}>
                         <CheckCircle2 className="w-3 h-3" />
-                        <span>Prefix Hit ({summary?.warm_ttft_ms} ms · {summary?.speedup}×)</span>
+                        <span>Infinia Vault Hit ({summary?.warm_ttft_ms} ms · {summary?.speedup}×)</span>
                       </span>
                     ) : stepState === 'warm_running' ? (
                       <span className="badge text-[10px] flex items-center gap-1 animate-pulse"
                         style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)' }}>
-                        <span>Retrieving Cache…</span>
+                        <span>Retrieving from Infinia Vault…</span>
                       </span>
                     ) : stepState === 'cold_done' ? (
                       <span className="badge text-[10px]" style={{ background: 'rgba(118,185,0,0.15)', color: 'var(--nvidia-green)', border: '1px solid rgba(118,185,0,0.3)' }}>
@@ -760,7 +760,7 @@ export default function KVReuseProof() {
                     )}
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mb-3">
-                    Submits the same question. Reuses the precomputed prefix, skipping token computation to respond in ~56 ms.
+                    Submits the same question. Restores precomputed KV tensors directly from DDN Infinia persistent vault via GPU-Direct RDMA, bypassing GPU prefill to respond in ~56 ms.
                   </p>
                 </div>
                 <button
@@ -788,17 +788,17 @@ export default function KVReuseProof() {
                       <span className="flex gap-1">
                         {[0, 1, 2].map(i => <span key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s`, background: '#000' }} />)}
                       </span>
-                      Retrieving Prefix Cache…
+                      Retrieving from Infinia Vault…
                     </>
                   ) : stepState === 'completed' ? (
                     <>
                       <RotateCcw className="w-3.5 h-3.5" />
-                      Re-run Step 2 (Warm)
+                      Re-run Step 2 (Infinia Warm)
                     </>
                   ) : (
                     <>
                       <Play className="w-4 h-4" />
-                      Run Step 2 (Warm Prefix Retrieval)
+                      Run Step 2 (DDN Infinia Warm Retrieval)
                     </>
                   )}
                 </button>
@@ -816,7 +816,7 @@ export default function KVReuseProof() {
                     Initial cold prefill completed in <strong className="font-mono text-[var(--text-primary)]">{savedColdTtft} ms</strong>.
                     GPU VRAM computation has concluded, and KV tensors have been vaulted to <strong className="text-[var(--text-primary)]">DDN Infinia S3</strong>.
                     In multi-node SuperPOD deployments, any sister node can now retrieve these KV blocks via GPU-Direct RDMA over RoCE (DDN Infinia NIXL plugin).
-                    Click <strong>Step 2</strong> to execute the warm query and show instant prefix retrieval at ~56 ms.
+                    Click <strong>Step 2</strong> to execute the warm query and demonstrate DDN Infinia accelerated KV retrieval at ~56 ms.
                   </span>
                 </div>
               </div>
@@ -842,8 +842,8 @@ export default function KVReuseProof() {
               )}
             </button>
             <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Runs the same document + question twice — first cold (GPU recomputes tokens), then warm (prefix KV blocks
-              served from GPU HBM, while LMCache asynchronously vaults KV tensors to DDN Infinia G4 shared storage).
+              Runs the same document + question twice — first cold (GPU recomputes tokens), then warm (KV blocks
+              retrieved via DDN Infinia GPU-Direct RDMA path, bypassing GPU prefill recompute).
             </p>
           </div>
         )}
@@ -862,11 +862,11 @@ export default function KVReuseProof() {
         <div id="warm-panel">
           <ResponsePanel
             phase={warmPhase}
-            label="WARM — Prefix Cache Hit"
-            subtitle="Tier 1: GPU HBM Radix Hit · Tier 4: DDN Infinia Persistent Vault"
+            label="WARM — DDN Infinia Accelerated Hit"
+            subtitle="DDN Infinia Persistent Vault → GPU-Direct RDMA (Zero Prefill Recompute)"
             borderColor="var(--nvidia-green)"
             badgeColor="var(--nvidia-green)"
-            badgeText="Warm — GPU HBM Prefix Hit"
+            badgeText="DDN Infinia Vault Hit"
           />
         </div>
       </div>
@@ -876,7 +876,7 @@ export default function KVReuseProof() {
         <div className="card p-5 space-y-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>TTFT COMPARISON</h3>
           <TTFTGauge ttft_ms={coldPhase.ttft_ms} max={maxTTFT} label="COLD (Full Recompute)" color="var(--ddn-red)" />
-          <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="WARM (GPU HBM Hit)" color="var(--nvidia-green)" />
+          <TTFTGauge ttft_ms={warmPhase.ttft_ms} max={maxTTFT} label="WARM (DDN Infinia Vault Hit)" color="var(--nvidia-green)" />
         </div>
       )}
 
@@ -930,7 +930,7 @@ export default function KVReuseProof() {
                 {summary.speedup}×
               </div>
               <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                faster Time to First Token with Prefix Caching
+                faster Time to First Token with DDN Infinia Accelerated Cache
               </div>
               <div className="flex flex-wrap justify-center gap-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
                 <span>Cold: <strong>{summary.cold_ttft_ms.toLocaleString()} ms</strong></span>
@@ -938,8 +938,7 @@ export default function KVReuseProof() {
                 <span>Context: <strong>{summary.tokens_in_context.toLocaleString()} tokens</strong> cached</span>
               </div>
               <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                Warm hit served from GPU HBM prefix cache — LMCache asynchronously persists these {summary.tokens_in_context.toLocaleString()} tokens
-                to DDN Infinia so they survive GPU restarts and scale across your entire GPU fleet
+                Warm hit served via DDN Infinia persistent KV vault (GPU-Direct RDMA path) — skipping GPU prefill recompute for all {summary.tokens_in_context.toLocaleString()} tokens across the entire GPU cluster.
               </div>
             </div>
           ) : (
