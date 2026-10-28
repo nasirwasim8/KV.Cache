@@ -142,10 +142,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m vllm.entrypoints.openai.api_server \
 - **Approach A (Tier Transparency):**
   - Distinguishes **Tier 1 (GPU HBM Radix Hit, ~50 ms)** from **Tier 4 (DDN Infinia Persistent Vault)**.
   - Clarifies that in a single-node active session, the 56 ms hit is served by local HBM, while LMCache asynchronously offloads KV tensors to DDN Infinia for cross-node sharing, container failovers, and cold worker spawns.
-- **Approach B (Simulated Disaggregated G4 Retrieval):**
-  - Interactive simulator modeling what occurs when GPU HBM is cold or evicted (or a cross-node request arrives in a DGX SuperPOD cluster).
-  - Contrasts **DDN Infinia + RoCE (NIXL GPU-Direct RDMA)**: 2 ms lookup + 14 ms transfer = **16 ms retrieval (~72 ms TTFT, 98.3% compute saved)** against **Standard Cloud S3 / NFS over TCP**: 35 ms lookup + 450 ms transfer = **485 ms retrieval (~540 ms TTFT)**.
-  - Explains the production NVIDIA Dynamo + DDN NIXL plugin integration vs the local dev S3 HTTP testbed.
+- **Uncluttered Design:** Kept focused strictly on the real cold/warm comparison and live S3 object scanner without hypothetical cross-node simulation cards.
 
 ### Tab 7: Configuration & About (`frontend/src/pages/Configuration.tsx`, `About.tsx`)
 - **Role:** Cluster controls, model selector (vLLM vs Ollama), hardware telemetry, and DDN Infinia credentials.
