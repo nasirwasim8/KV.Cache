@@ -948,7 +948,7 @@ export default function ChatObservatory({ onNavigateToRoi, onNavigateToDecision 
       await kvApi.clearSession(sessionId).catch(() => {})
       setTurns([]); setCumulativeSavings(0); setTotalHits(0); setResumeLatency(null)
       setGpuFlushed(true)
-      toast.success(`💾 ${res.turns_persisted} turns written to Infinia in ${res.store_latency_ms}ms`, { duration: 5000 })
+      toast.success(`${res.turns_persisted} turns written to DDN Infinia in ${res.store_latency_ms}ms`, { duration: 5000 })
     } catch {
       toast.error('Could not persist to Infinia — check connection')
     }
@@ -972,7 +972,7 @@ export default function ChatObservatory({ onNavigateToRoi, onNavigateToDecision 
         setTurns(restoredTurns)
         setResumeLatency(res.latency_ms)
         setGpuFlushed(false)
-        toast.success(`⚡ Restored ${res.turn_count} turns from Infinia in ${res.latency_ms}ms`, { duration: 5000, icon: '🗄️' })
+        toast.success(`Restored ${res.turn_count} turns from DDN Infinia in ${res.latency_ms}ms`, { duration: 5000 })
       } else {
         toast.error('No session found in Infinia — flush the session first')
       }
@@ -1118,7 +1118,7 @@ export default function ChatObservatory({ onNavigateToRoi, onNavigateToDecision 
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
               style={{ borderColor: 'rgba(237,140,0,0.5)', color: '#D97706', background: 'rgba(237,140,0,0.07)' }}
             >
-              <span className="text-xs">🔴</span> GPU Memory Flushed
+              <span className="w-2 h-2 rounded-full bg-[#D97706] inline-block mr-1"></span> GPU Memory Flushed
             </button>
 
             {/* Restore from Infinia button — only visible after flush */}
