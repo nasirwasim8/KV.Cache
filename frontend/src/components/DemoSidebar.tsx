@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw, Trash2, HelpCircle } from 'lucide-react'
+import { Settings, MessageSquare, BarChart3, Info, Zap, Cpu, Database, Calculator, Activity, RefreshCw, Trash2, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 
 interface Tab { id: string; label: string; icon: string }
@@ -21,6 +21,7 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
   const [clearing, setClearing] = useState(false)
   const [clearMsg, setClearMsg] = useState('')
   const [vllmRestarting, setVllmRestarting] = useState(false)
+  const [statusCollapsed, setStatusCollapsed] = useState(false)
   const { theme } = useTheme()
 
   const fetchHealth = async () => {
@@ -110,70 +111,95 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
           })}
         </nav>
 
-        {/* System Status */}
+        {/* System Status (Collapsible) */}
         <div className="mt-8 mx-4 border-t pt-4 space-y-3" style={{ borderColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
-          <div className="flex items-center gap-2">
-            <div className={`p-1 rounded ${health?.gpu_available ? 'bg-[#76B900]/10' : 'bg-neutral-200'}`}>
-              {health?.gpu_available ? <Zap className="w-3 h-3 text-[#76B900]" /> : <Cpu className="w-3 h-3 text-neutral-500" />}
+          <button
+            onClick={() => setStatusCollapsed(v => !v)}
+            className="w-full flex items-center justify-between p-1.5 -m-1.5 rounded-lg hover:bg-[var(--surface-secondary)] transition-colors text-left"
+            title={statusCollapsed ? 'Expand System Status' : 'Collapse System Status'}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`p-1 rounded ${health?.gpu_available ? 'bg-[#76B900]/10' : 'bg-neutral-200'}`}>
+                {health?.gpu_available ? <Zap className="w-3 h-3 text-[#76B900]" /> : <Cpu className="w-3 h-3 text-neutral-500" />}
+              </div>
+              <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>System Status</span>
             </div>
-            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>System Status</span>
-          </div>
+            <div className="flex items-center gap-1.5">
+              {statusCollapsed && health?.infinia_connected && (
+                <span className="w-2 h-2 rounded-full bg-[#76B900]" title="Infinia Connected" />
+              )}
+              {statusCollapsed ? (
+                <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+              ) : (
+                <ChevronUp className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+              )}
+            </div>
+          </button>
 
-          <div className="space-y-2">
-            {[
-              { label: 'DDN INFINIA', ok: health?.infinia_connected, okText: 'Connected', failText: 'Not configured' },
-              { label: 'vLLM', ok: health?.vllm_available ?? health?.model_ready, okText: 'Ready', failText: 'Offline' },
-            ].map(item => (
-              <div key={item.label} className="flex items-center justify-between text-xs">
-                <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{item.label}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${item.ok ? 'text-[#76B900] bg-[#76B900]/10' : 'text-neutral-500 bg-neutral-200'}`} style={item.ok ? {} : { background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
-                  {item.ok ? item.okText : item.failText}
-                </span>
-              </div>
-            ))}
+          {!statusCollapsed && (
+            <div className="space-y-2 pt-1 transition-all">
+              {[
+                { label: 'DDN INFINIA', ok: health?.infinia_connected, okText: 'Connected', failText: 'Not configured' },
+                {
+                  label: (activeTab === 'chat' || activeTab === 'prefix') ? 'OLLAMA' : 'vLLM',
+                  ok: (activeTab === 'chat' || activeTab === 'prefix')
+                    ? (health?.ollama_available ?? health?.model_ready)
+                    : (health?.vllm_available ?? health?.model_ready),
+                  okText: 'Ready',
+                  failText: 'Offline',
+                },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between text-xs">
+                  <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{item.label}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${item.ok ? 'text-[#76B900] bg-[#76B900]/10' : 'text-neutral-500 bg-neutral-200'}`} style={item.ok ? {} : { background: 'var(--surface-secondary)', color: 'var(--text-muted)' }}>
+                    {item.ok ? item.okText : item.failText}
+                  </span>
+                </div>
+              ))}
 
-            {health?.hit_count !== undefined && (
-              <div className="flex items-center justify-between text-xs mt-1">
-                <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}><Database className="w-3 h-3 inline mr-1" />CACHE HITS</span>
-                <span className="text-xs px-2 py-0.5 rounded-full text-[#1A81AF] font-mono" style={{ background: 'var(--status-info-subtle)' }}>
-                  {health.hit_count}
-                </span>
-              </div>
-            )}
+              {health?.hit_count !== undefined && (
+                <div className="flex items-center justify-between text-xs mt-1">
+                  <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}><Database className="w-3 h-3 inline mr-1" />CACHE HITS</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full text-[#1A81AF] font-mono" style={{ background: 'var(--status-info-subtle)' }}>
+                    {health.hit_count}
+                  </span>
+                </div>
+              )}
 
-            {/* Clear Infinia Cache button */}
-            {health?.infinia_connected && (
-              <div className="mt-3">
-                {clearMsg ? (
-                  <div className="text-center text-xs py-1.5 px-2 rounded leading-relaxed" style={{
-                    color: vllmRestarting ? '#FF7600' : '#76B900',
-                    background: vllmRestarting ? 'rgba(255,118,0,0.08)' : 'rgba(118,185,0,0.1)',
-                    border: vllmRestarting ? '1px solid rgba(255,118,0,0.2)' : 'none',
-                  }}>
-                    {vllmRestarting ? '⟳' : '✓'} {clearMsg}
-                  </div>
-                ) : (
-                  <button
-                    onClick={clearCache}
-                    disabled={clearing}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
-                    style={{
-                      background: clearing ? 'var(--surface-secondary)' : 'rgba(237,39,56,0.08)',
-                      border: '1px solid rgba(237,39,56,0.25)',
-                      color: clearing ? 'var(--text-muted)' : '#ED2738',
-                      cursor: clearing ? 'not-allowed' : 'pointer',
-                    }}
-                    onMouseEnter={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.16)')}
-                    onMouseLeave={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.08)')}
-                    title="Delete all KV tensor objects from DDN Infinia bucket"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    {clearing ? 'Clearing…' : 'Clear Infinia Cache'}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+              {/* Clear Infinia Cache button */}
+              {health?.infinia_connected && (
+                <div className="mt-3">
+                  {clearMsg ? (
+                    <div className="text-center text-xs py-1.5 px-2 rounded leading-relaxed" style={{
+                      color: vllmRestarting ? '#FF7600' : '#76B900',
+                      background: vllmRestarting ? 'rgba(255,118,0,0.08)' : 'rgba(118,185,0,0.1)',
+                      border: vllmRestarting ? '1px solid rgba(255,118,0,0.2)' : 'none',
+                    }}>
+                      {vllmRestarting ? '⟳' : '✓'} {clearMsg}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={clearCache}
+                      disabled={clearing}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
+                      style={{
+                        background: clearing ? 'var(--surface-secondary)' : 'rgba(237,39,56,0.08)',
+                        border: '1px solid rgba(237,39,56,0.25)',
+                        color: clearing ? 'var(--text-muted)' : '#ED2738',
+                        cursor: clearing ? 'not-allowed' : 'pointer',
+                      }}
+                      onMouseEnter={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.16)')}
+                      onMouseLeave={e => !clearing && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(237,39,56,0.08)')}
+                      title="Delete all KV tensor objects from DDN Infinia bucket"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      {clearing ? 'Clearing…' : 'Clear Infinia Cache'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </aside>

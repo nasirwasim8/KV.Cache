@@ -1599,7 +1599,7 @@ export default function ChatObservatory({ onNavigateToRoi, onNavigateToDecision 
       {/* Session Resume Success Banner */}
       {resumeLatency !== null && !gpuFlushed && turns.length > 0 && (
         <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'rgba(0,194,128,0.07)', border: '1px solid rgba(0,194,128,0.3)' }}>
-          <span className="text-xl">⚡</span>
+          <Zap className="w-4 h-4 text-[#00C280] shrink-0" />
           <div className="flex-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
             <strong style={{ color: '#00C280' }}>Session restored from DDN Infinia in {resumeLatency}ms</strong> — {turns.length} conversation turns reloaded.
             GPU re-processing skipped entirely. Continue the conversation below.
