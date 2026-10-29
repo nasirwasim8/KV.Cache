@@ -760,7 +760,7 @@ export default function KVReuseProof() {
                     )}
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mb-3">
-                    Submits the same question. Restores precomputed KV tensors directly from DDN Infinia persistent vault via GPU-Direct RDMA, bypassing GPU prefill to respond in ~56 ms.
+                    Submits the same question. Restores precomputed KV tensors directly from DDN Infinia persistent vault via GPU-Direct RDMA, bypassing GPU prefill recompute.
                   </p>
                 </div>
                 <button
@@ -816,7 +816,7 @@ export default function KVReuseProof() {
                     Initial cold prefill completed in <strong className="font-mono text-[var(--text-primary)]">{savedColdTtft} ms</strong>.
                     GPU VRAM computation has concluded, and KV tensors have been vaulted to <strong className="text-[var(--text-primary)]">DDN Infinia S3</strong>.
                     In multi-node SuperPOD deployments, any sister node can now retrieve these KV blocks via GPU-Direct RDMA over RoCE (DDN Infinia NIXL plugin).
-                    Click <strong>Step 2</strong> to execute the warm query and demonstrate DDN Infinia accelerated KV retrieval at ~56 ms.
+                    Click <strong>Step 2</strong> to execute the warm query and demonstrate DDN Infinia accelerated KV retrieval.
                   </span>
                 </div>
               </div>

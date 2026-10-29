@@ -202,7 +202,7 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
     - **Right Warm Panel Subtitle:** `DDN Infinia Persistent Vault → GPU-Direct RDMA (Zero Prefill Recompute)`
     - **Warm Badge:** `DDN Infinia Vault Hit`
     - **Step 2 Card Title:** `Step 2: Execute DDN Infinia Warm Retrieval`
-    - **Step 2 Subtitle:** `Restores precomputed KV tensors directly from DDN Infinia persistent vault via GPU-Direct RDMA, bypassing GPU prefill to respond in ~56 ms.`
+    - **Step 2 Subtitle:** `Restores precomputed KV tensors directly from DDN Infinia persistent vault via GPU-Direct RDMA, bypassing GPU prefill recompute.`
     - **Step 2 Action Button:** `Run Step 2 (DDN Infinia Warm Retrieval)` / `Re-run Step 2 (Infinia Warm)`
     - **Step 2 Completion Badge:** `Infinia Vault Hit (<TTFT> ms · <Speedup>×)`
     - **TTFT Comparison Bar Gauge:** `WARM (DDN Infinia Vault Hit)`
