@@ -187,13 +187,15 @@ export default function KVReuseProof() {
   const { theme } = useTheme()
 
   const [presets, setPresets] = useState<Preset[]>([])
-  const [selectedPreset, setSelectedPreset] = useState('legal_contract')
+  const [selectedPreset, setSelectedPreset] = useState('ncp_multitenant')
   const [customQuestion, setCustomQuestion] = useState('')
-  const [selectedQuestion, setSelectedQuestion] = useState('')
+  const [selectedQuestion, setSelectedQuestion] = useState(
+    'What are the cryptographic isolation, data privacy, and compliance standards (SOC-2, HIPAA, PCI-DSS) enforced across tenant environments?'
+  )
   const [endpointUrl, setEndpointUrl] = useState('http://localhost:11000')
   const [model, setModel] = useState('meta-llama/Llama-3.1-8B-Instruct')
   const [showQDropdown, setShowQDropdown] = useState(false)
-  const [audienceView, setAudienceView] = useState<'enterprise' | 'ncp'>('enterprise')
+  const [audienceView, setAudienceView] = useState<'enterprise' | 'ncp'>('ncp')
 
   // Workflow modes: 'stepper' (2-step guided) or 'auto' (1-click auto run)
   const [workflowMode, setWorkflowMode] = useState<'stepper' | 'auto'>('stepper')
@@ -217,9 +219,16 @@ export default function KVReuseProof() {
   useEffect(() => {
     fetch('/api/kv-reuse/presets')
       .then(r => r.json())
-      .then(d => setPresets(d.presets || []))
+      .then(d => {
+        const list: Preset[] = d.presets || []
+        setPresets(list)
+        const active = list.find((p: Preset) => p.key === selectedPreset) || list[0]
+        if (active && active.sample_questions && active.sample_questions.length > 0) {
+          setSelectedQuestion(prev => prev || active.sample_questions[0])
+        }
+      })
       .catch(() => {})
-  }, [])
+  }, [selectedPreset])
 
   const currentPreset = presets.find(p => p.key === selectedPreset)
 
@@ -591,7 +600,12 @@ export default function KVReuseProof() {
         {/* Preset selector */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
           {presets.map(p => (
-            <button key={p.key} onClick={() => { setSelectedPreset(p.key); setSelectedQuestion(''); setCustomQuestion(''); if (p.key === 'ncp_multitenant') setAudienceView('ncp') }}
+            <button key={p.key} onClick={() => {
+              setSelectedPreset(p.key)
+              setSelectedQuestion(p.sample_questions?.[0] || '')
+              setCustomQuestion('')
+              if (p.key === 'ncp_multitenant') setAudienceView('ncp')
+            }}
               disabled={running || stepState === 'cold_running' || stepState === 'warm_running'}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 border"
               style={{
@@ -606,39 +620,59 @@ export default function KVReuseProof() {
 
         {/* Question selector */}
         {currentPreset && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div className="relative space-y-1">
-              <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>SAMPLE QUESTION</label>
-              <button
-                onClick={() => setShowQDropdown(v => !v)}
-                disabled={running || stepState === 'cold_running' || stepState === 'warm_running'}
-                className="w-full input-field text-sm text-left flex items-center justify-between gap-2"
-                style={{ padding: '10px 14px' }}>
-                <span className="truncate" style={{ color: selectedQuestion ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                  {selectedQuestion || 'Select a question…'}
-                </span>
-                <ChevronDown className="w-4 h-4 shrink-0" style={{ color: 'var(--text-muted)' }} />
-              </button>
-              {showQDropdown && (
-                <div className="absolute z-20 w-full mt-1 card py-1 shadow-lg">
-                  {currentPreset.sample_questions.map(q => (
-                    <button key={q} onClick={() => { setSelectedQuestion(q); setCustomQuestion(''); setShowQDropdown(false) }}
-                      className="w-full text-left px-4 py-2 text-sm transition-all duration-100"
-                      style={{ color: 'var(--text-primary)' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-secondary)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                      {q}
-                    </button>
-                  ))}
+          <div className="mb-4 space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="relative space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                    {selectedPreset === 'ncp_multitenant' ? 'COMMON MULTI-TENANT QUERY' : 'SAMPLE QUESTION'}
+                  </label>
+                  {selectedPreset === 'ncp_multitenant' && (
+                    <span className="text-[10px] font-mono font-bold text-[#76B900] bg-[rgba(118,185,0,0.12)] px-2 py-0.5 rounded border border-[rgba(118,185,0,0.3)]">
+                      Cross-Tenant Audit Query
+                    </span>
+                  )}
                 </div>
-              )}
+                <button
+                  onClick={() => setShowQDropdown(v => !v)}
+                  disabled={running || stepState === 'cold_running' || stepState === 'warm_running'}
+                  className="w-full input-field text-sm text-left flex items-center justify-between gap-2"
+                  style={{ padding: '10px 14px' }}>
+                  <span className="truncate" style={{ color: selectedQuestion ? 'var(--text-primary)' : 'var(--text-muted)' }} title={selectedQuestion}>
+                    {selectedQuestion || 'Select a question…'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 shrink-0" style={{ color: 'var(--text-muted)' }} />
+                </button>
+                {showQDropdown && (
+                  <div className="absolute z-20 w-full mt-1 card py-1 shadow-lg max-h-64 overflow-y-auto">
+                    {currentPreset.sample_questions.map(q => (
+                      <button key={q} onClick={() => { setSelectedQuestion(q); setCustomQuestion(''); setShowQDropdown(false) }}
+                        className="w-full text-left px-4 py-2.5 text-xs transition-all duration-100 border-b border-[var(--border-subtle)] last:border-b-0"
+                        style={{
+                          color: selectedQuestion === q ? 'var(--nvidia-green)' : 'var(--text-primary)',
+                          fontWeight: selectedQuestion === q ? 600 : 400,
+                          background: selectedQuestion === q ? 'rgba(118,185,0,0.06)' : undefined,
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-secondary)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = selectedQuestion === q ? 'rgba(118,185,0,0.06)' : '')}>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>OR TYPE YOUR OWN</label>
+                <input className="input-field text-sm" placeholder="Ask anything about the document…"
+                  value={customQuestion} onChange={e => { setCustomQuestion(e.target.value); setSelectedQuestion('') }}
+                  disabled={running || stepState === 'cold_running' || stepState === 'warm_running'} />
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>OR TYPE YOUR OWN</label>
-              <input className="input-field text-sm" placeholder="Ask anything about the document…"
-                value={customQuestion} onChange={e => { setCustomQuestion(e.target.value); setSelectedQuestion('') }}
-                disabled={running || stepState === 'cold_running' || stepState === 'warm_running'} />
-            </div>
+            {selectedPreset === 'ncp_multitenant' && (
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                Demonstrates how multiple enterprise tenants (FinTech, HealthTech, Retail) submit the same compliance audit query against the shared 14,518-token platform directive. DDN Infinia caches these shared KV tensors so subsequent tenant queries bypass GPU prefill completely.
+              </p>
+            )}
           </div>
         )}
 
