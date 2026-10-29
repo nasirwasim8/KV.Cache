@@ -208,6 +208,10 @@ During our architectural auditing of `kv_reuse_service.py`, `vllm_manager.py`, a
     - **TTFT Comparison Bar Gauge:** `WARM (DDN Infinia Vault Hit)`
     - **Tier Indicator:** `DDN Infinia Accelerated: Sub-15ms NIXL Direct Path · 100% Prefill Recompute Bypassed`
     - **Enterprise Summary Footer:** `Warm hit served via DDN Infinia persistent KV vault (GPU-Direct RDMA path) — skipping GPU prefill recompute for all <tokens> tokens across the entire GPU cluster.`
+    - **NCP Common Audit Query (Preloaded by Default):**
+      - Question: `What are the cryptographic isolation, data privacy, and compliance standards (SOC-2, HIPAA, PCI-DSS) enforced across tenant environments?`
+      - Auto-loaded on page visit and on preset click, showing how multiple enterprise tenants (FinTech, HealthTech, Retail) submit the identical compliance inquiry against the shared 14,518-token platform directive.
+      - Cold Step 1 precomputes and vaults the 62 KV cache chunks (2 GB) to DDN Infinia; Warm Step 2 retrieves the vaulted prefix with zero recompute.
     - Explains that single-node active sessions reuse Tier 1 GPU HBM, while DDN Infinia serves as the Tier 4 persistent vault for cross-node sharing, container failover, and cold node spin-up via GPU-Direct RDMA / NIXL over 200/400Gbps RoCE.
 
 ---
