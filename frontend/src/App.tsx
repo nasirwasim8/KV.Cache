@@ -88,7 +88,7 @@ export default function App() {
               BUILD.DDN:KVC — DDN Infinia KV Cache Observatory · FastAPI 8002 · Vite 5176
             </span>
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              llama3.2:3b via Ollama · RTX 5090 GPU
+              Llama-3.1-8B-Instruct via vLLM · RTX 5090 GPU
               {' · '}
               <span style={{ cursor:'pointer', textDecoration:'underline', opacity:0.5 }}
                 onClick={() => setActiveTab('animate')}>

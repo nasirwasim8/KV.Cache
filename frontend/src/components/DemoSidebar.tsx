@@ -17,7 +17,7 @@ const iconMap: Record<string, React.ReactNode> = {
 }
 
 export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSidebarProps) {
-  const [health, setHealth] = useState<{ infinia_connected: boolean; ollama_available: boolean; model_ready: boolean; gpu_available: boolean; hit_count?: number } | null>(null)
+  const [health, setHealth] = useState<{ infinia_connected: boolean; ollama_available?: boolean; vllm_available?: boolean; model_ready: boolean; gpu_available: boolean; hit_count?: number } | null>(null)
   const [clearing, setClearing] = useState(false)
   const [clearMsg, setClearMsg] = useState('')
   const [vllmRestarting, setVllmRestarting] = useState(false)
@@ -122,7 +122,7 @@ export default function DemoSidebar({ tabs, activeTab, onTabChange }: DemoSideba
           <div className="space-y-2">
             {[
               { label: 'DDN INFINIA', ok: health?.infinia_connected, okText: 'Connected', failText: 'Not configured' },
-              { label: 'OLLAMA', ok: health?.model_ready, okText: 'Ready', failText: health?.ollama_available ? 'Loading' : 'Offline' },
+              { label: 'vLLM', ok: health?.vllm_available ?? health?.model_ready, okText: 'Ready', failText: 'Offline' },
             ].map(item => (
               <div key={item.label} className="flex items-center justify-between text-xs">
                 <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{item.label}</span>

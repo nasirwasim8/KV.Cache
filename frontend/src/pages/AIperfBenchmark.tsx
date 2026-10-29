@@ -1407,7 +1407,7 @@ VLLM_USE_FLASHINFER_SAMPLER=0 python -m \
                     },
                     {
                       system: 'Llama 3.1 8B · RTX 4090',
-                      subtitle: 'No KV cache · ollama · 4K ctx',
+                      subtitle: 'No KV cache · standard vLLM · 4K ctx',
                       ttft_p50: 280,
                       ttft_avg: 320,
                       throughput: 42,

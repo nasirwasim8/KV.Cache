@@ -2334,11 +2334,24 @@ async def health():
     gpu_info = ollama_client.gpu_info()
     infinia_status = kv_cache.test_connection() if settings.infinia_endpoint else {"success": False, "message": "Not configured"}
 
+    # Check vLLM status on port 11000
+    vllm_available = False
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            r = await client.get("http://localhost:11000/health")
+            if r.status_code == 200:
+                vllm_available = True
+    except Exception:
+        vllm_available = False
+
     return {
         "status": "ok",
+        "vllm_available": vllm_available,
+        "vllm_model": "meta-llama/Llama-3.1-8B-Instruct",
         "ollama_available": ollama_status.get("available", False),
         "ollama_model": settings.ollama_model,
-        "model_ready": ollama_status.get("model_ready", False),
+        "model_ready": vllm_available or ollama_status.get("model_ready", False),
         "infinia_configured": bool(settings.infinia_endpoint and settings.infinia_access_key),
         "infinia_connected": infinia_status.get("success", False),
         "gpu_available": gpu_info.get("available", False),
